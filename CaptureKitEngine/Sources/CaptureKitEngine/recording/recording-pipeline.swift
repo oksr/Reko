@@ -7,12 +7,14 @@ public struct RecordingConfig: Codable {
     public let captureSystemAudio: Bool
     public let outputDir: String
     public let micId: String?
+    public let cameraId: String?
 }
 
 public struct RecordingResult: Codable {
     public let screenPath: String
     public let systemAudioPath: String?
     public let micPath: String?
+    public let cameraPath: String?
     public let durationMs: UInt64
     public let frameCount: UInt64
 }
@@ -23,6 +25,8 @@ public final class RecordingPipeline {
     private var systemAudioWriter: AudioFileWriter?
     private var micCapture: MicCapture?
     private var micWriter: MicWriter?
+    private var cameraCapture: CameraCapture?
+    private var cameraWriter: VideoWriter?
     private var frameCount: UInt64 = 0
     private var startTime: UInt64 = 0
     private var isRecording = false
@@ -71,6 +75,19 @@ public final class RecordingPipeline {
             micWriter = writer
         }
 
+        if let cameraId = config.cameraId {
+            let camera = CameraCapture()
+            let dims = try camera.startCapture(deviceId: cameraId) { [weak self] sampleBuffer in
+                guard let self = self, self.isRecording else { return }
+                self.cameraWriter?.appendVideoSample(sampleBuffer)
+            }
+            cameraWriter = try VideoWriter(
+                outputURL: outputDir.appendingPathComponent("camera.mov"),
+                width: dims.width, height: dims.height, fps: config.fps
+            )
+            cameraCapture = camera
+        }
+
         frameCount = 0
         startTime = mach_absolute_time()
         isRecording = true
@@ -98,6 +115,8 @@ public final class RecordingPipeline {
         systemAudioWriter?.finish()
         micCapture?.stop()
         micWriter?.finish()
+        cameraCapture?.stopCapture()
+        await cameraWriter?.finish()
 
         var timebaseInfo = mach_timebase_info_data_t()
         mach_timebase_info(&timebaseInfo)
@@ -108,6 +127,7 @@ public final class RecordingPipeline {
             screenPath: "screen.mov",
             systemAudioPath: config.captureSystemAudio ? "system_audio.wav" : nil,
             micPath: micCapture != nil ? "mic.wav" : nil,
+            cameraPath: cameraCapture != nil ? "camera.mov" : nil,
             durationMs: durationMs,
             frameCount: frameCount
         )
