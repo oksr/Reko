@@ -11,6 +11,7 @@ function App() {
   const [engineVersion, setEngineVersion] = useState("")
   const [selectedDisplay, setSelectedDisplay] = useState<number | null>(null)
   const [selectedMic, setSelectedMic] = useState<string | null>(null)
+  const [selectedCamera, setSelectedCamera] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [lastProject, setLastProject] = useState<ProjectState | null>(null)
@@ -29,6 +30,7 @@ function App() {
         config: {
           display_id: selectedDisplay,
           mic_id: selectedMic,
+          camera_id: selectedCamera,
           capture_system_audio: true,
           fps: 60,
         },
@@ -79,6 +81,8 @@ function App() {
             selectedDisplayId={selectedDisplay}
             onMicSelected={setSelectedMic}
             selectedMicId={selectedMic}
+            onCameraSelected={setSelectedCamera}
+            selectedCameraId={selectedCamera}
           />
 
           <Separator />
@@ -109,6 +113,9 @@ function App() {
             )}
             {lastProject.tracks.system_audio && (
               <p><span className="text-muted-foreground">System Audio:</span> {lastProject.tracks.system_audio}</p>
+            )}
+            {lastProject.tracks.camera && (
+              <p><span className="text-muted-foreground">Camera:</span> {lastProject.tracks.camera}</p>
             )}
           </CardContent>
         </Card>

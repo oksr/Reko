@@ -10,9 +10,15 @@ export interface AudioInputInfo {
   name: string
 }
 
+export interface CameraInfo {
+  id: string
+  name: string
+}
+
 export interface RecordingConfig {
   display_id: number
   mic_id: string | null
+  camera_id: string | null
   capture_system_audio: boolean
   fps: number
 }
@@ -25,6 +31,7 @@ export interface ProjectState {
     screen: string
     mic: string | null
     system_audio: string | null
+    camera: string | null
   }
   timeline: {
     duration_ms: number
