@@ -18,6 +18,7 @@ public enum ExportError: Error, LocalizedError {
     case commandBufferCreationFailed
     case renderPassFailed
     case notConfigured
+    case videoDecoderFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -32,6 +33,7 @@ public enum ExportError: Error, LocalizedError {
         case .commandBufferCreationFailed: return "Failed to create command buffer"
         case .renderPassFailed: return "Render pass encoding failed"
         case .notConfigured: return "Compositor not configured — call configure(width:height:) first"
+        case .videoDecoderFailed(let msg): return "Video decoder failed: \(msg)"
         }
     }
 }
