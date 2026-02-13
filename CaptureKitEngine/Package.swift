@@ -27,5 +27,9 @@ let package = Package(
                 .linkedFramework("CoreAudio"),
             ]
         ),
+        .testTarget(
+            name: "CaptureKitEngineTests",
+            dependencies: ["CaptureKitEngine"]
+        ),
     ]
 )

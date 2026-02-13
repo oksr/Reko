@@ -49,3 +49,22 @@ pub fn save_project(project: &ProjectState) -> Result<(), String> {
     fs::write(dir.join("project.json"), json).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tracks_serialization_roundtrip() {
+        let tracks = Tracks {
+            screen: "screen.mov".to_string(),
+            mic: Some("mic.wav".to_string()),
+            system_audio: None,
+        };
+        let json = serde_json::to_string(&tracks).unwrap();
+        let parsed: Tracks = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.screen, "screen.mov");
+        assert_eq!(parsed.mic, Some("mic.wav".to_string()));
+        assert!(parsed.system_audio.is_none());
+    }
+}
