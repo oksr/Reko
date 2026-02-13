@@ -13,6 +13,7 @@ function App() {
   const [selectedMic, setSelectedMic] = useState<string | null>(null)
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [lastProject, setLastProject] = useState<ProjectState | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -36,6 +37,7 @@ function App() {
         },
       })
       setIsRecording(true)
+      setIsPaused(false)
     } catch (e) {
       setError(String(e))
     } finally {
@@ -48,11 +50,30 @@ function App() {
     try {
       const project = await invoke<ProjectState>("stop_recording")
       setIsRecording(false)
+      setIsPaused(false)
       setLastProject(project)
     } catch (e) {
       setError(String(e))
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handlePause = async () => {
+    try {
+      await invoke("pause_recording")
+      setIsPaused(true)
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
+  const handleResume = async () => {
+    try {
+      await invoke("resume_recording")
+      setIsPaused(false)
+    } catch (e) {
+      setError(String(e))
     }
   }
 
@@ -90,11 +111,14 @@ function App() {
           <div className="flex items-center gap-4">
             <RecordButton
               isRecording={isRecording}
+              isPaused={isPaused}
               onStart={handleStart}
               onStop={handleStop}
+              onPause={handlePause}
+              onResume={handleResume}
               disabled={!selectedDisplay || isLoading}
             />
-            <RecordingTimer isRecording={isRecording} />
+            <RecordingTimer isRecording={isRecording} isPaused={isPaused} />
           </div>
         </CardContent>
       </Card>
