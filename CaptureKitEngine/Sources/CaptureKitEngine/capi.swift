@@ -182,3 +182,79 @@ public func ck_stop_recording(
     outResultJson.pointee = strdup(resultJson)
     return errorCode
 }
+
+// MARK: - Export API
+
+private var activeExports: [UInt64: ExportPipeline] = [:]
+private var nextExportId: UInt64 = 1
+private let exportsLock = NSLock()
+
+@_cdecl("ck_start_export")
+public func ck_start_export(
+    projectJson: UnsafePointer<CChar>,
+    exportConfigJson: UnsafePointer<CChar>,
+    outExportId: UnsafeMutablePointer<UInt64>
+) -> Int32 {
+    let projectStr = String(cString: projectJson)
+    let configStr = String(cString: exportConfigJson)
+
+    let pipeline = ExportPipeline()
+
+    exportsLock.lock()
+    let exportId = nextExportId
+    nextExportId += 1
+    activeExports[exportId] = pipeline
+    exportsLock.unlock()
+
+    outExportId.pointee = exportId
+
+    // Run export on background queue
+    DispatchQueue.global(qos: .userInitiated).async {
+        do {
+            let result = try pipeline.run(projectJSON: projectStr, exportConfigJSON: configStr)
+            print("Export completed: \(result.outputPath)")
+        } catch {
+            pipeline.progress.setError("\(error)")
+            print("Export error: \(error)")
+        }
+    }
+
+    return 0
+}
+
+@_cdecl("ck_get_export_progress")
+public func ck_get_export_progress(
+    exportId: UInt64,
+    outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32 {
+    exportsLock.lock()
+    guard let pipeline = activeExports[exportId] else {
+        exportsLock.unlock()
+        return -1
+    }
+    exportsLock.unlock()
+
+    outJson.pointee = strdup(pipeline.progress.toJSON())
+    return 0
+}
+
+@_cdecl("ck_cancel_export")
+public func ck_cancel_export(exportId: UInt64) -> Int32 {
+    exportsLock.lock()
+    guard let pipeline = activeExports[exportId] else {
+        exportsLock.unlock()
+        return -1
+    }
+    exportsLock.unlock()
+
+    pipeline.cancel()
+    return 0
+}
+
+@_cdecl("ck_finish_export")
+public func ck_finish_export(exportId: UInt64) -> Int32 {
+    exportsLock.lock()
+    activeExports.removeValue(forKey: exportId)
+    exportsLock.unlock()
+    return 0
+}
