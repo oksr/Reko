@@ -108,6 +108,30 @@ public func ck_start_recording(
     return errorCode
 }
 
+@_cdecl("ck_pause_recording")
+public func ck_pause_recording(sessionId: UInt64) -> Int32 {
+    sessionsLock.lock()
+    guard let pipeline = activeSessions[sessionId] else {
+        sessionsLock.unlock()
+        return -1
+    }
+    sessionsLock.unlock()
+    pipeline.pause()
+    return 0
+}
+
+@_cdecl("ck_resume_recording")
+public func ck_resume_recording(sessionId: UInt64) -> Int32 {
+    sessionsLock.lock()
+    guard let pipeline = activeSessions[sessionId] else {
+        sessionsLock.unlock()
+        return -1
+    }
+    sessionsLock.unlock()
+    pipeline.resume()
+    return 0
+}
+
 @_cdecl("ck_stop_recording")
 public func ck_stop_recording(
     sessionId: UInt64,

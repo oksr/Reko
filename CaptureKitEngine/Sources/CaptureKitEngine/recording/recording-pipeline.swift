@@ -30,6 +30,9 @@ public final class RecordingPipeline {
     private var frameCount: UInt64 = 0
     private var startTime: UInt64 = 0
     private var isRecording = false
+    private var isPaused = false
+    private var totalPausedNano: UInt64 = 0
+    private var pauseStartNano: UInt64 = 0
     private let config: RecordingConfig
     private let outputDir: URL
 
@@ -68,7 +71,8 @@ public final class RecordingPipeline {
                 outputURL: outputDir.appendingPathComponent("mic.wav"),
                 format: format
             )
-            try mic.start { buffer, _ in
+            try mic.start { [weak self] buffer, _ in
+                guard let self = self, !self.isPaused else { return }
                 writer.write(buffer: buffer)
             }
             micCapture = mic
@@ -78,7 +82,7 @@ public final class RecordingPipeline {
         if let cameraId = config.cameraId {
             let camera = CameraCapture()
             let dims = try camera.startCapture(deviceId: cameraId) { [weak self] sampleBuffer in
-                guard let self = self, self.isRecording else { return }
+                guard let self = self, self.isRecording, !self.isPaused else { return }
                 self.cameraWriter?.appendVideoSample(sampleBuffer)
             }
             cameraWriter = try VideoWriter(
@@ -97,12 +101,12 @@ public final class RecordingPipeline {
             fps: config.fps,
             captureAudio: config.captureSystemAudio,
             onVideoFrame: { [weak self] sampleBuffer in
-                guard let self = self, self.isRecording else { return }
+                guard let self = self, self.isRecording, !self.isPaused else { return }
                 self.videoWriter?.appendVideoSample(sampleBuffer)
                 self.frameCount += 1
             },
             onAudioSample: { [weak self] sampleBuffer in
-                guard let self = self, self.isRecording else { return }
+                guard let self = self, self.isRecording, !self.isPaused else { return }
                 self.systemAudioWriter?.appendAudioSample(sampleBuffer)
             }
         )
@@ -120,7 +124,7 @@ public final class RecordingPipeline {
 
         var timebaseInfo = mach_timebase_info_data_t()
         mach_timebase_info(&timebaseInfo)
-        let elapsed = mach_absolute_time() - startTime
+        let elapsed = mach_absolute_time() - startTime - totalPausedNano
         let durationMs = elapsed * UInt64(timebaseInfo.numer) / UInt64(timebaseInfo.denom) / 1_000_000
 
         return RecordingResult(
@@ -131,5 +135,17 @@ public final class RecordingPipeline {
             durationMs: durationMs,
             frameCount: frameCount
         )
+    }
+
+    public func pause() {
+        guard isRecording, !isPaused else { return }
+        isPaused = true
+        pauseStartNano = mach_absolute_time()
+    }
+
+    public func resume() {
+        guard isRecording, isPaused else { return }
+        isPaused = false
+        totalPausedNano += mach_absolute_time() - pauseStartNano
     }
 }
