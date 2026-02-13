@@ -9,6 +9,48 @@ pub struct ProjectState {
     pub created_at: u64,
     pub tracks: Tracks,
     pub timeline: Timeline,
+    #[serde(default)]
+    pub effects: Option<Effects>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Effects {
+    pub background: BackgroundConfig,
+    pub camera_bubble: CameraBubbleConfig,
+    pub frame: FrameConfig,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundConfig {
+    #[serde(rename = "type")]
+    pub bg_type: String,
+    pub color: String,
+    pub gradient_from: String,
+    pub gradient_to: String,
+    pub gradient_angle: f64,
+    pub padding: f64,
+    pub preset_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CameraBubbleConfig {
+    pub visible: bool,
+    pub position: String,
+    pub size: f64,
+    pub shape: String,
+    pub border_width: f64,
+    pub border_color: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct FrameConfig {
+    pub border_radius: f64,
+    pub shadow: bool,
+    pub shadow_intensity: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -66,6 +108,66 @@ mod tests {
         let json = serde_json::to_string(&tracks).unwrap();
         let parsed: Tracks = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.camera, Some("camera.mov".to_string()));
+    }
+
+    #[test]
+    fn test_project_state_with_effects_roundtrip() {
+        let project = ProjectState {
+            id: "test".to_string(),
+            name: "Test".to_string(),
+            created_at: 12345,
+            tracks: Tracks {
+                screen: "screen.mov".to_string(),
+                mic: None,
+                system_audio: None,
+                camera: None,
+            },
+            timeline: Timeline {
+                duration_ms: 5000,
+                in_point: 0,
+                out_point: 5000,
+            },
+            effects: Some(Effects {
+                background: BackgroundConfig {
+                    bg_type: "gradient".to_string(),
+                    color: "#000".to_string(),
+                    gradient_from: "#1a1a2e".to_string(),
+                    gradient_to: "#16213e".to_string(),
+                    gradient_angle: 135.0,
+                    padding: 8.0,
+                    preset_id: Some("midnight".to_string()),
+                },
+                camera_bubble: CameraBubbleConfig {
+                    visible: true,
+                    position: "bottom-right".to_string(),
+                    size: 15.0,
+                    shape: "circle".to_string(),
+                    border_width: 3.0,
+                    border_color: "#ffffff".to_string(),
+                },
+                frame: FrameConfig {
+                    border_radius: 12.0,
+                    shadow: true,
+                    shadow_intensity: 0.5,
+                },
+            }),
+        };
+        let json = serde_json::to_string(&project).unwrap();
+        // Verify camelCase serialization
+        assert!(json.contains("cameraBubble"));
+        assert!(json.contains("gradientFrom"));
+        assert!(json.contains("borderRadius"));
+        assert!(json.contains("shadowIntensity"));
+        // Round-trip
+        let parsed: ProjectState = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.effects.unwrap().frame.border_radius, 12.0);
+    }
+
+    #[test]
+    fn test_project_state_without_effects_deserializes() {
+        let json = r#"{"id":"t","name":"T","created_at":0,"tracks":{"screen":"s.mov","mic":null,"system_audio":null,"camera":null},"timeline":{"duration_ms":5000,"in_point":0,"out_point":5000}}"#;
+        let parsed: ProjectState = serde_json::from_str(json).unwrap();
+        assert!(parsed.effects.is_none());
     }
 
     #[test]

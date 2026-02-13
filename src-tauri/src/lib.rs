@@ -29,6 +29,11 @@ pub fn run() {
             commands::recording::pause_recording,
             commands::recording::resume_recording,
             commands::recording::get_audio_levels,
+            commands::editor::open_editor,
+            commands::editor::list_projects,
+            commands::editor::load_project,
+            commands::editor::save_project_state,
+            commands::export::quick_export,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

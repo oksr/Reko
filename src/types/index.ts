@@ -28,6 +28,8 @@ export interface RecordingConfig {
   fps: number
 }
 
+import type { Effects } from "./editor"
+
 export interface ProjectState {
   id: string
   name: string
@@ -43,4 +45,5 @@ export interface ProjectState {
     in_point: number
     out_point: number
   }
+  effects?: Effects
 }

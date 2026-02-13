@@ -1,26 +1,29 @@
 import { useState, useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
+import { Card, CardContent } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { SourcePicker } from "@/components/recording/source-picker"
 import { RecordButton } from "@/components/recording/record-button"
 import { RecordingTimer } from "@/components/recording/recording-timer"
 import { AudioLevelMeter } from "@/components/recording/audio-level-meter"
+import { Pencil } from "lucide-react"
 import type { ProjectState } from "@/types"
 
-function App() {
-  const [engineVersion, setEngineVersion] = useState("")
+export function RecorderApp() {
   const [selectedDisplay, setSelectedDisplay] = useState<number | null>(null)
   const [selectedMic, setSelectedMic] = useState<string | null>(null)
   const [selectedCamera, setSelectedCamera] = useState<string | null>(null)
   const [isRecording, setIsRecording] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [lastProject, setLastProject] = useState<ProjectState | null>(null)
+  const [recentProjects, setRecentProjects] = useState<ProjectState[]>([])
   const [error, setError] = useState<string | null>(null)
 
+  // Load recent projects on mount
   useEffect(() => {
-    invoke<string>("get_engine_version").then(setEngineVersion)
+    invoke<ProjectState[]>("list_projects")
+      .then((projects) => setRecentProjects(projects.slice(0, 5)))
+      .catch(() => {}) // Silently fail if no projects yet
   }, [])
 
   const handleStart = async () => {
@@ -52,7 +55,9 @@ function App() {
       const project = await invoke<ProjectState>("stop_recording")
       setIsRecording(false)
       setIsPaused(false)
-      setLastProject(project)
+      // Auto-open editor immediately after recording stops
+      setRecentProjects((prev) => [project, ...prev.slice(0, 4)])
+      await invoke("open_editor", { projectId: project.id })
     } catch (e) {
       setError(String(e))
     } finally {
@@ -78,26 +83,27 @@ function App() {
     }
   }
 
+  const handleOpenEditor = async (projectId: string) => {
+    try {
+      await invoke("open_editor", { projectId })
+    } catch (e) {
+      setError(String(e))
+    }
+  }
+
   return (
-    <main className="min-h-screen p-8 max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">CaptureKit</h1>
-        <p className="text-sm text-muted-foreground">Engine v{engineVersion}</p>
+    <main className="p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-lg font-semibold">CaptureKit</h1>
+        <RecordingTimer isRecording={isRecording} isPaused={isPaused} />
       </div>
 
       {error && (
-        <Card className="mb-4 border-destructive">
-          <CardContent className="pt-4">
-            <p className="text-sm text-destructive">{error}</p>
-          </CardContent>
-        </Card>
+        <p className="text-sm text-destructive bg-destructive/10 rounded px-3 py-2">{error}</p>
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Record</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="pt-4 space-y-4">
           <SourcePicker
             onDisplaySelected={setSelectedDisplay}
             selectedDisplayId={selectedDisplay}
@@ -107,9 +113,7 @@ function App() {
             selectedCameraId={selectedCamera}
           />
 
-          <Separator />
-
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <RecordButton
               isRecording={isRecording}
               isPaused={isPaused}
@@ -119,7 +123,6 @@ function App() {
               onResume={handleResume}
               disabled={!selectedDisplay || isLoading}
             />
-            <RecordingTimer isRecording={isRecording} isPaused={isPaused} />
           </div>
 
           {isRecording && (
@@ -128,29 +131,34 @@ function App() {
         </CardContent>
       </Card>
 
-      {lastProject && (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>Last Recording</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <p><span className="text-muted-foreground">Name:</span> {lastProject.name}</p>
-            <p><span className="text-muted-foreground">Duration:</span> {(lastProject.timeline.duration_ms / 1000).toFixed(1)}s</p>
-            <p><span className="text-muted-foreground">Screen:</span> {lastProject.tracks.screen}</p>
-            {lastProject.tracks.mic && (
-              <p><span className="text-muted-foreground">Mic:</span> {lastProject.tracks.mic}</p>
-            )}
-            {lastProject.tracks.system_audio && (
-              <p><span className="text-muted-foreground">System Audio:</span> {lastProject.tracks.system_audio}</p>
-            )}
-            {lastProject.tracks.camera && (
-              <p><span className="text-muted-foreground">Camera:</span> {lastProject.tracks.camera}</p>
-            )}
+      {/* Recent projects list */}
+      {!isRecording && recentProjects.length > 0 && (
+        <Card>
+          <CardContent className="pt-4">
+            <h2 className="text-sm font-medium mb-2">Recent</h2>
+            <div className="space-y-2">
+              {recentProjects.map((p) => (
+                <div key={p.id} className="flex items-center justify-between text-sm">
+                  <div className="truncate flex-1 mr-2">
+                    <p className="font-medium truncate">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(p.timeline.duration_ms / 1000).toFixed(1)}s
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleOpenEditor(p.id)}
+                  >
+                    <Pencil className="w-3 h-3 mr-1" />
+                    Edit
+                  </Button>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
     </main>
   )
 }
-
-export default App
