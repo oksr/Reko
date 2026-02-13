@@ -22,4 +22,10 @@ final class CameraTests: XCTestCase {
         let capture = CameraCapture()
         capture.stopCapture() // should be a no-op
     }
+
+    func testCameraDimensionsArePositive() {
+        let dims = CameraCapture.CameraDimensions(width: 1920, height: 1080)
+        XCTAssertGreaterThan(dims.width, 0)
+        XCTAssertGreaterThan(dims.height, 0)
+    }
 }
