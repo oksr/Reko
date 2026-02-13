@@ -28,6 +28,7 @@ pub fn run() {
             commands::recording::stop_recording,
             commands::recording::pause_recording,
             commands::recording::resume_recording,
+            commands::recording::get_audio_levels,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

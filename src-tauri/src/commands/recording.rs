@@ -56,6 +56,22 @@ pub async fn start_recording(
     Ok(project_id)
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AudioLevels {
+    pub mic_level: f32,
+    pub system_audio_level: f32,
+}
+
+#[tauri::command]
+pub async fn get_audio_levels(
+    state: State<'_, RecordingState>,
+) -> Result<AudioLevels, String> {
+    let session_id = state.active_session_id.lock().unwrap()
+        .ok_or("No active recording")?;
+    let json = CaptureKitEngine::get_audio_levels(session_id)?;
+    serde_json::from_str(&json).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn pause_recording(
     state: State<'_, RecordingState>,
@@ -151,6 +167,22 @@ mod tests {
         };
         assert!(state.active_session_id.lock().unwrap().is_none());
         assert!(state.active_project_id.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_audio_levels_deserializes_from_swift_json() {
+        let json = r#"{"mic_level":0.75,"system_audio_level":0.3}"#;
+        let levels: AudioLevels = serde_json::from_str(json).unwrap();
+        assert!((levels.mic_level - 0.75).abs() < 0.001);
+        assert!((levels.system_audio_level - 0.3).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_audio_levels_deserializes_zeros() {
+        let json = r#"{"mic_level":0.0,"system_audio_level":0.0}"#;
+        let levels: AudioLevels = serde_json::from_str(json).unwrap();
+        assert_eq!(levels.mic_level, 0.0);
+        assert_eq!(levels.system_audio_level, 0.0);
     }
 
     #[test]

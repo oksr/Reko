@@ -15,6 +15,11 @@ export interface CameraInfo {
   name: string
 }
 
+export interface AudioLevels {
+  mic_level: number
+  system_audio_level: number
+}
+
 export interface RecordingConfig {
   display_id: number
   mic_id: string | null

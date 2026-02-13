@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator"
 import { SourcePicker } from "@/components/recording/source-picker"
 import { RecordButton } from "@/components/recording/record-button"
 import { RecordingTimer } from "@/components/recording/recording-timer"
+import { AudioLevelMeter } from "@/components/recording/audio-level-meter"
 import type { ProjectState } from "@/types"
 
 function App() {
@@ -120,6 +121,10 @@ function App() {
             />
             <RecordingTimer isRecording={isRecording} isPaused={isPaused} />
           </div>
+
+          {isRecording && (
+            <AudioLevelMeter isRecording={isRecording} isPaused={isPaused} />
+          )}
         </CardContent>
       </Card>
 
