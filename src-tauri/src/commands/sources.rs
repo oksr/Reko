@@ -16,6 +16,18 @@ pub struct AudioInputInfo {
     pub name: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CameraInfo {
+    pub id: String,
+    pub name: String,
+}
+
+#[tauri::command]
+pub async fn list_cameras() -> Result<Vec<CameraInfo>, String> {
+    let json = CaptureKitEngine::list_cameras()?;
+    serde_json::from_str(&json).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn list_displays() -> Result<Vec<DisplayInfo>, String> {
     let json = CaptureKitEngine::list_displays()?;
@@ -26,4 +38,25 @@ pub async fn list_displays() -> Result<Vec<DisplayInfo>, String> {
 pub async fn list_audio_inputs() -> Result<Vec<AudioInputInfo>, String> {
     let json = CaptureKitEngine::list_audio_inputs()?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_camera_info_deserializes_from_swift_json() {
+        let json = r#"[{"id":"abc-123","name":"FaceTime HD"}]"#;
+        let cameras: Vec<CameraInfo> = serde_json::from_str(json).unwrap();
+        assert_eq!(cameras.len(), 1);
+        assert_eq!(cameras[0].id, "abc-123");
+        assert_eq!(cameras[0].name, "FaceTime HD");
+    }
+
+    #[test]
+    fn test_camera_info_empty_array() {
+        let json = "[]";
+        let cameras: Vec<CameraInfo> = serde_json::from_str(json).unwrap();
+        assert!(cameras.is_empty());
+    }
 }

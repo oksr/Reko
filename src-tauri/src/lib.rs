@@ -23,6 +23,7 @@ pub fn run() {
             get_engine_version,
             commands::sources::list_displays,
             commands::sources::list_audio_inputs,
+            commands::sources::list_cameras,
             commands::recording::start_recording,
             commands::recording::stop_recording,
         ])

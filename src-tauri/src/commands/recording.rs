@@ -14,6 +14,7 @@ pub struct RecordingState {
 pub struct RecordingConfig {
     pub display_id: u32,
     pub mic_id: Option<String>,
+    pub camera_id: Option<String>,
     pub capture_system_audio: bool,
     pub fps: u32,
 }
@@ -23,6 +24,7 @@ struct SwiftRecordingResult {
     screen_path: String,
     system_audio_path: Option<String>,
     mic_path: Option<String>,
+    camera_path: Option<String>,
     duration_ms: u64,
     #[allow(dead_code)]
     frame_count: u64,
@@ -43,6 +45,7 @@ pub async fn start_recording(
         "capture_system_audio": config.capture_system_audio,
         "output_dir": raw.to_string_lossy(),
         "mic_id": config.mic_id,
+        "camera_id": config.camera_id,
     });
 
     let session_id = CaptureKitEngine::start_recording(&swift_config.to_string())?;
@@ -78,6 +81,7 @@ pub async fn stop_recording(
             screen: result.screen_path,
             mic: result.mic_path,
             system_audio: result.system_audio_path,
+            camera: result.camera_path,
         },
         timeline: Timeline {
             duration_ms: result.duration_ms,
@@ -88,4 +92,49 @@ pub async fn stop_recording(
 
     project::save_project(&project)?;
     Ok(project)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_recording_config_serializes_with_camera_id() {
+        let config = RecordingConfig {
+            display_id: 1,
+            mic_id: None,
+            camera_id: Some("cam-abc".to_string()),
+            capture_system_audio: true,
+            fps: 60,
+        };
+        let json = serde_json::to_value(&config).unwrap();
+        assert_eq!(json["camera_id"], "cam-abc");
+    }
+
+    #[test]
+    fn test_swift_result_deserializes_with_camera_path() {
+        let json = r#"{
+            "screen_path": "screen.mov",
+            "system_audio_path": null,
+            "mic_path": null,
+            "camera_path": "camera.mov",
+            "duration_ms": 5000,
+            "frame_count": 300
+        }"#;
+        let result: SwiftRecordingResult = serde_json::from_str(json).unwrap();
+        assert_eq!(result.camera_path, Some("camera.mov".to_string()));
+    }
+
+    #[test]
+    fn test_swift_result_deserializes_without_camera_path() {
+        let json = r#"{
+            "screen_path": "screen.mov",
+            "system_audio_path": null,
+            "mic_path": null,
+            "duration_ms": 5000,
+            "frame_count": 300
+        }"#;
+        let result: SwiftRecordingResult = serde_json::from_str(json).unwrap();
+        assert!(result.camera_path.is_none());
+    }
 }

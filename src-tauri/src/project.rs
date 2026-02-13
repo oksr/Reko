@@ -16,6 +16,7 @@ pub struct Tracks {
     pub screen: String,
     pub mic: Option<String>,
     pub system_audio: Option<String>,
+    pub camera: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -55,16 +56,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_tracks_serialization_roundtrip() {
+    fn test_tracks_serialization_with_camera() {
         let tracks = Tracks {
             screen: "screen.mov".to_string(),
             mic: Some("mic.wav".to_string()),
             system_audio: None,
+            camera: Some("camera.mov".to_string()),
         };
         let json = serde_json::to_string(&tracks).unwrap();
         let parsed: Tracks = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.screen, "screen.mov");
-        assert_eq!(parsed.mic, Some("mic.wav".to_string()));
-        assert!(parsed.system_audio.is_none());
+        assert_eq!(parsed.camera, Some("camera.mov".to_string()));
+    }
+
+    #[test]
+    fn test_tracks_serialization_without_camera() {
+        let tracks = Tracks {
+            screen: "screen.mov".to_string(),
+            mic: None,
+            system_audio: None,
+            camera: None,
+        };
+        let json = serde_json::to_string(&tracks).unwrap();
+        let parsed: Tracks = serde_json::from_str(&json).unwrap();
+        assert!(parsed.camera.is_none());
     }
 }
