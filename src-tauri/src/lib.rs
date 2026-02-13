@@ -26,6 +26,8 @@ pub fn run() {
             commands::sources::list_cameras,
             commands::recording::start_recording,
             commands::recording::stop_recording,
+            commands::recording::pause_recording,
+            commands::recording::resume_recording,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

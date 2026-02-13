@@ -57,6 +57,24 @@ pub async fn start_recording(
 }
 
 #[tauri::command]
+pub async fn pause_recording(
+    state: State<'_, RecordingState>,
+) -> Result<(), String> {
+    let session_id = state.active_session_id.lock().unwrap()
+        .ok_or("No active recording")?;
+    CaptureKitEngine::pause_recording(session_id)
+}
+
+#[tauri::command]
+pub async fn resume_recording(
+    state: State<'_, RecordingState>,
+) -> Result<(), String> {
+    let session_id = state.active_session_id.lock().unwrap()
+        .ok_or("No active recording")?;
+    CaptureKitEngine::resume_recording(session_id)
+}
+
+#[tauri::command]
 pub async fn stop_recording(
     state: State<'_, RecordingState>,
 ) -> Result<ProjectState, String> {
@@ -123,6 +141,16 @@ mod tests {
         }"#;
         let result: SwiftRecordingResult = serde_json::from_str(json).unwrap();
         assert_eq!(result.camera_path, Some("camera.mov".to_string()));
+    }
+
+    #[test]
+    fn test_recording_state_defaults_to_none() {
+        let state = RecordingState {
+            active_session_id: std::sync::Mutex::new(None),
+            active_project_id: std::sync::Mutex::new(None),
+        };
+        assert!(state.active_session_id.lock().unwrap().is_none());
+        assert!(state.active_project_id.lock().unwrap().is_none());
     }
 
     #[test]

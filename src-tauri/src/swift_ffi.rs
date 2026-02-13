@@ -7,6 +7,8 @@ extern "C" {
     fn ck_list_audio_inputs(out_json: *mut *const c_char) -> i32;
     fn ck_list_cameras(out_json: *mut *const c_char) -> i32;
     fn ck_start_recording(config_json: *const c_char, out_session_id: *mut u64) -> i32;
+    fn ck_pause_recording(session_id: u64) -> i32;
+    fn ck_resume_recording(session_id: u64) -> i32;
     fn ck_stop_recording(session_id: u64, out_result_json: *mut *const c_char) -> i32;
     fn ck_free_string(ptr: *mut c_char);
 }
@@ -59,6 +61,24 @@ impl CaptureKitEngine {
             }
         }
         Ok(session_id)
+    }
+
+    pub fn pause_recording(session_id: u64) -> Result<(), String> {
+        unsafe {
+            if ck_pause_recording(session_id) != 0 {
+                return Err("Failed to pause recording".into());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn resume_recording(session_id: u64) -> Result<(), String> {
+        unsafe {
+            if ck_resume_recording(session_id) != 0 {
+                return Err("Failed to resume recording".into());
+            }
+        }
+        Ok(())
     }
 
     pub fn stop_recording(session_id: u64) -> Result<String, String> {
