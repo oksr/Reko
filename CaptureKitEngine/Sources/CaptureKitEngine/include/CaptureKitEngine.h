@@ -14,6 +14,9 @@ typedef int32_t CKResult;
 const char* ck_get_version(void);
 void ck_free_string(char *str);
 
+// Source discovery
+CKResult ck_list_displays(const char **out_json);
+
 #ifdef __cplusplus
 }
 #endif
