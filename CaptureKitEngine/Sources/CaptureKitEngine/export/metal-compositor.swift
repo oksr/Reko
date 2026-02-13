@@ -19,6 +19,9 @@ public enum ExportError: Error, LocalizedError {
     case renderPassFailed
     case notConfigured
     case videoDecoderFailed(String)
+    case invalidProject(String)
+    case cancelled
+    case writerFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -34,6 +37,9 @@ public enum ExportError: Error, LocalizedError {
         case .renderPassFailed: return "Render pass encoding failed"
         case .notConfigured: return "Compositor not configured — call configure(width:height:) first"
         case .videoDecoderFailed(let msg): return "Video decoder failed: \(msg)"
+        case .invalidProject(let msg): return "Invalid project: \(msg)"
+        case .cancelled: return "Export cancelled"
+        case .writerFailed(let msg): return "Asset writer failed: \(msg)"
         }
     }
 }
@@ -88,6 +94,34 @@ public struct ExportEffects {
         self.hasShadow = hasShadow
         self.shadowIntensity = shadowIntensity
         self.camera = camera
+    }
+
+    /// Convenience initializer that decodes from a loosely-typed dictionary
+    /// (used when the project JSON is parsed via JSONSerialization).
+    public init(from dict: [String: Any]) {
+        let bg = dict["background"] as? [String: Any] ?? [:]
+        self.bgColorFrom = bg["colorFrom"] as? String ?? "#1a1a2e"
+        self.bgColorTo = bg["colorTo"] as? String ?? "#16213e"
+        self.bgAngleDeg = bg["angleDeg"] as? Double ?? 135
+        self.bgIsSolid = bg["isSolid"] as? Bool ?? false
+
+        let frame = dict["frame"] as? [String: Any] ?? [:]
+        self.padding = frame["padding"] as? Double ?? 8
+        self.borderRadius = frame["borderRadius"] as? Double ?? 12
+        self.hasShadow = frame["hasShadow"] as? Bool ?? true
+        self.shadowIntensity = frame["shadowIntensity"] as? Double ?? 0.5
+
+        if let cam = dict["camera"] as? [String: Any] {
+            self.camera = CameraEffects(
+                sizePercent: cam["sizePercent"] as? Double ?? 15,
+                position: cam["position"] as? String ?? "bottom-right",
+                isCircle: cam["isCircle"] as? Bool ?? true,
+                borderWidth: cam["borderWidth"] as? Double ?? 3,
+                borderColor: cam["borderColor"] as? String ?? "#ffffff"
+            )
+        } else {
+            self.camera = nil
+        }
     }
 }
 
