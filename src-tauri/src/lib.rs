@@ -1,3 +1,4 @@
+mod commands;
 mod swift_ffi;
 
 use swift_ffi::CaptureKitEngine;
@@ -11,7 +12,10 @@ fn get_engine_version() -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![get_engine_version])
+        .invoke_handler(tauri::generate_handler![
+            get_engine_version,
+            commands::sources::list_displays,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
