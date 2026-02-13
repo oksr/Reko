@@ -65,3 +65,23 @@ export interface FrameConfig {
   shadow: boolean
   shadowIntensity: number // 0-1
 }
+
+export interface ExportConfig {
+  resolution: "original" | "1080p" | "720p"
+  outputPath: string
+}
+
+export interface ExportProgress {
+  framesRendered: number
+  totalFrames: number
+  percentage: number
+  elapsedMs: number
+  estimatedRemainingMs: number | null
+  phase: "compositing" | "finalizing" | "done" | "cancelled" | "error"
+}
+
+export interface ExportResult {
+  outputPath: string
+  durationMs: number
+  fileSizeBytes: number
+}

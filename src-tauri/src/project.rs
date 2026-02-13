@@ -54,6 +54,32 @@ pub struct FrameConfig {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportConfig {
+    pub resolution: String,        // "original" | "1080p" | "720p"
+    pub output_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportProgress {
+    pub frames_rendered: u64,
+    pub total_frames: u64,
+    pub percentage: f64,
+    pub elapsed_ms: u64,
+    pub estimated_remaining_ms: Option<u64>,
+    pub phase: String,             // "compositing" | "finalizing" | "done" | "cancelled" | "error"
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportResult {
+    pub output_path: String,
+    pub duration_ms: u64,
+    pub file_size_bytes: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tracks {
     pub screen: String,
     pub mic: Option<String>,
@@ -181,5 +207,35 @@ mod tests {
         let json = serde_json::to_string(&tracks).unwrap();
         let parsed: Tracks = serde_json::from_str(&json).unwrap();
         assert!(parsed.camera.is_none());
+    }
+
+    #[test]
+    fn test_export_config_serialization() {
+        let config = ExportConfig {
+            resolution: "1080p".to_string(),
+            output_path: "/Users/test/Desktop/output.mp4".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("resolution"));
+        assert!(json.contains("outputPath"));
+        let parsed: ExportConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.resolution, "1080p");
+    }
+
+    #[test]
+    fn test_export_progress_serialization() {
+        let progress = ExportProgress {
+            frames_rendered: 500,
+            total_frames: 1000,
+            percentage: 50.0,
+            elapsed_ms: 5000,
+            estimated_remaining_ms: Some(5000),
+            phase: "compositing".to_string(),
+        };
+        let json = serde_json::to_string(&progress).unwrap();
+        assert!(json.contains("framesRendered"));
+        assert!(json.contains("estimatedRemainingMs"));
+        let parsed: ExportProgress = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.percentage, 50.0);
     }
 }
