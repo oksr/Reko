@@ -2,6 +2,7 @@ mod commands;
 mod project;
 mod swift_ffi;
 
+use commands::export::ExportState;
 use commands::recording::RecordingState;
 use std::sync::Mutex;
 use swift_ffi::CaptureKitEngine;
@@ -11,6 +12,13 @@ fn get_engine_version() -> String {
     CaptureKitEngine::version()
 }
 
+#[tauri::command]
+fn get_home_dir() -> Result<String, String> {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or("Could not find home directory".to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -18,6 +26,9 @@ pub fn run() {
         .manage(RecordingState {
             active_session_id: Mutex::new(None),
             active_project_id: Mutex::new(None),
+        })
+        .manage(ExportState {
+            active_export_id: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             get_engine_version,
@@ -33,7 +44,11 @@ pub fn run() {
             commands::editor::list_projects,
             commands::editor::load_project,
             commands::editor::save_project_state,
-            commands::export::quick_export,
+            commands::export::start_export,
+            commands::export::get_export_progress,
+            commands::export::cancel_export,
+            commands::export::finish_export,
+            get_home_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

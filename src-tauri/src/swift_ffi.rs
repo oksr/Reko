@@ -11,6 +11,14 @@ extern "C" {
     fn ck_resume_recording(session_id: u64) -> i32;
     fn ck_get_audio_levels(session_id: u64, out_json: *mut *const c_char) -> i32;
     fn ck_stop_recording(session_id: u64, out_result_json: *mut *const c_char) -> i32;
+    fn ck_start_export(
+        project_json: *const c_char,
+        export_config_json: *const c_char,
+        out_export_id: *mut u64,
+    ) -> i32;
+    fn ck_get_export_progress(export_id: u64, out_json: *mut *const c_char) -> i32;
+    fn ck_cancel_export(export_id: u64) -> i32;
+    fn ck_finish_export(export_id: u64) -> i32;
     fn ck_free_string(ptr: *mut c_char);
 }
 
@@ -88,5 +96,40 @@ impl CaptureKitEngine {
 
     pub fn stop_recording(session_id: u64) -> Result<String, String> {
         unsafe { call_json(|p| ck_stop_recording(session_id, p)) }
+    }
+
+    pub fn start_export(project_json: &str, export_config_json: &str) -> Result<u64, String> {
+        let p = CString::new(project_json).map_err(|e| e.to_string())?;
+        let c = CString::new(export_config_json).map_err(|e| e.to_string())?;
+        let mut export_id: u64 = 0;
+        unsafe {
+            let result = ck_start_export(p.as_ptr(), c.as_ptr(), &mut export_id);
+            if result != 0 {
+                return Err("Failed to start export".into());
+            }
+        }
+        Ok(export_id)
+    }
+
+    pub fn get_export_progress(export_id: u64) -> Result<String, String> {
+        unsafe { call_json(|p| ck_get_export_progress(export_id, p)) }
+    }
+
+    pub fn cancel_export(export_id: u64) -> Result<(), String> {
+        unsafe {
+            if ck_cancel_export(export_id) != 0 {
+                return Err("Failed to cancel export".into());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn finish_export(export_id: u64) -> Result<(), String> {
+        unsafe {
+            if ck_finish_export(export_id) != 0 {
+                return Err("Failed to finish export".into());
+            }
+        }
+        Ok(())
     }
 }
