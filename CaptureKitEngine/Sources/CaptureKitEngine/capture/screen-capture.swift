@@ -106,4 +106,5 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
 public enum CaptureError: Error {
     case displayNotFound
+    case cameraNotFound
 }

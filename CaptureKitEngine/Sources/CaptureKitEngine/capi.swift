@@ -53,6 +53,20 @@ public func ck_list_audio_inputs(outJson: UnsafeMutablePointer<UnsafeMutablePoin
     return 0
 }
 
+@_cdecl("ck_list_cameras")
+public func ck_list_cameras(outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32 {
+    let cameras = CameraCapture.listCameras()
+    let encoder = JSONEncoder()
+    encoder.keyEncodingStrategy = .convertToSnakeCase
+    guard let data = try? encoder.encode(cameras),
+          let json = String(data: data, encoding: .utf8) else {
+        outJson.pointee = strdup("[]")
+        return -1
+    }
+    outJson.pointee = strdup(json)
+    return 0
+}
+
 @_cdecl("ck_start_recording")
 public func ck_start_recording(
     configJson: UnsafePointer<CChar>,
