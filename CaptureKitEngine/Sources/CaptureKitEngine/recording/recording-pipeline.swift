@@ -1,5 +1,36 @@
 import Foundation
 import CoreMedia
+import AVFoundation
+
+public enum AudioLevelCalculator {
+    public static func peakLevel(from buffer: AVAudioPCMBuffer) -> Float {
+        guard let channelData = buffer.floatChannelData else { return 0 }
+        let frames = Int(buffer.frameLength)
+        var peak: Float = 0
+        for i in 0..<frames {
+            peak = max(peak, abs(channelData[0][i]))
+        }
+        return min(peak, 1.0)
+    }
+
+    public static func peakLevel(from sampleBuffer: CMSampleBuffer) -> Float {
+        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return 0 }
+        let length = CMBlockBufferGetDataLength(blockBuffer)
+        guard length > 0 else { return 0 }
+
+        var dataPointer: UnsafeMutablePointer<Int8>?
+        CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: nil, dataPointerOut: &dataPointer)
+        guard let src = dataPointer else { return 0 }
+
+        let floatPtr = UnsafeRawPointer(src).assumingMemoryBound(to: Float.self)
+        let sampleCount = length / MemoryLayout<Float>.size
+        var peak: Float = 0
+        for i in 0..<sampleCount {
+            peak = max(peak, abs(floatPtr[i]))
+        }
+        return min(peak, 1.0)
+    }
+}
 
 public struct RecordingConfig: Codable {
     public let displayId: UInt32
@@ -33,6 +64,9 @@ public final class RecordingPipeline {
     private var isPaused = false
     private var totalPausedNano: UInt64 = 0
     private var pauseStartNano: UInt64 = 0
+    private var micLevel: Float = 0
+    private var systemAudioLevel: Float = 0
+    private let levelsLock = NSLock()
     private let config: RecordingConfig
     private let outputDir: URL
 
@@ -74,6 +108,10 @@ public final class RecordingPipeline {
             try mic.start { [weak self] buffer, _ in
                 guard let self = self, !self.isPaused else { return }
                 writer.write(buffer: buffer)
+                let level = AudioLevelCalculator.peakLevel(from: buffer)
+                self.levelsLock.lock()
+                self.micLevel = level
+                self.levelsLock.unlock()
             }
             micCapture = mic
             micWriter = writer
@@ -108,6 +146,10 @@ public final class RecordingPipeline {
             onAudioSample: { [weak self] sampleBuffer in
                 guard let self = self, self.isRecording, !self.isPaused else { return }
                 self.systemAudioWriter?.appendAudioSample(sampleBuffer)
+                let level = AudioLevelCalculator.peakLevel(from: sampleBuffer)
+                self.levelsLock.lock()
+                self.systemAudioLevel = level
+                self.levelsLock.unlock()
             }
         )
     }
@@ -147,5 +189,11 @@ public final class RecordingPipeline {
         guard isRecording, isPaused else { return }
         isPaused = false
         totalPausedNano += mach_absolute_time() - pauseStartNano
+    }
+
+    public func getAudioLevels() -> (mic: Float, systemAudio: Float) {
+        levelsLock.lock()
+        defer { levelsLock.unlock() }
+        return (micLevel, systemAudioLevel)
     }
 }

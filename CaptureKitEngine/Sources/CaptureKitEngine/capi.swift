@@ -132,6 +132,24 @@ public func ck_resume_recording(sessionId: UInt64) -> Int32 {
     return 0
 }
 
+@_cdecl("ck_get_audio_levels")
+public func ck_get_audio_levels(
+    sessionId: UInt64,
+    outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32 {
+    sessionsLock.lock()
+    guard let pipeline = activeSessions[sessionId] else {
+        sessionsLock.unlock()
+        return -1
+    }
+    sessionsLock.unlock()
+
+    let levels = pipeline.getAudioLevels()
+    let json = "{\"mic_level\":\(levels.mic),\"system_audio_level\":\(levels.systemAudio)}"
+    outJson.pointee = strdup(json)
+    return 0
+}
+
 @_cdecl("ck_stop_recording")
 public func ck_stop_recording(
     sessionId: UInt64,
