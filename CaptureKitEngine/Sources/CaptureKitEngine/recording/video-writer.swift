@@ -32,11 +32,13 @@ public final class VideoWriter {
     }
 
     public func appendVideoSample(_ sampleBuffer: CMSampleBuffer) {
+        guard CMSampleBufferGetImageBuffer(sampleBuffer) != nil else { return }
         if !isStarted {
             assetWriter.startWriting()
             assetWriter.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
             isStarted = true
         }
+        guard assetWriter.status == .writing else { return }
         guard videoInput.isReadyForMoreMediaData else { return }
         videoInput.append(sampleBuffer)
     }

@@ -87,6 +87,13 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         guard sampleBuffer.isValid else { return }
         switch type {
         case .screen:
+            guard let attachmentsArray = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
+                  let attachments = attachmentsArray.first,
+                  let statusRawValue = attachments[SCStreamFrameInfo.status] as? Int,
+                  let status = SCFrameStatus(rawValue: statusRawValue),
+                  status == .complete else {
+                return
+            }
             onVideoFrame?(sampleBuffer)
         case .audio:
             onAudioSample?(sampleBuffer)
