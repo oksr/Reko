@@ -9,6 +9,20 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (p: string) => p,
 }))
 
+// Mock AudioContext for AudioTrack
+global.AudioContext = class {
+  decodeAudioData = vi.fn().mockResolvedValue({
+    numberOfChannels: 1,
+    length: 1000,
+    sampleRate: 44100,
+    getChannelData: () => new Float32Array(1000),
+  })
+} as any
+
+global.fetch = vi.fn().mockResolvedValue({
+  arrayBuffer: () => Promise.resolve(new ArrayBuffer(1024)),
+}) as any
+
 const MOCK_PROJECT: EditorProject = {
   id: "t", name: "T", created_at: 0,
   tracks: { screen: "/s.mov", mic: "/m.wav", system_audio: null, camera: "/c.mov", mouse_events: null },
@@ -32,24 +46,26 @@ describe("Timeline", () => {
     useEditorStore.getState().loadProject({ ...MOCK_PROJECT })
   })
 
-  it("renders screen track", () => {
+  it("renders clip track with duration label", () => {
     render(<Timeline videoSync={mockVideoSync} />)
-    expect(screen.getByText("Screen")).toBeTruthy()
-  })
-
-  it("renders camera track when present", () => {
-    render(<Timeline videoSync={mockVideoSync} />)
-    expect(screen.getByText("Camera")).toBeTruthy()
-  })
-
-  it("renders trim handles", () => {
-    render(<Timeline videoSync={mockVideoSync} />)
-    expect(screen.getByTitle("In point")).toBeTruthy()
-    expect(screen.getByTitle("Out point")).toBeTruthy()
+    expect(screen.getByText("Clip")).toBeTruthy()
   })
 
   it("renders time ruler", () => {
     render(<Timeline videoSync={mockVideoSync} />)
     expect(screen.getByText("0:00")).toBeTruthy()
+  })
+
+  it("renders empty zoom track with hint text", () => {
+    render(<Timeline videoSync={mockVideoSync} />)
+    expect(screen.getByText("Click or drag to add zoom on cursor")).toBeTruthy()
+  })
+
+  it("renders zoom segments when keyframes exist", () => {
+    useEditorStore.getState().addZoomKeyframe({
+      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "ease-in-out", durationMs: 500,
+    })
+    render(<Timeline videoSync={mockVideoSync} />)
+    expect(screen.getByText("2.0x")).toBeTruthy()
   })
 })

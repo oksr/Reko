@@ -125,7 +125,7 @@ function EditorContent() {
       </div>
 
       {/* Timeline */}
-      <div className="border-t shrink-0 p-4 min-h-[12rem]">
+      <div className="border-t shrink-0 px-4 py-3">
         <Timeline videoSync={videoSync} />
       </div>
     </div>

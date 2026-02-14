@@ -12,6 +12,8 @@ export function ZoomPanel() {
   const setZoomKeyframes = useEditorStore((s) => s.setZoomKeyframes)
   const addZoomKeyframe = useEditorStore((s) => s.addZoomKeyframe)
   const removeZoomKeyframe = useEditorStore((s) => s.removeZoomKeyframe)
+  const selectedZoomIndex = useEditorStore((s) => s.selectedZoomIndex)
+  const setSelectedZoomIndex = useEditorStore((s) => s.setSelectedZoomIndex)
   const [generating, setGenerating] = useState(false)
 
   if (!project) return null
@@ -36,9 +38,9 @@ export function ZoomPanel() {
       timeMs: Math.round(currentTime),
       x: 0.5,
       y: 0.5,
-      scale: 2.0,
+      scale: 1.5,
       easing: "ease-in-out",
-      durationMs: 300,
+      durationMs: 500,
     })
   }
 
@@ -78,10 +80,13 @@ export function ZoomPanel() {
         <div className="space-y-1">
           <Label className="text-xs">Keyframes ({keyframes.length})</Label>
           <div className="max-h-32 overflow-y-auto space-y-0.5">
-            {keyframes.map((kf) => (
+            {keyframes.map((kf, i) => (
               <div
                 key={kf.timeMs}
-                className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1"
+                className={`flex items-center justify-between text-xs rounded px-2 py-1 cursor-pointer ${
+                  selectedZoomIndex === i ? "bg-primary/20 ring-1 ring-primary" : "bg-muted/50 hover:bg-muted"
+                }`}
+                onClick={() => setSelectedZoomIndex(i)}
               >
                 <span className="font-mono">{formatTime(kf.timeMs)}</span>
                 <span>{kf.scale}x</span>
