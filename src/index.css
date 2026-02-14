@@ -127,3 +127,268 @@
     @apply font-sans;
     }
 }
+
+/* Transparent background for recorder and picker windows */
+body:has(.recorder-window),
+body:has(.window-picker) {
+  background: transparent !important;
+}
+
+/* Recorder Toolbar */
+
+.recorder-window {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background: transparent;
+}
+
+.recorder-toolbar {
+  background: rgba(30, 30, 30, 0.95);
+  border-radius: 12px;
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  height: 56px;
+  padding: 0 8px;
+  user-select: none;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin: 0 auto 8px;
+  transition: max-width 250ms cubic-bezier(0.2, 0, 0, 1);
+  max-width: 700px;
+}
+
+.recorder-toolbar.recording {
+  max-width: 420px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: default;
+  transition: background 100ms ease-out;
+  white-space: nowrap;
+  outline: none;
+}
+
+.toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.toolbar-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.toolbar-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: -2px;
+}
+
+.toolbar-btn.active {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.toolbar-btn.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.toolbar-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: default;
+  transition: background 100ms ease-out;
+  outline: none;
+}
+
+.toolbar-btn-icon:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.toolbar-btn-icon:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.toolbar-btn-icon:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: -2px;
+}
+
+/* Record button */
+.record-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: default;
+  transition: background 100ms ease-out;
+  outline: none;
+  padding: 0;
+}
+
+.record-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.record-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.record-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: -2px;
+}
+
+.record-btn.disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* Chevron indicator */
+.chevron-indicator {
+  width: 6px;
+  height: 6px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* Popover animations */
+.toolbar-popover {
+  background: rgba(30, 30, 30, 0.98);
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  animation: popover-in 150ms cubic-bezier(0.2, 0, 0, 1);
+  transform-origin: bottom center;
+}
+
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Morph transition */
+.toolbar-content-enter {
+  animation: content-fade-in 120ms ease-out;
+}
+
+.toolbar-content-exit {
+  animation: content-fade-out 120ms ease-out;
+}
+
+@keyframes content-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes content-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Recording pulse */
+.recording-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recording-dot {
+    animation: none;
+  }
+  .recorder-toolbar {
+    transition: none;
+  }
+  .toolbar-popover {
+    animation: none;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Countdown */
+.countdown-number {
+  font-size: 28px;
+  font-weight: 700;
+  color: white;
+  animation: countdown-scale 1s cubic-bezier(0.2, 0, 0, 1);
+}
+
+@keyframes countdown-scale {
+  from {
+    transform: scale(1.2);
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .countdown-number {
+    animation: none;
+  }
+}
+
+/* Window picker card animation */
+@keyframes picker-card-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}

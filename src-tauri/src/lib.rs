@@ -1,5 +1,6 @@
+pub mod autozoom;
 mod commands;
-mod project;
+pub mod project;
 mod swift_ffi;
 
 use commands::export::ExportState;
@@ -23,6 +24,8 @@ fn get_home_dir() -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(RecordingState {
             active_session_id: Mutex::new(None),
             active_project_id: Mutex::new(None),
@@ -35,6 +38,7 @@ pub fn run() {
             commands::sources::list_displays,
             commands::sources::list_audio_inputs,
             commands::sources::list_cameras,
+            commands::sources::list_windows,
             commands::recording::start_recording,
             commands::recording::stop_recording,
             commands::recording::pause_recording,
@@ -48,6 +52,7 @@ pub fn run() {
             commands::export::get_export_progress,
             commands::export::cancel_export,
             commands::export::finish_export,
+            commands::editor::generate_auto_zoom,
             get_home_dir,
         ])
         .run(tauri::generate_context!())

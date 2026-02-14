@@ -22,6 +22,25 @@ pub struct CameraInfo {
     pub name: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WindowInfo {
+    pub id: u32,
+    pub app_name: String,
+    pub title: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub bundle_id: String,
+    pub app_icon: String,
+}
+
+#[tauri::command]
+pub async fn list_windows() -> Result<Vec<WindowInfo>, String> {
+    let json = CaptureKitEngine::list_windows()?;
+    serde_json::from_str(&json).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn list_cameras() -> Result<Vec<CameraInfo>, String> {
     let json = CaptureKitEngine::list_cameras()?;

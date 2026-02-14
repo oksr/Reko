@@ -1,6 +1,7 @@
 import Foundation
 import CoreMedia
 import AVFoundation
+import ScreenCaptureKit
 
 public enum AudioLevelCalculator {
     public static func peakLevel(from buffer: AVAudioPCMBuffer) -> Float {
@@ -33,7 +34,8 @@ public enum AudioLevelCalculator {
 }
 
 public struct RecordingConfig: Codable {
-    public let displayId: UInt32
+    public let displayId: UInt32?
+    public let windowId: UInt32?
     public let fps: Int
     public let captureSystemAudio: Bool
     public let outputDir: String
@@ -46,6 +48,7 @@ public struct RecordingResult: Codable {
     public let systemAudioPath: String?
     public let micPath: String?
     public let cameraPath: String?
+    public let mouseEventsPath: String?
     public let durationMs: UInt64
     public let frameCount: UInt64
 }
@@ -58,6 +61,7 @@ public final class RecordingPipeline {
     private var micWriter: MicWriter?
     private var cameraCapture: CameraCapture?
     private var cameraWriter: VideoWriter?
+    private var mouseLogger: MouseLogger?
     private var frameCount: UInt64 = 0
     private var startTime: UInt64 = 0
     private var isRecording = false
@@ -78,17 +82,43 @@ public final class RecordingPipeline {
     public func start() async throws {
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
 
-        let displays = try await ScreenCapture.listDisplays()
-        guard let display = displays.first(where: { $0.id == config.displayId }) else {
+        // Determine capture source dimensions
+        let captureWidth: Int
+        let captureHeight: Int
+
+        if let windowId = config.windowId {
+            // Window capture path
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let window = content.windows.first(where: { $0.windowID == windowId }) else {
+                throw CaptureError.windowNotFound
+            }
+            captureWidth = Int(window.frame.width) * 2
+            captureHeight = Int(window.frame.height) * 2
+        } else if let displayId = config.displayId {
+            let displays = try await ScreenCapture.listDisplays()
+            guard let display = displays.first(where: { $0.id == displayId }) else {
+                throw CaptureError.displayNotFound
+            }
+            captureWidth = display.width * 2
+            captureHeight = display.height * 2
+
+            // Start mouse logging (display recording only)
+            let mouseOutputURL = outputDir.appendingPathComponent("mouse_events.jsonl")
+            let logger = MouseLogger(
+                outputURL: mouseOutputURL,
+                screenWidth: display.width,
+                screenHeight: display.height
+            )
+            if logger.start() {
+                mouseLogger = logger
+            }
+        } else {
             throw CaptureError.displayNotFound
         }
 
-        let width = display.width * 2
-        let height = display.height * 2
-
         videoWriter = try VideoWriter(
             outputURL: outputDir.appendingPathComponent("screen.mov"),
-            width: width, height: height, fps: config.fps
+            width: captureWidth, height: captureHeight, fps: config.fps
         )
 
         if config.captureSystemAudio {
@@ -134,24 +164,37 @@ public final class RecordingPipeline {
         startTime = mach_absolute_time()
         isRecording = true
 
-        try await screenCapture.startCapture(
-            displayID: config.displayId,
-            fps: config.fps,
-            captureAudio: config.captureSystemAudio,
-            onVideoFrame: { [weak self] sampleBuffer in
-                guard let self = self, self.isRecording, !self.isPaused else { return }
-                self.videoWriter?.appendVideoSample(sampleBuffer)
-                self.frameCount += 1
-            },
-            onAudioSample: { [weak self] sampleBuffer in
-                guard let self = self, self.isRecording, !self.isPaused else { return }
-                self.systemAudioWriter?.appendAudioSample(sampleBuffer)
-                let level = AudioLevelCalculator.peakLevel(from: sampleBuffer)
-                self.levelsLock.lock()
-                self.systemAudioLevel = level
-                self.levelsLock.unlock()
-            }
-        )
+        let videoHandler: (CMSampleBuffer) -> Void = { [weak self] sampleBuffer in
+            guard let self = self, self.isRecording, !self.isPaused else { return }
+            self.videoWriter?.appendVideoSample(sampleBuffer)
+            self.frameCount += 1
+        }
+        let audioHandler: (CMSampleBuffer) -> Void = { [weak self] sampleBuffer in
+            guard let self = self, self.isRecording, !self.isPaused else { return }
+            self.systemAudioWriter?.appendAudioSample(sampleBuffer)
+            let level = AudioLevelCalculator.peakLevel(from: sampleBuffer)
+            self.levelsLock.lock()
+            self.systemAudioLevel = level
+            self.levelsLock.unlock()
+        }
+
+        if let windowId = config.windowId {
+            try await screenCapture.startWindowCapture(
+                windowID: windowId,
+                fps: config.fps,
+                captureAudio: config.captureSystemAudio,
+                onVideoFrame: videoHandler,
+                onAudioSample: audioHandler
+            )
+        } else if let displayId = config.displayId {
+            try await screenCapture.startCapture(
+                displayID: displayId,
+                fps: config.fps,
+                captureAudio: config.captureSystemAudio,
+                onVideoFrame: videoHandler,
+                onAudioSample: audioHandler
+            )
+        }
     }
 
     public func stop() async throws -> RecordingResult {
@@ -163,6 +206,7 @@ public final class RecordingPipeline {
         micWriter?.finish()
         cameraCapture?.stopCapture()
         await cameraWriter?.finish()
+        mouseLogger?.stop()
 
         var timebaseInfo = mach_timebase_info_data_t()
         mach_timebase_info(&timebaseInfo)
@@ -174,6 +218,7 @@ public final class RecordingPipeline {
             systemAudioPath: config.captureSystemAudio ? "system_audio.wav" : nil,
             micPath: micCapture != nil ? "mic.wav" : nil,
             cameraPath: cameraCapture != nil ? "camera.mov" : nil,
+            mouseEventsPath: mouseLogger != nil ? "mouse_events.jsonl" : nil,
             durationMs: durationMs,
             frameCount: frameCount
         )
@@ -183,12 +228,14 @@ public final class RecordingPipeline {
         guard isRecording, !isPaused else { return }
         isPaused = true
         pauseStartNano = mach_absolute_time()
+        mouseLogger?.pause()
     }
 
     public func resume() {
         guard isRecording, isPaused else { return }
         isPaused = false
         totalPausedNano += mach_absolute_time() - pauseStartNano
+        mouseLogger?.resume()
     }
 
     public func getAudioLevels() -> (mic: Float, systemAudio: Float) {

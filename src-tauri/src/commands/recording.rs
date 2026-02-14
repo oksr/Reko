@@ -12,7 +12,8 @@ pub struct RecordingState {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RecordingConfig {
-    pub display_id: u32,
+    pub display_id: Option<u32>,
+    pub window_id: Option<u32>,
     pub mic_id: Option<String>,
     pub camera_id: Option<String>,
     pub capture_system_audio: bool,
@@ -25,6 +26,7 @@ struct SwiftRecordingResult {
     system_audio_path: Option<String>,
     mic_path: Option<String>,
     camera_path: Option<String>,
+    mouse_events_path: Option<String>,
     duration_ms: u64,
     #[allow(dead_code)]
     frame_count: u64,
@@ -41,6 +43,7 @@ pub async fn start_recording(
 
     let swift_config = serde_json::json!({
         "display_id": config.display_id,
+        "window_id": config.window_id,
         "fps": config.fps,
         "capture_system_audio": config.capture_system_audio,
         "output_dir": raw.to_string_lossy(),
@@ -116,6 +119,7 @@ pub async fn stop_recording(
             mic: result.mic_path,
             system_audio: result.system_audio_path,
             camera: result.camera_path,
+            mouse_events: result.mouse_events_path,
         },
         timeline: Timeline {
             duration_ms: result.duration_ms,
@@ -136,7 +140,8 @@ mod tests {
     #[test]
     fn test_recording_config_serializes_with_camera_id() {
         let config = RecordingConfig {
-            display_id: 1,
+            display_id: Some(1),
+            window_id: None,
             mic_id: None,
             camera_id: Some("cam-abc".to_string()),
             capture_system_audio: true,

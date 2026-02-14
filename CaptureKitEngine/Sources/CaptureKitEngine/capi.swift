@@ -39,6 +39,33 @@ public func ck_list_displays(outJson: UnsafeMutablePointer<UnsafeMutablePointer<
     return errorCode
 }
 
+@_cdecl("ck_list_windows")
+public func ck_list_windows(outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32 {
+    // CG z-order query is thread-safe — call before async Task to avoid deadlock
+    let zOrder = ScreenCapture.getWindowZOrder()
+
+    let semaphore = DispatchSemaphore(value: 0)
+    var resultJson = "[]"
+    var errorCode: Int32 = 0
+
+    Task {
+        do {
+            let windows = try await ScreenCapture.listWindows(zOrder: zOrder)
+            let encoder = JSONEncoder()
+            encoder.keyEncodingStrategy = .convertToSnakeCase
+            let data = try encoder.encode(windows)
+            resultJson = String(data: data, encoding: .utf8) ?? "[]"
+        } catch {
+            errorCode = -1
+        }
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    outJson.pointee = strdup(resultJson)
+    return errorCode
+}
+
 @_cdecl("ck_list_audio_inputs")
 public func ck_list_audio_inputs(outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32 {
     let inputs = MicCapture.listInputs()

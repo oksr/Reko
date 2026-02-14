@@ -6,6 +6,7 @@ extern "C" {
     fn ck_list_displays(out_json: *mut *const c_char) -> i32;
     fn ck_list_audio_inputs(out_json: *mut *const c_char) -> i32;
     fn ck_list_cameras(out_json: *mut *const c_char) -> i32;
+    fn ck_list_windows(out_json: *mut *const c_char) -> i32;
     fn ck_start_recording(config_json: *const c_char, out_session_id: *mut u64) -> i32;
     fn ck_pause_recording(session_id: u64) -> i32;
     fn ck_resume_recording(session_id: u64) -> i32;
@@ -58,6 +59,10 @@ impl CaptureKitEngine {
 
     pub fn list_cameras() -> Result<String, String> {
         unsafe { call_json(|p| ck_list_cameras(p)) }
+    }
+
+    pub fn list_windows() -> Result<String, String> {
+        unsafe { call_json(|p| ck_list_windows(p)) }
     }
 
     pub fn start_recording(config_json: &str) -> Result<u64, String> {
