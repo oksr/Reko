@@ -1,5 +1,5 @@
-#ifndef CAPTUREKIT_ENGINE_H
-#define CAPTUREKIT_ENGINE_H
+#ifndef REKO_ENGINE_H
+#define REKO_ENGINE_H
 
 #include <stdint.h>
 

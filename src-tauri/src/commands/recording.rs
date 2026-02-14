@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use tauri::State;
 
 use crate::project::{self, ProjectState, Tracks, Timeline};
-use crate::swift_ffi::CaptureKitEngine;
+use crate::swift_ffi::RekoEngine;
 
 pub struct RecordingState {
     pub active_session_id: Mutex<Option<u64>>,
@@ -51,7 +51,7 @@ pub async fn start_recording(
         "camera_id": config.camera_id,
     });
 
-    let session_id = CaptureKitEngine::start_recording(&swift_config.to_string())?;
+    let session_id = RekoEngine::start_recording(&swift_config.to_string())?;
 
     *state.active_session_id.lock().unwrap() = Some(session_id);
     *state.active_project_id.lock().unwrap() = Some(project_id.clone());
@@ -71,7 +71,7 @@ pub async fn get_audio_levels(
 ) -> Result<AudioLevels, String> {
     let session_id = state.active_session_id.lock().unwrap()
         .ok_or("No active recording")?;
-    let json = CaptureKitEngine::get_audio_levels(session_id)?;
+    let json = RekoEngine::get_audio_levels(session_id)?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
@@ -81,7 +81,7 @@ pub async fn pause_recording(
 ) -> Result<(), String> {
     let session_id = state.active_session_id.lock().unwrap()
         .ok_or("No active recording")?;
-    CaptureKitEngine::pause_recording(session_id)
+    RekoEngine::pause_recording(session_id)
 }
 
 #[tauri::command]
@@ -90,7 +90,7 @@ pub async fn resume_recording(
 ) -> Result<(), String> {
     let session_id = state.active_session_id.lock().unwrap()
         .ok_or("No active recording")?;
-    CaptureKitEngine::resume_recording(session_id)
+    RekoEngine::resume_recording(session_id)
 }
 
 #[tauri::command]
@@ -102,7 +102,7 @@ pub async fn stop_recording(
     let project_id = state.active_project_id.lock().unwrap().take()
         .ok_or("No active project")?;
 
-    let result_json = CaptureKitEngine::stop_recording(session_id)?;
+    let result_json = RekoEngine::stop_recording(session_id)?;
     let result: SwiftRecordingResult = serde_json::from_str(&result_json)
         .map_err(|e| e.to_string())?;
 

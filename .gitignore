@@ -17,7 +17,7 @@ src-tauri/target/
 src-tauri/gen/
 
 # Swift build artifacts
-CaptureKitEngine/.build/
+RekoEngine/.build/
 
 # Editor directories and files
 .vscode/*

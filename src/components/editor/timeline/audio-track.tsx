@@ -13,7 +13,7 @@ export function AudioTrack({ ctx, audioPath, type }: AudioTrackProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const { peaks, loading } = useAudioWaveform(audioPath, 800)
 
-  const { inPoint, outPoint, durationMs, msToPercent } = ctx
+  const { inPoint, outPoint, durationMs: _durationMs, msToPercent } = ctx
   const inPct = msToPercent(inPoint) / 100
   const outPct = msToPercent(outPoint) / 100
 

@@ -1,0 +1,43 @@
+use crate::swift_ffi::RekoEngine;
+
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGPreflightScreenCaptureAccess() -> bool;
+}
+
+#[tauri::command]
+pub async fn check_permission(kind: String) -> Result<String, String> {
+    let status = match kind.as_str() {
+        "screen" => {
+            // CGPreflightScreenCaptureAccess: synchronous, no deadlock risk
+            let granted = unsafe { CGPreflightScreenCaptureAccess() };
+            if granted { 1 } else { 0 }
+        }
+        "microphone" => RekoEngine::check_microphone_permission(),
+        "camera" => RekoEngine::check_camera_permission(),
+        "accessibility" => RekoEngine::check_accessibility_permission(),
+        _ => return Err(format!("Unknown permission kind: {}", kind)),
+    };
+    let label = match status {
+        1 => "granted",
+        2 => "denied",
+        _ => "not_determined",
+    };
+    Ok(label.to_string())
+}
+
+#[tauri::command]
+pub fn open_permission_settings(kind: String) -> Result<(), String> {
+    let url = match kind.as_str() {
+        "screen" => "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+        "microphone" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+        "camera" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
+        "accessibility" => "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+        _ => return Err(format!("Unknown permission kind: {}", kind)),
+    };
+    std::process::Command::new("open")
+        .arg(url)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}

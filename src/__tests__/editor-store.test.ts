@@ -103,19 +103,16 @@ describe("editor store", () => {
     expect(frame?.shadow).toBe(false)
   })
 
-  it("undo reverts last change", async () => {
+  it("undo reverts last change", () => {
     useEditorStore.getState().setBackground({ color: "#ff0000" })
-    // Wait for throttle to flush
-    await new Promise((r) => setTimeout(r, 600))
     expect(useEditorStore.getState().project?.effects.background.color).toBe("#ff0000")
 
     useEditorStore.temporal.getState().undo()
     expect(useEditorStore.getState().project?.effects.background.color).toBe("#000000")
   })
 
-  it("redo restores undone change", async () => {
+  it("redo restores undone change", () => {
     useEditorStore.getState().setBackground({ color: "#ff0000" })
-    await new Promise((r) => setTimeout(r, 600))
     useEditorStore.temporal.getState().undo()
     useEditorStore.temporal.getState().redo()
     expect(useEditorStore.getState().project?.effects.background.color).toBe("#ff0000")

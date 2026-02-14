@@ -1,5 +1,5 @@
 import XCTest
-@testable import CaptureKitEngine
+@testable import RekoEngine
 
 final class PauseResumeTests: XCTestCase {
     func testDurationCalculationWithPause() {

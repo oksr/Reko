@@ -34,7 +34,7 @@ export function RecorderApp() {
   const [appState, setAppState] = useState<AppState>("permission-check")
 
   // Display selection
-  const [displays, setDisplays] = useState<DisplayInfo[]>([])
+  const [_displays, setDisplays] = useState<DisplayInfo[]>([])
   const [selectedDisplay, setSelectedDisplay] = useState<number | null>(null)
 
   // Input toggles
@@ -58,6 +58,38 @@ export function RecorderApp() {
 
   // Settings
   const [recentProjects, setRecentProjects] = useState<ProjectState[]>([])
+
+  // First-launch onboarding: open onboarding window and hide recorder
+  useEffect(() => {
+    const completed = localStorage.getItem("onboarding_completed")
+    if (completed === "true") return
+
+    // Hide recorder and open onboarding window
+    const win = getCurrentWindow()
+    windowHiddenRef.current = true
+    win.hide().catch(() => {})
+
+    new WebviewWindow("onboarding", {
+      url: "/onboarding",
+      width: 500,
+      height: 400,
+      resizable: false,
+      decorations: false,
+      transparent: false,
+      center: true,
+      title: "Reko — Setup",
+    })
+
+    // Listen for onboarding window close to show recorder
+    const unlisten = win.listen("tauri://focus", async () => {
+      if (localStorage.getItem("onboarding_completed") === "true") {
+        windowHiddenRef.current = false
+        handlePermissionGranted()
+      }
+    })
+
+    return () => { unlisten.then((fn) => fn()) }
+  }, [])
 
   // Permission granted -> load devices
   const handlePermissionGranted = useCallback(() => {

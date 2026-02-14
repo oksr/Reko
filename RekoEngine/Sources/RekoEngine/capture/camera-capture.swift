@@ -52,7 +52,7 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         output.videoSettings = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ]
-        let queue = DispatchQueue(label: "com.capturekit.camera", qos: .userInteractive)
+        let queue = DispatchQueue(label: "com.reko.camera", qos: .userInteractive)
         output.setSampleBufferDelegate(self, queue: queue)
         output.alwaysDiscardsLateVideoFrames = true
 

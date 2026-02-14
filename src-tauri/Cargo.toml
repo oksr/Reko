@@ -1,12 +1,12 @@
 [package]
-name = "capturekit"
+name = "reko"
 version = "0.1.0"
-description = "CaptureKit"
+description = "Reko"
 authors = ["you"]
 edition = "2021"
 
 [lib]
-name = "capturekit_lib"
+name = "reko_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

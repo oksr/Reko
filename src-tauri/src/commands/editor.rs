@@ -22,12 +22,12 @@ pub fn open_editor(
     let project_path = project::project_dir(&project_id).join("project.json");
     let title = if let Ok(data) = std::fs::read_to_string(&project_path) {
         if let Ok(p) = serde_json::from_str::<project::ProjectState>(&data) {
-            format!("CaptureKit — {}", p.name)
+            format!("Reko — {}", p.name)
         } else {
-            "CaptureKit Editor".to_string()
+            "Reko Editor".to_string()
         }
     } else {
-        "CaptureKit Editor".to_string()
+        "Reko Editor".to_string()
     };
 
     let url = format!("/editor?project={}", project_id);

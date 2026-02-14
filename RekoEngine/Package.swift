@@ -2,19 +2,19 @@
 import PackageDescription
 
 let package = Package(
-    name: "CaptureKitEngine",
+    name: "RekoEngine",
     platforms: [.macOS(.v14)],
     products: [
         .library(
-            name: "CaptureKitEngine",
+            name: "RekoEngine",
             type: .static,
-            targets: ["CaptureKitEngine"]
+            targets: ["RekoEngine"]
         ),
     ],
     targets: [
         .target(
-            name: "CaptureKitEngine",
-            path: "Sources/CaptureKitEngine",
+            name: "RekoEngine",
+            path: "Sources/RekoEngine",
             publicHeadersPath: "include",
             linkerSettings: [
                 .linkedFramework("ScreenCaptureKit"),
@@ -28,8 +28,8 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "CaptureKitEngineTests",
-            dependencies: ["CaptureKitEngine"]
+            name: "RekoEngineTests",
+            dependencies: ["RekoEngine"]
         ),
     ]
 )

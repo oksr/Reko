@@ -21,6 +21,9 @@ extern "C" {
     fn ck_cancel_export(export_id: u64) -> i32;
     fn ck_finish_export(export_id: u64) -> i32;
     fn ck_free_string(ptr: *mut c_char);
+    fn ck_check_microphone_permission() -> i32;
+    fn ck_check_camera_permission() -> i32;
+    fn ck_check_accessibility_permission() -> i32;
 }
 
 unsafe fn call_json(call: impl FnOnce(*mut *const c_char) -> i32) -> Result<String, String> {
@@ -34,9 +37,9 @@ unsafe fn call_json(call: impl FnOnce(*mut *const c_char) -> i32) -> Result<Stri
     Ok(json)
 }
 
-pub struct CaptureKitEngine;
+pub struct RekoEngine;
 
-impl CaptureKitEngine {
+impl RekoEngine {
     pub fn version() -> String {
         unsafe {
             let ptr = ck_get_version();
@@ -136,5 +139,17 @@ impl CaptureKitEngine {
             }
         }
         Ok(())
+    }
+
+    pub fn check_microphone_permission() -> i32 {
+        unsafe { ck_check_microphone_permission() }
+    }
+
+    pub fn check_camera_permission() -> i32 {
+        unsafe { ck_check_camera_permission() }
+    }
+
+    pub fn check_accessibility_permission() -> i32 {
+        unsafe { ck_check_accessibility_permission() }
     }
 }

@@ -4,10 +4,10 @@
 <plist version="1.0">
 <dict>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>CaptureKit needs to record your screen</string>
+    <string>Reko needs to record your screen</string>
     <key>NSCameraUsageDescription</key>
-    <string>CaptureKit needs camera access for webcam overlay</string>
+    <string>Reko needs camera access for webcam overlay</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>CaptureKit needs microphone access to record audio</string>
+    <string>Reko needs microphone access to record audio</string>
 </dict>
 </plist>

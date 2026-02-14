@@ -5,7 +5,7 @@ fn main() {
     tauri_build::build();
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let swift_project_dir = manifest_dir.parent().unwrap().join("CaptureKitEngine");
+    let swift_project_dir = manifest_dir.parent().unwrap().join("RekoEngine");
 
     // Build Swift framework
     let status = Command::new("swift")
@@ -22,7 +22,7 @@ fn main() {
         "cargo:rustc-link-search=native={}",
         swift_lib_dir.display()
     );
-    println!("cargo:rustc-link-lib=static=CaptureKitEngine");
+    println!("cargo:rustc-link-lib=static=RekoEngine");
 
     // Link Apple frameworks
     for framework in &[

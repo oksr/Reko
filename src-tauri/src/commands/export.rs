@@ -1,5 +1,5 @@
 use crate::project::{self, ExportConfig, ExportProgress};
-use crate::swift_ffi::CaptureKitEngine;
+use crate::swift_ffi::RekoEngine;
 use std::sync::Mutex;
 
 pub struct ExportState {
@@ -16,7 +16,7 @@ pub fn start_export(
     let project_path = project::project_dir(&project_id).join("project.json");
     let project_json = std::fs::read_to_string(&project_path).map_err(|e| e.to_string())?;
     let config_json = serde_json::to_string(&export_config).map_err(|e| e.to_string())?;
-    let export_id = CaptureKitEngine::start_export(&project_json, &config_json)?;
+    let export_id = RekoEngine::start_export(&project_json, &config_json)?;
 
     let mut active = state.active_export_id.lock().unwrap();
     *active = Some(export_id);
@@ -29,7 +29,7 @@ pub fn start_export(
 pub fn get_export_progress(state: tauri::State<ExportState>) -> Result<ExportProgress, String> {
     let active = state.active_export_id.lock().unwrap();
     let export_id = active.ok_or("No active export")?;
-    let json = CaptureKitEngine::get_export_progress(export_id)?;
+    let json = RekoEngine::get_export_progress(export_id)?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
@@ -38,7 +38,7 @@ pub fn get_export_progress(state: tauri::State<ExportState>) -> Result<ExportPro
 pub fn cancel_export(state: tauri::State<ExportState>) -> Result<(), String> {
     let mut active = state.active_export_id.lock().unwrap();
     if let Some(export_id) = active.take() {
-        CaptureKitEngine::cancel_export(export_id)?;
+        RekoEngine::cancel_export(export_id)?;
     }
     Ok(())
 }
@@ -48,7 +48,7 @@ pub fn cancel_export(state: tauri::State<ExportState>) -> Result<(), String> {
 pub fn finish_export(state: tauri::State<ExportState>) -> Result<(), String> {
     let mut active = state.active_export_id.lock().unwrap();
     if let Some(export_id) = active.take() {
-        CaptureKitEngine::finish_export(export_id)?;
+        RekoEngine::finish_export(export_id)?;
     }
     Ok(())
 }

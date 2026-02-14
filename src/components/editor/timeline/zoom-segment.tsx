@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react"
-import { useEditorStore } from "@/stores/editor-store"
+import { useEditorStore, pauseUndo, resumeUndo } from "@/stores/editor-store"
+import { sequenceTimeToSourceTime, sourceTimeToSequenceTime } from "@/lib/sequence"
 import { Mouse, Lock } from "lucide-react"
 import { ZoomPopover } from "./zoom-popover"
 import type { ZoomKeyframe } from "@/types/editor"
@@ -21,6 +22,7 @@ export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTi
   const { durationMs, msToPercent, containerRef } = ctx
   const updateClipZoomKeyframe = useEditorStore((s) => s.updateClipZoomKeyframe)
   const removeZoomKeyframeFromClip = useEditorStore((s) => s.removeZoomKeyframeFromClip)
+  const addZoomKeyframeToClip = useEditorStore((s) => s.addZoomKeyframeToClip)
   const [popoverOpen, setPopoverOpen] = useState(false)
 
   const leftPct = msToPercent(segment.timeMs)
@@ -31,38 +33,85 @@ export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTi
   const handleBodyDrag = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
+      e.preventDefault()
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
       const startX = e.clientX
-      const origClipTime = clipRelativeTimeMs
+      const origSeqTimeMs = segment.timeMs
+      const segDuration = segment.durationMs
+      // Snapshot the current kf data for cross-clip moves
+      const kfData = { scale: segment.scale, x: segment.x, y: segment.y, easing: segment.easing }
+      let lastClipIndex = clipIndex
+      let lastKfIndex = kfIndex
+      pauseUndo()
 
       const onMove = (ev: MouseEvent) => {
+        const sequence = useEditorStore.getState().project?.sequence
+        if (!sequence) return
+
         const dx = ev.clientX - startX
         const dtMs = (dx / rect.width) * durationMs
-        const newClipTime = Math.max(0, Math.round(origClipTime + dtMs))
-        updateClipZoomKeyframe(clipIndex, kfIndex, { timeMs: newClipTime })
+        // Clamp to timeline bounds
+        const newSeqTime = Math.max(0, Math.min(durationMs - segDuration, Math.round(origSeqTimeMs + dtMs)))
+
+        // Find which clip this sequence time falls into
+        const mapping = sequenceTimeToSourceTime(newSeqTime, sequence.clips, sequence.transitions)
+        if (!mapping) return
+
+        const targetClip = sequence.clips[mapping.clipIndex]
+        const clipSeqStart = sourceTimeToSequenceTime(
+          targetClip.sourceStart, mapping.clipIndex, sequence.clips, sequence.transitions
+        )
+        const newClipRelTime = Math.max(0, Math.round(newSeqTime - clipSeqStart))
+
+        if (mapping.clipIndex === lastClipIndex) {
+          // Same clip — just update position
+          updateClipZoomKeyframe(lastClipIndex, lastKfIndex, { timeMs: newClipRelTime })
+        } else {
+          // Cross-clip: remove from old, add to new
+          const oldClip = sequence.clips[lastClipIndex]
+          if (oldClip && lastKfIndex < oldClip.zoomKeyframes.length) {
+            removeZoomKeyframeFromClip(lastClipIndex, oldClip.zoomKeyframes[lastKfIndex].timeMs)
+          }
+          addZoomKeyframeToClip(mapping.clipIndex, {
+            timeMs: newClipRelTime,
+            durationMs: segDuration,
+            ...kfData,
+          })
+          lastClipIndex = mapping.clipIndex
+          // New keyframe index: find it in the updated clip
+          const updatedSeq = useEditorStore.getState().project?.sequence
+          if (updatedSeq) {
+            const newClip = updatedSeq.clips[mapping.clipIndex]
+            lastKfIndex = newClip.zoomKeyframes.findIndex((k) => k.timeMs === newClipRelTime)
+            if (lastKfIndex === -1) lastKfIndex = 0
+          }
+        }
       }
 
       const onUp = () => {
         document.removeEventListener("mousemove", onMove)
         document.removeEventListener("mouseup", onUp)
+        resumeUndo()
       }
 
       document.addEventListener("mousemove", onMove)
       document.addEventListener("mouseup", onUp)
     },
-    [containerRef, durationMs, clipRelativeTimeMs, clipIndex, kfIndex, updateClipZoomKeyframe]
+    [containerRef, durationMs, segment, clipIndex, kfIndex, clipRelativeTimeMs, updateClipZoomKeyframe, removeZoomKeyframeFromClip, addZoomKeyframeToClip]
   )
 
   // Drag to resize from edge
   const handleEdgeDrag = useCallback(
     (e: React.MouseEvent, edge: "left" | "right") => {
       e.stopPropagation()
+      e.preventDefault()
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
       const MIN_DURATION = 200
       const seqStartMs = segment.timeMs
       const origClipTime = clipRelativeTimeMs
+      pauseUndo()
 
       const onMove = (ev: MouseEvent) => {
         const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width))
@@ -70,7 +119,7 @@ export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTi
 
         if (edge === "left") {
           const maxStart = seqStartMs + segment.durationMs - MIN_DURATION
-          const newSeqStart = Math.min(seqTimeMs, maxStart)
+          const newSeqStart = Math.max(0, Math.min(seqTimeMs, maxStart))
           const delta = newSeqStart - seqStartMs
           updateClipZoomKeyframe(clipIndex, kfIndex, {
             timeMs: Math.max(0, origClipTime + delta),
@@ -78,7 +127,8 @@ export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTi
           })
         } else {
           const minEnd = seqStartMs + MIN_DURATION
-          const newEnd = Math.max(minEnd, Math.min(seqTimeMs, durationMs))
+          const maxEnd = durationMs
+          const newEnd = Math.max(minEnd, Math.min(seqTimeMs, maxEnd))
           updateClipZoomKeyframe(clipIndex, kfIndex, { durationMs: newEnd - seqStartMs })
         }
       }
@@ -86,6 +136,7 @@ export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTi
       const onUp = () => {
         document.removeEventListener("mousemove", onMove)
         document.removeEventListener("mouseup", onUp)
+        resumeUndo()
       }
 
       document.addEventListener("mousemove", onMove)

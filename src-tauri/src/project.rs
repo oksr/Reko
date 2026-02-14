@@ -190,10 +190,16 @@ pub struct Timeline {
 }
 
 pub fn projects_dir() -> PathBuf {
-    let dir = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("com.capturekit.app")
-        .join("projects");
+    let data = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+
+    // Migrate from old CaptureKit data directory if it exists
+    let old_dir = data.join("com.capturekit.app");
+    let new_dir = data.join("com.reko.app");
+    if old_dir.exists() && !new_dir.exists() {
+        fs::rename(&old_dir, &new_dir).ok();
+    }
+
+    let dir = new_dir.join("projects");
     fs::create_dir_all(&dir).ok();
     dir
 }

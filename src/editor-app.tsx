@@ -42,6 +42,19 @@ function EditorContent() {
       .then((p) => {
         const editorProject: EditorProject = {
           ...p,
+          tracks: { ...p.tracks, mouse_events: null },
+          sequence: {
+            clips: [{
+              id: "main",
+              sourceStart: p.timeline.in_point,
+              sourceEnd: p.timeline.out_point,
+              speed: 1,
+              zoomKeyframes: [],
+            }],
+            transitions: [],
+            overlayTracks: [],
+            overlays: [],
+          },
           effects: p.effects ?? {
             background: {
               type: "gradient",
@@ -65,6 +78,14 @@ function EditorContent() {
               shadow: true,
               shadowIntensity: 0.5,
             },
+            cursor: {
+              enabled: false,
+              type: "highlight",
+              size: 40,
+              color: "#facc15",
+              opacity: 0.5,
+            },
+            zoomKeyframes: [],
           },
         }
         loadProject(editorProject)

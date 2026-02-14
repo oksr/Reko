@@ -1,5 +1,7 @@
 import Foundation
 import ScreenCaptureKit
+import AVFoundation
+import ApplicationServices
 
 private var activeSessions: [UInt64: RecordingPipeline] = [:]
 private var nextSessionId: UInt64 = 1
@@ -7,12 +9,39 @@ private let sessionsLock = NSLock()
 
 @_cdecl("ck_get_version")
 public func ck_get_version() -> UnsafeMutablePointer<CChar>? {
-    return strdup(CaptureKitEngine.version)
+    return strdup(RekoEngine.version)
 }
 
 @_cdecl("ck_free_string")
 public func ck_free_string(ptr: UnsafeMutablePointer<CChar>?) {
     free(ptr)
+}
+
+// MARK: - Permission Checks
+
+@_cdecl("ck_check_microphone_permission")
+public func ck_check_microphone_permission() -> Int32 {
+    switch AVCaptureDevice.authorizationStatus(for: .audio) {
+    case .authorized: return 1
+    case .denied, .restricted: return 2
+    case .notDetermined: return 0
+    @unknown default: return 0
+    }
+}
+
+@_cdecl("ck_check_camera_permission")
+public func ck_check_camera_permission() -> Int32 {
+    switch AVCaptureDevice.authorizationStatus(for: .video) {
+    case .authorized: return 1
+    case .denied, .restricted: return 2
+    case .notDetermined: return 0
+    @unknown default: return 0
+    }
+}
+
+@_cdecl("ck_check_accessibility_permission")
+public func ck_check_accessibility_permission() -> Int32 {
+    return AXIsProcessTrusted() ? 1 : 0
 }
 
 @_cdecl("ck_list_displays")

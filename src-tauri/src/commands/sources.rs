@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::swift_ffi::CaptureKitEngine;
+use crate::swift_ffi::RekoEngine;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DisplayInfo {
@@ -37,25 +37,25 @@ pub struct WindowInfo {
 
 #[tauri::command]
 pub async fn list_windows() -> Result<Vec<WindowInfo>, String> {
-    let json = CaptureKitEngine::list_windows()?;
+    let json = RekoEngine::list_windows()?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn list_cameras() -> Result<Vec<CameraInfo>, String> {
-    let json = CaptureKitEngine::list_cameras()?;
+    let json = RekoEngine::list_cameras()?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn list_displays() -> Result<Vec<DisplayInfo>, String> {
-    let json = CaptureKitEngine::list_displays()?;
+    let json = RekoEngine::list_displays()?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn list_audio_inputs() -> Result<Vec<AudioInputInfo>, String> {
-    let json = CaptureKitEngine::list_audio_inputs()?;
+    let json = RekoEngine::list_audio_inputs()?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 

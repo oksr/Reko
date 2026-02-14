@@ -1,11 +1,11 @@
-import { useState } from "react"
+import { useCallback } from "react"
+import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu"
 import {
   Camera, CameraOff,
   Mic, MicOff,
   Volume2, VolumeOff,
   ChevronDown,
 } from "lucide-react"
-import { DevicePickerPopover } from "./device-picker-popover"
 
 type InputType = "camera" | "mic" | "system-audio"
 
@@ -55,7 +55,6 @@ export function InputToggle({
   onDeviceSelect,
   devices,
 }: Props) {
-  const [pickerOpen, setPickerOpen] = useState(false)
   const { iconOn: IconOn, iconOff: IconOff, labelOff, labelNone, ariaLabel } = config[type]
 
   const Icon = enabled ? IconOn : IconOff
@@ -75,25 +74,48 @@ export function InputToggle({
     onToggle(!enabled)
   }
 
+  const showDeviceMenu = useCallback(async () => {
+    const items: Array<MenuItem | PredefinedMenuItem> = []
+
+    items.push(
+      await MenuItem.new({
+        text: `${selectedDeviceId === null ? "✓ " : "   "}None`,
+        action: () => {
+          onToggle(false)
+          onDeviceSelect(null)
+        },
+      })
+    )
+
+    items.push(await PredefinedMenuItem.new({ item: "Separator" }))
+
+    for (const device of devices) {
+      const isSelected = selectedDeviceId === device.id
+      const deviceId = device.id
+      items.push(
+        await MenuItem.new({
+          text: `${isSelected ? "✓ " : "   "}${device.name}`,
+          action: () => {
+            onToggle(true)
+            onDeviceSelect(deviceId)
+          },
+        })
+      )
+    }
+
+    const menu = await Menu.new({ items })
+    await menu.popup()
+  }, [devices, selectedDeviceId, onToggle, onDeviceSelect])
+
   const handleChevronClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setPickerOpen(true)
+    showDeviceMenu()
   }
 
   const handleContextMenu = (e: React.MouseEvent) => {
     if (type === "system-audio") return
     e.preventDefault()
-    setPickerOpen(true)
-  }
-
-  const handleDeviceSelect = (deviceId: string | null) => {
-    if (deviceId === null) {
-      onToggle(false)
-      onDeviceSelect(null)
-    } else {
-      onToggle(true)
-      onDeviceSelect(deviceId)
-    }
+    showDeviceMenu()
   }
 
   return (
@@ -110,23 +132,15 @@ export function InputToggle({
         <Icon size={18} strokeWidth={2} />
         <span className="max-w-[80px] truncate">{label}</span>
         {showChevron && (
-          <DevicePickerPopover
-            devices={devices}
-            selectedDeviceId={selectedDeviceId}
-            onSelect={handleDeviceSelect}
-            open={pickerOpen}
-            onOpenChange={setPickerOpen}
+          <span
+            className="flex items-center justify-center min-w-[28px] min-h-[28px]"
+            onClick={handleChevronClick}
+            onMouseDown={(e) => e.stopPropagation()}
+            role="button"
+            aria-label={`Select ${type === "camera" ? "camera" : "microphone"} device`}
           >
-            <span
-              className="flex items-center justify-center min-w-[28px] min-h-[28px]"
-              onClick={handleChevronClick}
-              onMouseDown={(e) => e.stopPropagation()}
-              role="button"
-              aria-label={`Select ${type === "camera" ? "camera" : "microphone"} device`}
-            >
-              <ChevronDown size={10} className="opacity-50" />
-            </span>
-          </DevicePickerPopover>
+            <ChevronDown size={10} className="opacity-50" />
+          </span>
         )}
       </button>
     </div>

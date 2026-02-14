@@ -18,7 +18,7 @@ export interface SequenceZoomSegment {
   scale: number
   x: number
   y: number
-  easing: string
+  easing: "ease-in-out" | "ease-in" | "ease-out" | "linear"
 }
 
 export function ZoomTrack({ ctx }: ZoomTrackProps) {
@@ -127,7 +127,7 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
 
   return (
     <div
-      className={`relative h-9 rounded-md ${
+      className={`relative h-9 rounded-md overflow-hidden ${
         isEmpty ? "bg-indigo-950/40 border border-dashed border-indigo-500/30" : "bg-indigo-950/20"
       }`}
       onMouseDown={handleMouseDown}

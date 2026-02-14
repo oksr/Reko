@@ -1,6 +1,6 @@
 import XCTest
 import AVFoundation
-@testable import CaptureKitEngine
+@testable import RekoEngine
 
 final class AudioLevelTests: XCTestCase {
     func testPeakLevelWithSilence() {

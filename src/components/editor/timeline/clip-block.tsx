@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useEditorStore } from "@/stores/editor-store"
 import type { Clip } from "@/types/editor"
 import type { TimelineContext } from "./types"
@@ -11,16 +11,20 @@ interface ClipBlockProps {
   ctx: TimelineContext
 }
 
+const DRAG_THRESHOLD = 5
+
 export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipBlockProps) {
   const selectedClipIndex = useEditorStore((s) => s.selectedClipIndex)
   const setSelectedClipIndex = useEditorStore((s) => s.setSelectedClipIndex)
   const activeTool = useEditorStore((s) => s.activeTool)
   const trimClipStart = useEditorStore((s) => s.trimClipStart)
   const trimClipEnd = useEditorStore((s) => s.trimClipEnd)
+  const moveClip = useEditorStore((s) => s.moveClip)
   const isSelected = selectedClipIndex === index
 
-  // Visual trim offset (percentage) — applied during drag only
   const [trimDelta, setTrimDelta] = useState<{ edge: "left" | "right"; pct: number } | null>(null)
+  const [dragOffset, setDragOffset] = useState<number | null>(null) // pct offset during reorder drag
+  const isDraggingRef = useRef(false)
 
   const clipDuration = (clip.sourceEnd - clip.sourceStart) / clip.speed
 
@@ -40,7 +44,6 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
       if (!ctx.containerRef.current) return
       const rect = ctx.containerRef.current.getBoundingClientRect()
       const dxPct = ((me.clientX - startX) / rect.width) * 100
-      // Clamp: can't trim past the right edge minus minimum
       const maxPct = widthPercent - ctx.msToPercent(500 / speed)
       const clampedPct = Math.max(0, Math.min(maxPct, dxPct))
       setTrimDelta({ edge: "left", pct: clampedPct })
@@ -48,9 +51,7 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
     const onUp = (me: MouseEvent) => {
       document.removeEventListener("mousemove", onMove)
       document.removeEventListener("mouseup", onUp)
-      // Swallow the click that follows mouseup so razor doesn't fire
       document.addEventListener("click", (ev) => ev.stopPropagation(), { capture: true, once: true })
-      // Commit: convert visual delta to source time
       if (ctx.containerRef.current) {
         const rect = ctx.containerRef.current.getBoundingClientRect()
         const dx = me.clientX - startX
@@ -75,7 +76,6 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
       if (!ctx.containerRef.current) return
       const rect = ctx.containerRef.current.getBoundingClientRect()
       const dxPct = ((me.clientX - startX) / rect.width) * 100
-      // Clamp: can't shrink past minimum
       const minPct = ctx.msToPercent(500 / speed) - widthPercent
       const clampedPct = Math.max(minPct, Math.min(0, dxPct))
       setTrimDelta({ edge: "right", pct: clampedPct })
@@ -83,7 +83,6 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
     const onUp = (me: MouseEvent) => {
       document.removeEventListener("mousemove", onMove)
       document.removeEventListener("mouseup", onUp)
-      // Swallow the click that follows mouseup so razor doesn't fire
       document.addEventListener("click", (ev) => ev.stopPropagation(), { capture: true, once: true })
       if (ctx.containerRef.current) {
         const rect = ctx.containerRef.current.getBoundingClientRect()
@@ -94,6 +93,64 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
       }
       setTrimDelta(null)
     }
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+  }
+
+  // Reorder drag via mousedown/mousemove/mouseup
+  const handleBodyMouseDown = (e: React.MouseEvent) => {
+    if (activeTool === "razor") return
+    e.preventDefault()
+    const startX = e.clientX
+    isDraggingRef.current = false
+
+    const onMove = (me: MouseEvent) => {
+      if (!ctx.containerRef.current) return
+      const dx = me.clientX - startX
+      if (!isDraggingRef.current && Math.abs(dx) < DRAG_THRESHOLD) return
+      isDraggingRef.current = true
+      const rect = ctx.containerRef.current.getBoundingClientRect()
+      const dxPct = (dx / rect.width) * 100
+      setDragOffset(dxPct)
+    }
+
+    const onUp = (me: MouseEvent) => {
+      document.removeEventListener("mousemove", onMove)
+      document.removeEventListener("mouseup", onUp)
+
+      if (isDraggingRef.current && ctx.containerRef.current) {
+        // Swallow click
+        document.addEventListener("click", (ev) => ev.stopPropagation(), { capture: true, once: true })
+        // Compute drop target
+        const rect = ctx.containerRef.current.getBoundingClientRect()
+        const dropPct = (me.clientX - rect.left) / rect.width
+        const sequence = useEditorStore.getState().project?.sequence
+        if (sequence) {
+          let accumulated = 0
+          let toIndex = sequence.clips.length - 1
+          for (let i = 0; i < sequence.clips.length; i++) {
+            const c = sequence.clips[i]
+            const dur = (c.sourceEnd - c.sourceStart) / c.speed
+            const pct = ctx.msToPercent(dur) / 100
+            accumulated += pct
+            if (dropPct < accumulated) {
+              toIndex = i
+              break
+            }
+          }
+          if (index !== toIndex) {
+            moveClip(index, toIndex)
+          }
+        }
+      } else {
+        // Was a click, not a drag — select the clip
+        setSelectedClipIndex(index)
+      }
+
+      setDragOffset(null)
+      isDraggingRef.current = false
+    }
+
     document.addEventListener("mousemove", onMove)
     document.addEventListener("mouseup", onUp)
   }
@@ -109,6 +166,9 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
       visWidth = widthPercent + trimDelta.pct
     }
   }
+  if (dragOffset !== null) {
+    visLeft = leftPercent + dragOffset
+  }
 
   const visDuration = trimDelta
     ? (trimDelta.edge === "left"
@@ -123,23 +183,14 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
         isSelected
           ? "ring-2 ring-amber-300"
           : "hover:brightness-110"
-      }`}
+      } ${dragOffset !== null ? "opacity-80 z-20 shadow-lg" : ""}`}
       style={{
         left: `${visLeft}%`,
         width: `${Math.max(0, visWidth)}%`,
         minWidth: "2px",
         background: "linear-gradient(to bottom, #d4a054, #c4903e)",
       }}
-      onClick={(e) => {
-        if (activeTool === "razor") return
-        e.stopPropagation()
-        setSelectedClipIndex(index)
-      }}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.setData("clip-index", String(index))
-        e.dataTransfer.effectAllowed = "move"
-      }}
+      onMouseDown={handleBodyMouseDown}
     >
       {/* Clip label */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">

@@ -5,11 +5,13 @@ import "./index.css"
 import { RecorderApp } from "./recorder-app"
 import { EditorApp } from "./editor-app"
 import { WindowPickerApp } from "./window-picker-app"
+import { OnboardingApp } from "./onboarding-app"
 
 function Root() {
   const path = window.location.pathname
   if (path.startsWith("/editor")) return <EditorApp />
   if (path.startsWith("/window-picker")) return <WindowPickerApp />
+  if (path.startsWith("/onboarding")) return <OnboardingApp />
   return <RecorderApp />
 }
 

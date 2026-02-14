@@ -6,11 +6,11 @@ mod swift_ffi;
 use commands::export::ExportState;
 use commands::recording::RecordingState;
 use std::sync::Mutex;
-use swift_ffi::CaptureKitEngine;
+use swift_ffi::RekoEngine;
 
 #[tauri::command]
 fn get_engine_version() -> String {
-    CaptureKitEngine::version()
+    RekoEngine::version()
 }
 
 #[tauri::command]
@@ -54,6 +54,8 @@ pub fn run() {
             commands::export::finish_export,
             commands::editor::generate_auto_zoom,
             get_home_dir,
+            commands::permissions::check_permission,
+            commands::permissions::open_permission_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

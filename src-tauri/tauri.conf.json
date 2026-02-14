@@ -1,8 +1,8 @@
 {
   "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-cli/schema.json",
-  "productName": "CaptureKit",
+  "productName": "Reko",
   "version": "0.1.0",
-  "identifier": "com.capturekit.app",
+  "identifier": "com.reko.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "recorder",
-        "title": "CaptureKit",
+        "title": "Reko",
         "width": 684,
         "height": 58,
         "resizable": false,
@@ -29,8 +29,8 @@
       "assetProtocol": {
         "scope": {
           "allow": [
-            "$APPDATA/com.capturekit.app/**",
-            "$HOME/Library/Application Support/com.capturekit.app/**"
+            "$APPDATA/com.reko.app/**",
+            "$HOME/Library/Application Support/com.reko.app/**"
           ]
         }
       }
@@ -38,7 +38,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

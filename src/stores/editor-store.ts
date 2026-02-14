@@ -122,28 +122,13 @@ interface EditorState {
 // State that gets tracked for undo/redo
 type TrackedState = Pick<EditorState, "project">
 
-// Throttle helper for undo debouncing
-function throttle<T extends (...args: any[]) => any>(fn: T, ms: number): T {
-  let lastCall = 0
-  let timer: ReturnType<typeof setTimeout> | null = null
-  return ((...args: any[]) => {
-    const now = Date.now()
-    if (timer) clearTimeout(timer)
-    if (now - lastCall >= ms) {
-      lastCall = now
-      fn(...args)
-    } else {
-      timer = setTimeout(() => {
-        lastCall = Date.now()
-        fn(...args)
-      }, ms - (now - lastCall))
-    }
-  }) as T
-}
+/** Pause/resume undo tracking during continuous drags to avoid excessive history entries */
+export function pauseUndo() { useEditorStore.temporal.getState().pause() }
+export function resumeUndo() { useEditorStore.temporal.getState().resume() }
 
 export const useEditorStore = create<EditorState>()(
   temporal(
-    (set, get) => ({
+    (set, _get) => ({
       project: null,
       currentTime: 0,
       isPlaying: false,
@@ -691,10 +676,8 @@ export const useEditorStore = create<EditorState>()(
       partialize: (state): TrackedState => ({
         project: state.project,
       }),
+      equality: (past, curr) => past.project === curr.project,
       limit: 100,
-      // Throttle undo tracking so slider drags don't create
-      // excessive history entries. Coalesces changes within 500ms.
-      handleSet: (handleSet) => throttle(handleSet, 500),
     }
   )
 )

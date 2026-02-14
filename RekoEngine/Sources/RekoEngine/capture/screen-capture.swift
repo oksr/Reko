@@ -70,7 +70,7 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         )
 
         let excludedBundleIds: Set<String> = [
-            "com.capturekit.app",
+            "com.reko.app",
             "com.apple.dock",
             "com.apple.SystemUIServer",
             "com.apple.WindowManager",
@@ -154,10 +154,10 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
-        let videoQueue = DispatchQueue(label: "com.capturekit.video", qos: .userInteractive)
+        let videoQueue = DispatchQueue(label: "com.reko.video", qos: .userInteractive)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: videoQueue)
         if captureAudio {
-            let audioQueue = DispatchQueue(label: "com.capturekit.audio", qos: .userInteractive)
+            let audioQueue = DispatchQueue(label: "com.reko.audio", qos: .userInteractive)
             try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
         }
 
@@ -196,10 +196,10 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
 
         let stream = SCStream(filter: filter, configuration: config, delegate: self)
-        let videoQueue = DispatchQueue(label: "com.capturekit.video", qos: .userInteractive)
+        let videoQueue = DispatchQueue(label: "com.reko.video", qos: .userInteractive)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: videoQueue)
         if captureAudio {
-            let audioQueue = DispatchQueue(label: "com.capturekit.audio", qos: .userInteractive)
+            let audioQueue = DispatchQueue(label: "com.reko.audio", qos: .userInteractive)
             try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: audioQueue)
         }
 

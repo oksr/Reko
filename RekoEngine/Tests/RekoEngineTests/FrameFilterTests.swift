@@ -1,7 +1,7 @@
 import XCTest
 import CoreMedia
 import ScreenCaptureKit
-@testable import CaptureKitEngine
+@testable import RekoEngine
 
 final class FrameFilterTests: XCTestCase {
 

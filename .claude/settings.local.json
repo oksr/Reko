@@ -24,7 +24,16 @@
       "Bash(python3:*)",
       "Bash(cargo check:*)",
       "Bash(npx shadcn@latest add:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(git -C /Users/ofekseroussi/Dev/reko for-each-ref --format='delete %\\(refname\\)' refs/original)",
+      "Bash(git -C /Users/ofekseroussi/Dev/reko update-ref --stdin)",
+      "Bash(git -C /Users/ofekseroussi/Dev/reko reflog expire --expire=now --all)",
+      "Bash(git -C /Users/ofekseroussi/Dev/reko gc --prune=now --aggressive)",
+      "Bash(ls:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx tauri build:*)",
+      "mcp__octocode__githubSearchRepositories"
     ]
   }
 }

@@ -15,7 +15,6 @@ export function SequenceTrack({ ctx }: SequenceTrackProps) {
   const sequence = useEditorStore((s) => s.project?.sequence)
   const activeTool = useEditorStore((s) => s.activeTool)
   const splitAtPlayhead = useEditorStore((s) => s.splitAtPlayhead)
-  const moveClip = useEditorStore((s) => s.moveClip)
   const removeTransition = useEditorStore((s) => s.removeTransition)
   const addTransition = useEditorStore((s) => s.addTransition)
 
@@ -35,38 +34,6 @@ export function SequenceTrack({ ctx }: SequenceTrackProps) {
     ctx.videoSync.seek(timeMs)
     useEditorStore.getState().setCurrentTime(timeMs)
     splitAtPlayhead()
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = "move"
-  }
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const fromIndex = parseInt(e.dataTransfer.getData("clip-index"), 10)
-    if (isNaN(fromIndex)) return
-
-    const rect = e.currentTarget.getBoundingClientRect()
-    const relX = e.clientX - rect.left
-    const pctX = relX / rect.width
-
-    let accumulated = 0
-    let toIndex = sequence.clips.length - 1
-    for (let i = 0; i < sequence.clips.length; i++) {
-      const clip = sequence.clips[i]
-      const clipDur = (clip.sourceEnd - clip.sourceStart) / clip.speed
-      const clipPct = ctx.msToPercent(clipDur) / 100
-      accumulated += clipPct
-      if (pctX < accumulated) {
-        toIndex = i
-        break
-      }
-    }
-
-    if (fromIndex !== toIndex) {
-      moveClip(fromIndex, toIndex)
-    }
   }
 
   const handleCutPointContextMenu = (e: React.MouseEvent, index: number) => {
@@ -141,8 +108,6 @@ export function SequenceTrack({ ctx }: SequenceTrackProps) {
       data-testid="sequence-track"
       className="relative h-10"
       onClick={handleTrackClick}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
     >
       {clipElements}
       {cutElements}

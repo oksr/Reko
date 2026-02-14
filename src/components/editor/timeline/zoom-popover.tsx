@@ -16,7 +16,7 @@ interface ZoomPopoverProps {
   children: React.ReactNode
 }
 
-export function ZoomPopover({ segment, index, clipIndex, kfIndex, clipRelativeTimeMs, open, onOpenChange, children }: ZoomPopoverProps) {
+export function ZoomPopover({ segment, index: _index, clipIndex, kfIndex, clipRelativeTimeMs, open, onOpenChange, children }: ZoomPopoverProps) {
   const updateClipZoomKeyframe = useEditorStore((s) => s.updateClipZoomKeyframe)
   const removeZoomKeyframeFromClip = useEditorStore((s) => s.removeZoomKeyframeFromClip)
 
