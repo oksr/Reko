@@ -35,20 +35,21 @@ export function useVideoSync(options: VideoSyncOptions = {}) {
 
     const tick = () => {
       const primary = videosRef.current[0]
-      if (primary && !primary.paused) {
-        const timeMs = primary.currentTime * 1000
+      if (!primary) return
+
+      const timeMs = primary.currentTime * 1000
+      const project = useEditorStore.getState().project
+
+      // Stop playback at out-point or when video naturally ends
+      if (primary.paused || primary.ended || (project && timeMs >= project.timeline.out_point)) {
         onTimeUpdateRef.current?.(timeMs)
-
-        // Stop playback at out-point
-        const project = useEditorStore.getState().project
-        if (project && timeMs >= project.timeline.out_point) {
-          pause()
-          useEditorStore.getState().setIsPlaying(false)
-          return
-        }
-
-        rafRef.current = requestAnimationFrame(tick)
+        pause()
+        useEditorStore.getState().setIsPlaying(false)
+        return
       }
+
+      onTimeUpdateRef.current?.(timeMs)
+      rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
   }, [pause])
