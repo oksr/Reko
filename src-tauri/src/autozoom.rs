@@ -11,20 +11,20 @@ pub struct MouseEvent {
     pub event_type: String,
 }
 
-/// Generate zoom keyframes from mouse click events.
+/// Generate zoom keyframes from mouse click events (segment model).
 ///
 /// Algorithm:
 /// 1. Filter to click events only
 /// 2. Group clicks that are close in time (within `cluster_ms`)
-/// 3. For each cluster, create a zoom-in keyframe at the cluster center
-/// 4. After each zoom-in, add a zoom-out keyframe (`hold_ms` later)
-/// 5. Ensure keyframes don't overlap
+/// 3. For each cluster, create a zoom segment at the cluster center
+/// 4. Each segment has built-in ramp-in/hold/ramp-out (no separate zoom-out needed)
+/// 5. Ensure segments don't overlap and stay within video duration
 pub fn generate_zoom_keyframes(
     events: &[MouseEvent],
     zoom_scale: f64,
-    transition_ms: u64,
-    hold_ms: u64,
+    segment_duration_ms: u64,
     cluster_ms: u64,
+    video_duration_ms: u64,
 ) -> Vec<ZoomKeyframe> {
     // Filter clicks only
     let clicks: Vec<&MouseEvent> = events
@@ -51,7 +51,6 @@ pub fn generate_zoom_keyframes(
     }
     clusters.push(current_cluster);
 
-    // Generate zoom-in + zoom-out pairs from clusters
     let mut keyframes: Vec<ZoomKeyframe> = vec![];
 
     for cluster in &clusters {
@@ -60,31 +59,26 @@ pub fn generate_zoom_keyframes(
         let cy: f64 = cluster.iter().map(|e| e.y).sum::<f64>() / cluster.len() as f64;
         let time_ms = cluster[0].time_ms;
 
-        // Check there's room: don't overlap with previous zoom-out
+        // Clamp segment to not exceed video duration
+        let duration = segment_duration_ms.min(video_duration_ms.saturating_sub(time_ms));
+        if duration < 200 {
+            continue; // Too short to be useful
+        }
+
+        // Check there's room: don't overlap with previous segment
         if let Some(last) = keyframes.last() {
             if time_ms < last.time_ms + last.duration_ms + 100 {
                 continue; // Skip — too close to previous
             }
         }
 
-        // Zoom IN
         keyframes.push(ZoomKeyframe {
             time_ms,
             x: cx,
             y: cy,
             scale: zoom_scale,
             easing: "ease-in-out".to_string(),
-            duration_ms: transition_ms,
-        });
-
-        // Zoom OUT (return to 1.0)
-        keyframes.push(ZoomKeyframe {
-            time_ms: time_ms + transition_ms + hold_ms,
-            x: 0.5,
-            y: 0.5,
-            scale: 1.0,
-            easing: "ease-in-out".to_string(),
-            duration_ms: transition_ms,
+            duration_ms: duration,
         });
     }
 
@@ -155,24 +149,20 @@ mod tests {
     #[test]
     fn test_no_clicks_returns_empty() {
         let events = vec![make_move(100, 0.5, 0.5)];
-        let kfs = generate_zoom_keyframes(&events, 2.0, 300, 1000, 500);
+        let kfs = generate_zoom_keyframes(&events, 2.0, 1000, 500, 10000);
         assert!(kfs.is_empty());
     }
 
     #[test]
-    fn test_single_click_generates_zoom_pair() {
+    fn test_single_click_generates_one_segment() {
         let events = vec![make_click(1000, 0.3, 0.7)];
-        let kfs = generate_zoom_keyframes(&events, 2.0, 300, 1000, 500);
-        assert_eq!(kfs.len(), 2);
-        // Zoom in
+        let kfs = generate_zoom_keyframes(&events, 2.0, 1000, 500, 10000);
+        assert_eq!(kfs.len(), 1);
         assert_eq!(kfs[0].time_ms, 1000);
         assert_eq!(kfs[0].x, 0.3);
         assert_eq!(kfs[0].y, 0.7);
         assert_eq!(kfs[0].scale, 2.0);
-        assert_eq!(kfs[0].duration_ms, 300);
-        // Zoom out
-        assert_eq!(kfs[1].time_ms, 1000 + 300 + 1000); // 2300
-        assert_eq!(kfs[1].scale, 1.0);
+        assert_eq!(kfs[0].duration_ms, 1000);
     }
 
     #[test]
@@ -181,21 +171,38 @@ mod tests {
             make_click(1000, 0.3, 0.3),
             make_click(1200, 0.4, 0.4), // within 500ms cluster
         ];
-        let kfs = generate_zoom_keyframes(&events, 2.0, 300, 1000, 500);
-        assert_eq!(kfs.len(), 2); // one pair, not two
+        let kfs = generate_zoom_keyframes(&events, 2.0, 1000, 500, 10000);
+        assert_eq!(kfs.len(), 1); // one segment, not two
         // Center of cluster
         assert!((kfs[0].x - 0.35).abs() < 0.01);
         assert!((kfs[0].y - 0.35).abs() < 0.01);
     }
 
     #[test]
-    fn test_spaced_clicks_generate_multiple_pairs() {
+    fn test_spaced_clicks_generate_multiple_segments() {
         let events = vec![
             make_click(1000, 0.2, 0.2),
             make_click(5000, 0.8, 0.8), // well spaced
         ];
-        let kfs = generate_zoom_keyframes(&events, 2.0, 300, 1000, 500);
-        assert_eq!(kfs.len(), 4); // two pairs
+        let kfs = generate_zoom_keyframes(&events, 2.0, 1000, 500, 10000);
+        assert_eq!(kfs.len(), 2); // two segments (not pairs)
+    }
+
+    #[test]
+    fn test_segment_clamped_to_video_duration() {
+        let events = vec![make_click(2000, 0.5, 0.5)];
+        // Video is only 2400ms, click at 2000 — segment should be clamped
+        let kfs = generate_zoom_keyframes(&events, 2.0, 1000, 500, 2400);
+        assert_eq!(kfs.len(), 1);
+        assert_eq!(kfs[0].duration_ms, 400); // 2400 - 2000
+    }
+
+    #[test]
+    fn test_segment_too_close_to_end_is_skipped() {
+        let events = vec![make_click(2300, 0.5, 0.5)];
+        // Video is 2400ms, click at 2300 — only 100ms left, < 200 minimum
+        let kfs = generate_zoom_keyframes(&events, 2.0, 1000, 500, 2400);
+        assert!(kfs.is_empty());
     }
 
     #[test]

@@ -105,6 +105,12 @@ pub fn generate_auto_zoom(project_id: String) -> Result<Vec<project::ZoomKeyfram
         return Ok(vec![]);
     }
 
+    // Load project to get video duration
+    let project_path = project::project_dir(&project_id).join("project.json");
+    let project_data = std::fs::read_to_string(&project_path).map_err(|e| e.to_string())?;
+    let p: project::ProjectState = serde_json::from_str(&project_data).map_err(|e| e.to_string())?;
+    let video_duration_ms = p.timeline.duration_ms;
+
     let content = std::fs::read_to_string(&mouse_path).map_err(|e| e.to_string())?;
     let events: Vec<autozoom::MouseEvent> = content
         .lines()
@@ -113,10 +119,10 @@ pub fn generate_auto_zoom(project_id: String) -> Result<Vec<project::ZoomKeyfram
 
     Ok(autozoom::generate_zoom_keyframes(
         &events,
-        2.0,   // zoom_scale
-        300,   // transition_ms
-        1500,  // hold_ms
-        500,   // cluster_ms
+        2.0,    // zoom_scale
+        1000,   // segment_duration_ms
+        500,    // cluster_ms
+        video_duration_ms,
     ))
 }
 
