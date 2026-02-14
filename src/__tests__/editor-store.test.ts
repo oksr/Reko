@@ -194,6 +194,54 @@ describe("editor store", () => {
     expect(pastStates.length).toBe(0)
   })
 
+  it("auto-migrates project to sequence with one clip", () => {
+    const { project } = useEditorStore.getState()
+    expect(project!.sequence.clips).toHaveLength(1)
+    expect(project!.sequence.clips[0].sourceStart).toBe(0)
+    expect(project!.sequence.clips[0].sourceEnd).toBe(MOCK_PROJECT.timeline.duration_ms)
+  })
+
+  it("splits a clip at playhead", () => {
+    const store = useEditorStore.getState()
+    store.setCurrentTime(2000)
+    store.splitAtPlayhead()
+    const { project } = useEditorStore.getState()
+    expect(project!.sequence.clips).toHaveLength(2)
+    expect(project!.sequence.clips[0].sourceEnd).toBe(2000)
+    expect(project!.sequence.clips[1].sourceStart).toBe(2000)
+    expect(project!.sequence.transitions).toHaveLength(1)
+    expect(project!.sequence.transitions[0]).toBeNull() // cut
+  })
+
+  it("removes a clip with ripple delete", () => {
+    const store = useEditorStore.getState()
+    store.setCurrentTime(2000)
+    store.splitAtPlayhead()
+    store.setSelectedClipIndex(1)
+    store.rippleDelete()
+    const { project } = useEditorStore.getState()
+    expect(project!.sequence.clips).toHaveLength(1)
+    expect(project!.sequence.clips[0].sourceEnd).toBe(2000)
+  })
+
+  it("reorders clips via moveClip", () => {
+    const store = useEditorStore.getState()
+    // Split into 3 clips
+    store.setCurrentTime(2000)
+    store.splitAtPlayhead()
+    store.setCurrentTime(3000) // 1000 into second clip -> source 3000
+    store.splitAtPlayhead()
+
+    const clipsBefore = useEditorStore.getState().project!.sequence.clips
+    expect(clipsBefore).toHaveLength(3)
+
+    store.moveClip(2, 0) // move last clip to first position
+    const clipsAfter = useEditorStore.getState().project!.sequence.clips
+    expect(clipsAfter[0].id).toBe(clipsBefore[2].id)
+    expect(clipsAfter[1].id).toBe(clipsBefore[0].id)
+    expect(clipsAfter[2].id).toBe(clipsBefore[1].id)
+  })
+
   it("loadProject merges cursor defaults for old projects", () => {
     const oldProject = {
       ...MOCK_PROJECT,
@@ -208,5 +256,99 @@ describe("editor store", () => {
     expect(effects.cursor.enabled).toBe(false)
     expect(effects.cursor.type).toBe("highlight")
     expect(effects.zoomKeyframes).toEqual([])
+  })
+})
+
+describe("overlay actions", () => {
+  beforeEach(() => {
+    useEditorStore.getState().loadProject({ ...MOCK_PROJECT })
+    useEditorStore.temporal.getState().clear()
+  })
+
+  it("adds an overlay track", () => {
+    const store = useEditorStore.getState()
+    store.addOverlayTrack("text")
+    const tracks = useEditorStore.getState().project!.sequence.overlayTracks
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0].type).toBe("text")
+  })
+
+  it("adds an overlay to a track", () => {
+    const store = useEditorStore.getState()
+    store.addOverlayTrack("text")
+    const trackId = useEditorStore.getState().project!.sequence.overlayTracks[0].id
+    store.addOverlay({
+      trackId,
+      type: "text",
+      startMs: 1000,
+      durationMs: 2000,
+      position: { x: 0.5, y: 0.1 },
+      size: { width: 0.3, height: 0.05 },
+      opacity: 1,
+    })
+    const overlays = useEditorStore.getState().project!.sequence.overlays
+    expect(overlays).toHaveLength(1)
+    expect(overlays[0].startMs).toBe(1000)
+  })
+
+  it("removes an overlay", () => {
+    const store = useEditorStore.getState()
+    store.addOverlayTrack("text")
+    const trackId = useEditorStore.getState().project!.sequence.overlayTracks[0].id
+    store.addOverlay({
+      trackId, type: "text", startMs: 1000, durationMs: 2000,
+      position: { x: 0.5, y: 0.1 }, size: { width: 0.3, height: 0.05 }, opacity: 1,
+    })
+    const overlayId = useEditorStore.getState().project!.sequence.overlays[0].id
+    store.removeOverlay(overlayId)
+    expect(useEditorStore.getState().project!.sequence.overlays).toHaveLength(0)
+  })
+
+  it("enforces max 5 overlay tracks", () => {
+    const store = useEditorStore.getState()
+    for (let i = 0; i < 5; i++) store.addOverlayTrack("text")
+    expect(useEditorStore.getState().project!.sequence.overlayTracks).toHaveLength(5)
+    store.addOverlayTrack("image") // should be ignored
+    expect(useEditorStore.getState().project!.sequence.overlayTracks).toHaveLength(5)
+  })
+})
+
+describe("clip-scoped zoom actions", () => {
+  beforeEach(() => {
+    useEditorStore.getState().loadProject({ ...MOCK_PROJECT })
+    useEditorStore.temporal.getState().clear()
+  })
+
+  it("addZoomKeyframeToClip adds keyframe to specific clip", () => {
+    const store = useEditorStore.getState()
+    store.addZoomKeyframeToClip(0, {
+      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+    })
+    const clip = useEditorStore.getState().project!.sequence.clips[0]
+    expect(clip.zoomKeyframes).toHaveLength(1)
+    expect(clip.zoomKeyframes[0].timeMs).toBe(500)
+  })
+
+  it("removeZoomKeyframeFromClip removes by timeMs", () => {
+    const store = useEditorStore.getState()
+    store.addZoomKeyframeToClip(0, {
+      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+    })
+    store.removeZoomKeyframeFromClip(0, 500)
+    const clip = useEditorStore.getState().project!.sequence.clips[0]
+    expect(clip.zoomKeyframes).toHaveLength(0)
+  })
+
+  it("clearClipZoomKeyframes clears all keyframes from a clip", () => {
+    const store = useEditorStore.getState()
+    store.addZoomKeyframeToClip(0, {
+      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+    })
+    store.addZoomKeyframeToClip(0, {
+      timeMs: 1500, x: 0.5, y: 0.5, scale: 1.5, easing: "ease-in-out", durationMs: 300,
+    })
+    store.clearClipZoomKeyframes(0)
+    const clip = useEditorStore.getState().project!.sequence.clips[0]
+    expect(clip.zoomKeyframes).toHaveLength(0)
   })
 })

@@ -1,6 +1,6 @@
 import { describe, test, expect } from "vitest"
-import { interpolateZoom } from "@/lib/zoom-interpolation"
-import type { ZoomKeyframe } from "@/types/editor"
+import { interpolateZoom, interpolateZoomAtSequenceTime } from "@/lib/zoom-interpolation"
+import type { ZoomKeyframe, Clip, Transition } from "@/types/editor"
 
 const RAMP_MS = 200 // fixed ramp duration
 
@@ -62,5 +62,41 @@ describe("interpolateZoom (segment model)", () => {
     // In hold of second segment
     const r2 = interpolateZoom(kfs, 3300)
     expect(r2.scale).toBe(2.5)
+  })
+})
+
+describe("interpolateZoomAtSequenceTime", () => {
+  const clips: Clip[] = [
+    {
+      id: "a", sourceStart: 0, sourceEnd: 3000, speed: 1,
+      zoomKeyframes: [
+        { timeMs: 500, durationMs: 500, x: 0.3, y: 0.3, scale: 2, easing: "ease-in-out" },
+      ],
+    },
+    {
+      id: "b", sourceStart: 5000, sourceEnd: 8000, speed: 1,
+      zoomKeyframes: [
+        { timeMs: 1000, durationMs: 500, x: 0.7, y: 0.7, scale: 1.5, easing: "linear" },
+      ],
+    },
+  ]
+  const transitions: (Transition | null)[] = [null]
+
+  test("resolves zoom from first clip", () => {
+    // seqTime 750 is in hold phase of first clip's keyframe (500 + 200 ramp = 700)
+    const result = interpolateZoomAtSequenceTime(750, clips, transitions)
+    expect(result.scale).toBe(2)
+    expect(result.x).toBe(0.3)
+  })
+
+  test("resolves zoom from second clip", () => {
+    // seqTime 4200 = 1200 into second clip, in hold phase of its keyframe (1000 + 200 = 1200)
+    const result = interpolateZoomAtSequenceTime(4200, clips, transitions)
+    expect(result.scale).toBe(1.5)
+  })
+
+  test("returns default for time between keyframes", () => {
+    const result = interpolateZoomAtSequenceTime(2500, clips, transitions)
+    expect(result.scale).toBe(1)
   })
 })

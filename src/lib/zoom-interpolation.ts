@@ -1,4 +1,5 @@
-import type { ZoomKeyframe } from "@/types/editor"
+import type { ZoomKeyframe, Clip, Transition } from "@/types/editor"
+import { sequenceTimeToSourceTime } from "@/lib/sequence"
 
 const RAMP_MS = 200
 
@@ -47,4 +48,17 @@ export function interpolateZoom(
   }
 
   return none
+}
+
+export function interpolateZoomAtSequenceTime(
+  seqTime: number,
+  clips: Clip[],
+  transitions: (Transition | null)[]
+): { x: number; y: number; scale: number } {
+  const mapping = sequenceTimeToSourceTime(seqTime, clips, transitions)
+  if (!mapping) return { x: 0.5, y: 0.5, scale: 1 }
+
+  const clip = clips[mapping.clipIndex]
+  const clipRelativeTime = mapping.sourceTime - clip.sourceStart
+  return interpolateZoom(clip.zoomKeyframes, clipRelativeTime)
 }

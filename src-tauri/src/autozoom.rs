@@ -1,4 +1,4 @@
-use crate::project::ZoomKeyframe;
+use crate::project::{Clip, SequenceTransition, ZoomKeyframe};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -123,6 +123,42 @@ pub fn interpolate_zoom(keyframes: &[ZoomKeyframe], time_ms: u64) -> (f64, f64, 
         return (x, y, s);
     }
 
+    (0.5, 0.5, 1.0)
+}
+
+/// Sequence-aware zoom interpolation.
+/// Finds the active clip at the given sequence time, then delegates
+/// to `interpolate_zoom` with the clip-relative time.
+pub fn interpolate_zoom_at_sequence_time(
+    seq_time: u64,
+    clips: &[Clip],
+    transitions: &[Option<SequenceTransition>],
+) -> (f64, f64, f64) {
+    let mut elapsed: i64 = 0;
+    for (i, clip) in clips.iter().enumerate() {
+        let clip_duration = ((clip.source_end - clip.source_start) as f64 / clip.speed) as i64;
+        let overlap_before = if i > 0 {
+            transitions.get(i - 1)
+                .and_then(|t| t.as_ref())
+                .filter(|t| t.transition_type != "cut")
+                .map(|t| t.duration_ms as i64)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        if (seq_time as i64) < elapsed + clip_duration - overlap_before {
+            let time_in_clip = seq_time as i64 - (elapsed - overlap_before);
+            return interpolate_zoom(&clip.zoom_keyframes, time_in_clip.max(0) as u64);
+        }
+
+        elapsed += clip_duration;
+        if let Some(Some(t)) = transitions.get(i) {
+            if t.transition_type != "cut" {
+                elapsed -= t.duration_ms as i64;
+            }
+        }
+    }
     (0.5, 0.5, 1.0)
 }
 
@@ -257,5 +293,63 @@ mod tests {
             ZoomKeyframe { time_ms: 3000, x: 0.5, y: 0.5, scale: 1.5, easing: "ease-in-out".to_string(), duration_ms: 500 },
         ];
         assert_eq!(interpolate_zoom(&kfs, 2000), (0.5, 0.5, 1.0));
+    }
+
+    #[test]
+    fn test_sequence_interpolation_first_clip() {
+        let clips = vec![
+            Clip {
+                id: "a".to_string(), source_start: 0, source_end: 3000, speed: 1.0,
+                zoom_keyframes: vec![ZoomKeyframe {
+                    time_ms: 500, duration_ms: 500, x: 0.3, y: 0.3, scale: 2.0,
+                    easing: "ease-in-out".to_string(),
+                }],
+            },
+            Clip {
+                id: "b".to_string(), source_start: 5000, source_end: 8000, speed: 1.0,
+                zoom_keyframes: vec![],
+            },
+        ];
+        let transitions = vec![None];
+
+        // 750ms is in the hold phase of the zoom segment (500..1000)
+        let (_, _, scale) = interpolate_zoom_at_sequence_time(750, &clips, &transitions);
+        assert!((scale - 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_sequence_interpolation_second_clip() {
+        let clips = vec![
+            Clip {
+                id: "a".to_string(), source_start: 0, source_end: 3000, speed: 1.0,
+                zoom_keyframes: vec![],
+            },
+            Clip {
+                id: "b".to_string(), source_start: 5000, source_end: 8000, speed: 1.0,
+                zoom_keyframes: vec![ZoomKeyframe {
+                    time_ms: 500, duration_ms: 500, x: 0.7, y: 0.7, scale: 1.5,
+                    easing: "ease-in-out".to_string(),
+                }],
+            },
+        ];
+        let transitions = vec![None];
+
+        // Seq time 3750 = 3000 (clip A) + 750 into clip B -> in hold phase of kf at 500
+        let (_, _, scale) = interpolate_zoom_at_sequence_time(3750, &clips, &transitions);
+        assert!((scale - 1.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_sequence_interpolation_empty_clips() {
+        assert_eq!(interpolate_zoom_at_sequence_time(1000, &[], &[]), (0.5, 0.5, 1.0));
+    }
+
+    #[test]
+    fn test_sequence_interpolation_no_keyframes() {
+        let clips = vec![Clip {
+            id: "a".to_string(), source_start: 0, source_end: 5000, speed: 1.0,
+            zoom_keyframes: vec![],
+        }];
+        assert_eq!(interpolate_zoom_at_sequence_time(2500, &clips, &[]), (0.5, 0.5, 1.0));
     }
 }

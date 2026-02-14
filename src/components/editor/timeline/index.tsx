@@ -1,10 +1,13 @@
-import { useRef, useMemo } from "react"
+import { useRef, useMemo, useCallback } from "react"
 import { useEditorStore } from "@/stores/editor-store"
+import { getSequenceDuration } from "@/lib/sequence"
 import type { useVideoSync } from "@/hooks/use-video-sync"
 import { TimeRuler } from "./time-ruler"
 import { PlayheadPin } from "./playhead-pin"
-import { ClipTrack } from "./clip-track"
+import { SequenceTrack } from "./sequence-track"
 import { ZoomTrack } from "./zoom-track"
+import { OverlayTrack } from "./overlay-track"
+import { TimelineToolbar } from "./timeline-toolbar"
 import { AudioTrack } from "./audio-track"
 import type { TimelineContext } from "./types"
 
@@ -16,20 +19,39 @@ export function Timeline({ videoSync }: TimelineProps) {
   const project = useEditorStore((s) => s.project)
   const currentTime = useEditorStore((s) => s.currentTime)
   const containerRef = useRef<HTMLDivElement>(null)
+  const frozenDurationRef = useRef<number | null>(null)
+
+  const freezeDuration = useCallback(() => {
+    if (!project) return
+    frozenDurationRef.current = getSequenceDuration(
+      project.sequence.clips,
+      project.sequence.transitions
+    )
+  }, [project])
+
+  const unfreezeDuration = useCallback(() => {
+    frozenDurationRef.current = null
+  }, [])
 
   const ctx: TimelineContext | null = useMemo(() => {
     if (!project) return null
-    const { duration_ms, in_point, out_point } = project.timeline
+    const { in_point, out_point } = project.timeline
+    const seqDuration = getSequenceDuration(project.sequence.clips, project.sequence.transitions)
+    const durationMs = frozenDurationRef.current
+      ?? (seqDuration > 0 ? seqDuration : project.timeline.duration_ms)
     return {
-      durationMs: duration_ms,
+      durationMs,
+      videoDurationMs: project.timeline.duration_ms,
       inPoint: in_point,
       outPoint: out_point,
       currentTime,
       videoSync,
-      msToPercent: (ms: number) => (ms / duration_ms) * 100,
+      msToPercent: (ms: number) => (ms / durationMs) * 100,
       containerRef,
+      freezeDuration,
+      unfreezeDuration,
     }
-  }, [project, currentTime, videoSync])
+  }, [project, currentTime, videoSync, freezeDuration, unfreezeDuration])
 
   if (!project || !ctx) return null
 
@@ -38,6 +60,7 @@ export function Timeline({ videoSync }: TimelineProps) {
 
   return (
     <div className="space-y-1.5 select-none">
+      <TimelineToolbar />
       <div ref={containerRef} className="relative">
         {/* Time ruler + Playhead pin */}
         <TimeRuler ctx={ctx} />
@@ -45,7 +68,10 @@ export function Timeline({ videoSync }: TimelineProps) {
 
         {/* Tracks */}
         <div className="space-y-1 mt-1">
-          <ClipTrack ctx={ctx} />
+          {project.sequence.overlayTracks.map((track, i) => (
+            <OverlayTrack key={track.id} track={track} trackIndex={i} ctx={ctx} />
+          ))}
+          <SequenceTrack ctx={ctx} />
           <ZoomTrack ctx={ctx} />
           {audioPath && <AudioTrack ctx={ctx} audioPath={audioPath} type={audioType} />}
         </div>

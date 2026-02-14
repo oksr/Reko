@@ -127,6 +127,7 @@ pub async fn stop_recording(
             out_point: result.duration_ms,
         },
         effects: None,
+        sequence: None,
     };
 
     project::save_project(&project)?;

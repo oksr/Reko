@@ -1,5 +1,6 @@
-import { useCallback, useRef } from "react"
+import { useCallback, useMemo, useRef } from "react"
 import { useEditorStore } from "@/stores/editor-store"
+import { sourceTimeToSequenceTime, sequenceTimeToSourceTime } from "@/lib/sequence"
 import { ZoomSegment } from "./zoom-segment"
 import type { TimelineContext } from "./types"
 
@@ -7,22 +8,59 @@ interface ZoomTrackProps {
   ctx: TimelineContext
 }
 
+/** A zoom keyframe mapped to sequence time, with its clip origin */
+export interface SequenceZoomSegment {
+  clipIndex: number
+  kfIndex: number
+  seqTimeMs: number
+  clipRelativeTimeMs: number
+  durationMs: number
+  scale: number
+  x: number
+  y: number
+  easing: string
+}
+
 export function ZoomTrack({ ctx }: ZoomTrackProps) {
-  const project = useEditorStore((s) => s.project)
+  const sequence = useEditorStore((s) => s.project?.sequence)
   const selectedZoomIndex = useEditorStore((s) => s.selectedZoomIndex)
   const setSelectedZoomIndex = useEditorStore((s) => s.setSelectedZoomIndex)
-  const addZoomKeyframe = useEditorStore((s) => s.addZoomKeyframe)
-  const removeZoomKeyframe = useEditorStore((s) => s.removeZoomKeyframe)
+  const addZoomKeyframeToClip = useEditorStore((s) => s.addZoomKeyframeToClip)
   const dragStartRef = useRef<{ x: number; timeMs: number } | null>(null)
 
-  const keyframes = project?.effects.zoomKeyframes ?? []
+  // Flatten all clip keyframes into sequence-time segments
+  const segments: SequenceZoomSegment[] = useMemo(() => {
+    if (!sequence) return []
+    const result: SequenceZoomSegment[] = []
+    for (let ci = 0; ci < sequence.clips.length; ci++) {
+      const clip = sequence.clips[ci]
+      const clipSeqStart = sourceTimeToSequenceTime(
+        clip.sourceStart, ci, sequence.clips, sequence.transitions
+      )
+      for (let ki = 0; ki < clip.zoomKeyframes.length; ki++) {
+        const kf = clip.zoomKeyframes[ki]
+        result.push({
+          clipIndex: ci,
+          kfIndex: ki,
+          seqTimeMs: clipSeqStart + kf.timeMs,
+          clipRelativeTimeMs: kf.timeMs,
+          durationMs: kf.durationMs,
+          scale: kf.scale,
+          x: kf.x,
+          y: kf.y,
+          easing: kf.easing,
+        })
+      }
+    }
+    return result.sort((a, b) => a.seqTimeMs - b.seqTimeMs)
+  }, [sequence])
 
   // Check if a time range overlaps any existing segment
   const isOverlapping = (timeMs: number, durationMs: number): boolean => {
     const end = timeMs + durationMs
-    return keyframes.some((kf) => {
-      const kfEnd = kf.timeMs + kf.durationMs
-      return timeMs < kfEnd && end > kf.timeMs
+    return segments.some((seg) => {
+      const segEnd = seg.seqTimeMs + seg.durationMs
+      return timeMs < segEnd && end > seg.seqTimeMs
     })
   }
 
@@ -39,7 +77,7 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!ctx.containerRef.current || !dragStartRef.current) return
+      if (!ctx.containerRef.current || !dragStartRef.current || !sequence) return
       const rect = ctx.containerRef.current.getBoundingClientRect()
       const endPct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
       const endTimeMs = Math.round(endPct * ctx.durationMs)
@@ -48,56 +86,44 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
       const dx = Math.abs(e.clientX - dragStartRef.current.x)
       dragStartRef.current = null
 
-      // Click (< 5px drag): create default segment
+      // Determine segment start and duration
+      let segStart: number
+      let segDuration: number
       if (dx < 5) {
-        const defaultDuration = 500
-        const newStart = Math.max(0, endTimeMs - defaultDuration / 2)
-        if (!isOverlapping(newStart, defaultDuration)) {
-          addZoomKeyframe({
-            timeMs: newStart,
-            durationMs: defaultDuration,
-            x: 0.5,
-            y: 0.5,
-            scale: 1.5,
-            easing: "ease-in-out",
-          })
-        }
-        return
+        // Click: default 500ms segment
+        segDuration = 500
+        segStart = Math.max(0, endTimeMs - segDuration / 2)
+      } else {
+        // Drag: span the dragged range
+        segStart = Math.min(startTimeMs, endTimeMs)
+        segDuration = Math.max(200, Math.abs(endTimeMs - startTimeMs))
       }
 
-      // Drag: create segment spanning the dragged range
-      const segStart = Math.min(startTimeMs, endTimeMs)
-      const segEnd = Math.max(startTimeMs, endTimeMs)
-      const duration = Math.max(200, segEnd - segStart)
-      if (!isOverlapping(segStart, duration)) {
-        addZoomKeyframe({
-          timeMs: segStart,
-          durationMs: duration,
-          x: 0.5,
-          y: 0.5,
-          scale: 1.5,
-          easing: "ease-in-out",
-        })
-      }
+      if (isOverlapping(segStart, segDuration)) return
+
+      // Find which clip this falls into
+      const mapping = sequenceTimeToSourceTime(segStart, sequence.clips, sequence.transitions)
+      if (!mapping) return
+
+      const clip = sequence.clips[mapping.clipIndex]
+      const clipSeqStart = sourceTimeToSequenceTime(
+        clip.sourceStart, mapping.clipIndex, sequence.clips, sequence.transitions
+      )
+      const clipRelativeTime = segStart - clipSeqStart
+
+      addZoomKeyframeToClip(mapping.clipIndex, {
+        timeMs: Math.round(clipRelativeTime),
+        durationMs: segDuration,
+        x: 0.5,
+        y: 0.5,
+        scale: 1.5,
+        easing: "ease-in-out",
+      })
     },
-    [ctx, keyframes, addZoomKeyframe]
+    [ctx, sequence, segments, addZoomKeyframeToClip]
   )
 
-  // Delete selected segment on Delete/Backspace
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedZoomIndex !== null) {
-        const kf = keyframes[selectedZoomIndex]
-        if (kf) {
-          removeZoomKeyframe(kf.timeMs)
-          setSelectedZoomIndex(null)
-        }
-      }
-    },
-    [selectedZoomIndex, keyframes, removeZoomKeyframe, setSelectedZoomIndex]
-  )
-
-  const isEmpty = keyframes.length === 0
+  const isEmpty = segments.length === 0
 
   return (
     <div
@@ -106,19 +132,28 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
       }`}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
-      onKeyDown={handleKeyDown}
       tabIndex={0}
     >
       {isEmpty ? (
         <div className="flex items-center justify-center h-full">
-          <span className="text-xs text-indigo-400/60">Click or drag to add zoom on cursor</span>
+          <span className="text-xs text-indigo-400/60">Click or drag to add zoom</span>
         </div>
       ) : (
-        keyframes.map((kf, i) => (
+        segments.map((seg, i) => (
           <ZoomSegment
-            key={`${kf.timeMs}-${i}`}
-            segment={kf}
+            key={`${seg.clipIndex}-${seg.kfIndex}`}
+            segment={{
+              timeMs: seg.seqTimeMs,
+              durationMs: seg.durationMs,
+              scale: seg.scale,
+              x: seg.x,
+              y: seg.y,
+              easing: seg.easing,
+            }}
             index={i}
+            clipIndex={seg.clipIndex}
+            kfIndex={seg.kfIndex}
+            clipRelativeTimeMs={seg.clipRelativeTimeMs}
             ctx={ctx}
             isSelected={selectedZoomIndex === i}
             onSelect={setSelectedZoomIndex}

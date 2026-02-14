@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import { assetUrl } from "@/lib/asset-url"
-import { interpolateZoom } from "@/lib/zoom-interpolation"
+import { interpolateZoomAtSequenceTime } from "@/lib/zoom-interpolation"
 import { useEditorStore } from "@/stores/editor-store"
 import { useMouseEvents } from "@/hooks/use-mouse-events"
 import type { useVideoSync } from "@/hooks/use-video-sync"
@@ -40,7 +40,11 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
   const { effects, tracks } = project
   const { background, cameraBubble, frame, cursor } = effects
   const { cursorPos } = useMouseEvents()
-  const zoomState = interpolateZoom(effects.zoomKeyframes, currentTime)
+  const zoomState = interpolateZoomAtSequenceTime(
+    currentTime,
+    project.sequence.clips,
+    project.sequence.transitions
+  )
 
   const bgStyle: React.CSSProperties =
     background.type === "gradient" || background.type === "preset"

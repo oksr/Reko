@@ -15,6 +15,7 @@ export interface EditorProject {
     out_point: number
   }
   effects: Effects
+  sequence: Sequence
 }
 
 export interface Effects {
@@ -83,6 +84,45 @@ export interface ZoomKeyframe {
   scale: number       // 1.0 = no zoom, 2.0 = 2x zoom, etc.
   easing: "ease-in-out" | "ease-in" | "ease-out" | "linear"
   durationMs: number  // transition duration to reach this keyframe
+}
+
+export interface Clip {
+  id: string
+  sourceStart: number
+  sourceEnd: number
+  speed: number
+  zoomKeyframes: ZoomKeyframe[]
+}
+
+export interface Transition {
+  type: "cut" | "crossfade" | "dissolve" | "fade-through-black"
+  durationMs: number
+}
+
+export interface OverlayTrack {
+  id: string
+  type: "webcam" | "text" | "image"
+  locked: boolean
+  visible: boolean
+}
+
+export interface Overlay {
+  id: string
+  trackId: string
+  type: "webcam" | "text" | "image"
+  startMs: number
+  durationMs: number
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  opacity: number
+  linkedClipId?: string
+}
+
+export interface Sequence {
+  clips: Clip[]
+  transitions: (Transition | null)[] // length = clips.length - 1
+  overlayTracks: OverlayTrack[]
+  overlays: Overlay[]
 }
 
 export interface CursorConfig {

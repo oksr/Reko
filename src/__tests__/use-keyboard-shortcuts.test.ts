@@ -79,4 +79,35 @@ describe("useKeyboardShortcuts", () => {
     fireKey("ArrowLeft")
     expect(mockVideoSync.seek).toHaveBeenCalledWith(0)
   })
+
+  it("Cmd+K splits at playhead", () => {
+    renderHook(() => useKeyboardShortcuts(mockVideoSync))
+    fireKey("k", { metaKey: true })
+    const clips = useEditorStore.getState().project!.sequence.clips
+    expect(clips).toHaveLength(2)
+    expect(clips[0].sourceEnd).toBe(5000)
+    expect(clips[1].sourceStart).toBe(5000)
+  })
+
+  it("V switches to select tool", () => {
+    useEditorStore.getState().setActiveTool("razor")
+    renderHook(() => useKeyboardShortcuts(mockVideoSync))
+    fireKey("v")
+    expect(useEditorStore.getState().activeTool).toBe("select")
+  })
+
+  it("C switches to razor tool", () => {
+    renderHook(() => useKeyboardShortcuts(mockVideoSync))
+    fireKey("c")
+    expect(useEditorStore.getState().activeTool).toBe("razor")
+  })
+
+  it("Delete ripple-deletes selected clip", () => {
+    renderHook(() => useKeyboardShortcuts(mockVideoSync))
+    // Split first, then select and delete second clip
+    useEditorStore.getState().splitAtPlayhead()
+    useEditorStore.getState().setSelectedClipIndex(1)
+    fireKey("Delete")
+    expect(useEditorStore.getState().project!.sequence.clips).toHaveLength(1)
+  })
 })

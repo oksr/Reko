@@ -8,15 +8,19 @@ import type { TimelineContext } from "./types"
 interface ZoomSegmentProps {
   segment: ZoomKeyframe
   index: number
+  clipIndex: number
+  kfIndex: number
+  /** The original clip-relative timeMs of this keyframe */
+  clipRelativeTimeMs: number
   ctx: TimelineContext
   isSelected: boolean
   onSelect: (index: number) => void
 }
 
-export function ZoomSegment({ segment, index, ctx, isSelected, onSelect }: ZoomSegmentProps) {
+export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTimeMs, ctx, isSelected, onSelect }: ZoomSegmentProps) {
   const { durationMs, msToPercent, containerRef } = ctx
-  const moveZoomKeyframe = useEditorStore((s) => s.moveZoomKeyframe)
-  const updateZoomKeyframe = useEditorStore((s) => s.updateZoomKeyframe)
+  const updateClipZoomKeyframe = useEditorStore((s) => s.updateClipZoomKeyframe)
+  const removeZoomKeyframeFromClip = useEditorStore((s) => s.removeZoomKeyframeFromClip)
   const [popoverOpen, setPopoverOpen] = useState(false)
 
   const leftPct = msToPercent(segment.timeMs)
@@ -30,13 +34,13 @@ export function ZoomSegment({ segment, index, ctx, isSelected, onSelect }: ZoomS
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
       const startX = e.clientX
-      const startTimeMs = segment.timeMs
+      const origClipTime = clipRelativeTimeMs
 
       const onMove = (ev: MouseEvent) => {
         const dx = ev.clientX - startX
         const dtMs = (dx / rect.width) * durationMs
-        const newTime = Math.max(0, Math.min(durationMs - segment.durationMs, Math.round(startTimeMs + dtMs)))
-        moveZoomKeyframe(index, newTime)
+        const newClipTime = Math.max(0, Math.round(origClipTime + dtMs))
+        updateClipZoomKeyframe(clipIndex, kfIndex, { timeMs: newClipTime })
       }
 
       const onUp = () => {
@@ -47,7 +51,7 @@ export function ZoomSegment({ segment, index, ctx, isSelected, onSelect }: ZoomS
       document.addEventListener("mousemove", onMove)
       document.addEventListener("mouseup", onUp)
     },
-    [containerRef, durationMs, segment, index, moveZoomKeyframe]
+    [containerRef, durationMs, clipRelativeTimeMs, clipIndex, kfIndex, updateClipZoomKeyframe]
   )
 
   // Drag to resize from edge
@@ -57,21 +61,25 @@ export function ZoomSegment({ segment, index, ctx, isSelected, onSelect }: ZoomS
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
       const MIN_DURATION = 200
+      const seqStartMs = segment.timeMs
+      const origClipTime = clipRelativeTimeMs
 
       const onMove = (ev: MouseEvent) => {
         const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width))
-        const timeMs = Math.round(pct * durationMs)
+        const seqTimeMs = Math.round(pct * durationMs)
 
         if (edge === "left") {
-          const maxStart = segment.timeMs + segment.durationMs - MIN_DURATION
-          const newStart = Math.max(0, Math.min(timeMs, maxStart))
-          const newDuration = segment.timeMs + segment.durationMs - newStart
-          moveZoomKeyframe(index, newStart)
-          updateZoomKeyframe(index, { durationMs: newDuration })
+          const maxStart = seqStartMs + segment.durationMs - MIN_DURATION
+          const newSeqStart = Math.min(seqTimeMs, maxStart)
+          const delta = newSeqStart - seqStartMs
+          updateClipZoomKeyframe(clipIndex, kfIndex, {
+            timeMs: Math.max(0, origClipTime + delta),
+            durationMs: Math.max(MIN_DURATION, segment.durationMs - delta),
+          })
         } else {
-          const minEnd = segment.timeMs + MIN_DURATION
-          const newEnd = Math.max(minEnd, Math.min(timeMs, durationMs))
-          updateZoomKeyframe(index, { durationMs: newEnd - segment.timeMs })
+          const minEnd = seqStartMs + MIN_DURATION
+          const newEnd = Math.max(minEnd, Math.min(seqTimeMs, durationMs))
+          updateClipZoomKeyframe(clipIndex, kfIndex, { durationMs: newEnd - seqStartMs })
         }
       }
 
@@ -83,7 +91,7 @@ export function ZoomSegment({ segment, index, ctx, isSelected, onSelect }: ZoomS
       document.addEventListener("mousemove", onMove)
       document.addEventListener("mouseup", onUp)
     },
-    [containerRef, durationMs, segment, index, moveZoomKeyframe, updateZoomKeyframe]
+    [containerRef, durationMs, segment, clipRelativeTimeMs, clipIndex, kfIndex, updateClipZoomKeyframe]
   )
 
   const handleClick = (e: React.MouseEvent) => {
@@ -92,10 +100,22 @@ export function ZoomSegment({ segment, index, ctx, isSelected, onSelect }: ZoomS
     setPopoverOpen(true)
   }
 
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.key === "Delete" || e.key === "Backspace") && isSelected) {
+        removeZoomKeyframeFromClip(clipIndex, clipRelativeTimeMs)
+      }
+    },
+    [isSelected, clipIndex, clipRelativeTimeMs, removeZoomKeyframeFromClip]
+  )
+
   return (
     <ZoomPopover
       segment={segment}
       index={index}
+      clipIndex={clipIndex}
+      kfIndex={kfIndex}
+      clipRelativeTimeMs={clipRelativeTimeMs}
       open={popoverOpen}
       onOpenChange={setPopoverOpen}
     >
@@ -112,6 +132,8 @@ export function ZoomSegment({ segment, index, ctx, isSelected, onSelect }: ZoomS
         }}
         onMouseDown={handleBodyDrag}
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
       >
         {/* Labels */}
         <div className="flex flex-col items-center justify-center h-full text-white/90 pointer-events-none overflow-hidden px-1">

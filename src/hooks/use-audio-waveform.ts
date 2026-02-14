@@ -1,9 +1,29 @@
 import { useState, useEffect, useRef } from "react"
-import { convertFileSrc } from "@tauri-apps/api/core"
+import { assetUrl } from "@/lib/asset-url"
+import type { Clip } from "@/types/editor"
 
 interface WaveformResult {
   peaks: number[] | null
   loading: boolean
+}
+
+/**
+ * Rearrange raw waveform peaks to match the sequence clip order.
+ * Extracts the peak range for each clip and concatenates them.
+ */
+export function rearrangeWaveform(
+  allPeaks: number[],
+  durationMs: number,
+  clips: Clip[]
+): number[] {
+  const msPerPeak = durationMs / allPeaks.length
+  const result: number[] = []
+  for (const clip of clips) {
+    const startIdx = Math.floor(clip.sourceStart / msPerPeak)
+    const endIdx = Math.floor(clip.sourceEnd / msPerPeak)
+    result.push(...allPeaks.slice(startIdx, endIdx))
+  }
+  return result
 }
 
 /**
@@ -31,7 +51,7 @@ export function useAudioWaveform(audioPath: string | null, width: number): Wavef
 
     const decode = async () => {
       try {
-        const url = convertFileSrc(audioPath)
+        const url = assetUrl(audioPath)
         const response = await fetch(url, { signal: controller.signal })
         const arrayBuffer = await response.arrayBuffer()
 

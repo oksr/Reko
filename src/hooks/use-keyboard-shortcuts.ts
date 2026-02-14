@@ -60,6 +60,39 @@ export function useKeyboardShortcuts(videoSync: ReturnType<typeof useVideoSync>)
       if (e.key === "o" && !e.metaKey && !e.ctrlKey) {
         useEditorStore.getState().setOutPoint(state.currentTime)
       }
+
+      // Cmd+K — split at playhead
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault()
+        useEditorStore.getState().splitAtPlayhead()
+      }
+
+      // V — select tool
+      if (e.key === "v" && !e.metaKey && !e.ctrlKey) {
+        useEditorStore.getState().setActiveTool("select")
+      }
+
+      // C — razor tool
+      if (e.key === "c" && !e.metaKey && !e.ctrlKey) {
+        useEditorStore.getState().setActiveTool("razor")
+      }
+
+      // Z — zoom tool (only without modifiers to avoid conflict with undo)
+      if (e.key === "z" && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        useEditorStore.getState().setActiveTool("zoom")
+      }
+
+      // Delete / Backspace — ripple delete selected clip
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (state.selectedClipIndex !== null) {
+          e.preventDefault()
+          if (e.shiftKey) {
+            useEditorStore.getState().liftDelete()
+          } else {
+            useEditorStore.getState().rippleDelete()
+          }
+        }
+      }
     }
 
     window.addEventListener("keydown", handleKeyDown)

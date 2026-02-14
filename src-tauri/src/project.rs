@@ -11,6 +11,8 @@ pub struct ProjectState {
     pub timeline: Timeline,
     #[serde(default)]
     pub effects: Option<Effects>,
+    #[serde(default)]
+    pub sequence: Option<Sequence>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -77,6 +79,70 @@ pub struct ZoomKeyframe {
     pub scale: f64,               // 1.0 = no zoom
     pub easing: String,           // "ease-in-out" | "ease-in" | "ease-out" | "linear"
     pub duration_ms: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Clip {
+    pub id: String,
+    pub source_start: u64,
+    pub source_end: u64,
+    pub speed: f64,
+    pub zoom_keyframes: Vec<ZoomKeyframe>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SequenceTransition {
+    #[serde(rename = "type")]
+    pub transition_type: String,
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Sequence {
+    pub clips: Vec<Clip>,
+    pub transitions: Vec<Option<SequenceTransition>>,
+    pub overlay_tracks: Vec<SequenceOverlayTrack>,
+    pub overlays: Vec<SequenceOverlay>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SequenceOverlayTrack {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub track_type: String,
+    pub locked: bool,
+    pub visible: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SequenceOverlay {
+    pub id: String,
+    pub track_id: String,
+    #[serde(rename = "type")]
+    pub overlay_type: String,
+    pub start_ms: u64,
+    pub duration_ms: u64,
+    pub position: OverlayPosition,
+    pub size: OverlaySize,
+    pub opacity: f64,
+    pub linked_clip_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OverlayPosition {
+    pub x: f64,
+    pub y: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OverlaySize {
+    pub width: f64,
+    pub height: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -210,6 +276,7 @@ mod tests {
                 cursor: None,
                 zoom_keyframes: None,
             }),
+            sequence: None,
         };
         let json = serde_json::to_string(&project).unwrap();
         // Verify camelCase serialization

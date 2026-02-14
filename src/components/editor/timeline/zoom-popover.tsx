@@ -8,17 +8,20 @@ import type { ZoomKeyframe } from "@/types/editor"
 interface ZoomPopoverProps {
   segment: ZoomKeyframe
   index: number
+  clipIndex: number
+  kfIndex: number
+  clipRelativeTimeMs: number
   open: boolean
   onOpenChange: (open: boolean) => void
   children: React.ReactNode
 }
 
-export function ZoomPopover({ segment, index, open, onOpenChange, children }: ZoomPopoverProps) {
-  const updateZoomKeyframe = useEditorStore((s) => s.updateZoomKeyframe)
-  const removeZoomKeyframe = useEditorStore((s) => s.removeZoomKeyframe)
+export function ZoomPopover({ segment, index, clipIndex, kfIndex, clipRelativeTimeMs, open, onOpenChange, children }: ZoomPopoverProps) {
+  const updateClipZoomKeyframe = useEditorStore((s) => s.updateClipZoomKeyframe)
+  const removeZoomKeyframeFromClip = useEditorStore((s) => s.removeZoomKeyframeFromClip)
 
   const handleDelete = () => {
-    removeZoomKeyframe(segment.timeMs)
+    removeZoomKeyframeFromClip(clipIndex, clipRelativeTimeMs)
     onOpenChange(false)
   }
 
@@ -38,7 +41,7 @@ export function ZoomPopover({ segment, index, open, onOpenChange, children }: Zo
             max={3.0}
             step={0.1}
             value={segment.scale}
-            onChange={(e) => updateZoomKeyframe(index, { scale: parseFloat(e.target.value) })}
+            onChange={(e) => updateClipZoomKeyframe(clipIndex, kfIndex, { scale: parseFloat(e.target.value) })}
             className="w-full h-1.5 accent-primary"
           />
         </div>
@@ -48,7 +51,7 @@ export function ZoomPopover({ segment, index, open, onOpenChange, children }: Zo
           <Label className="text-xs">Easing</Label>
           <select
             value={segment.easing}
-            onChange={(e) => updateZoomKeyframe(index, { easing: e.target.value as ZoomKeyframe["easing"] })}
+            onChange={(e) => updateClipZoomKeyframe(clipIndex, kfIndex, { easing: e.target.value as ZoomKeyframe["easing"] })}
             className="w-full text-xs bg-muted border border-border rounded px-2 py-1"
           >
             <option value="ease-in-out">Ease In-Out</option>
