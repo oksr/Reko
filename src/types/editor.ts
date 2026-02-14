@@ -7,6 +7,7 @@ export interface EditorProject {
     mic: string | null
     system_audio: string | null
     camera: string | null
+    mouse_events: string | null
   }
   timeline: {
     duration_ms: number
@@ -20,6 +21,8 @@ export interface Effects {
   background: BackgroundConfig
   cameraBubble: CameraBubbleConfig
   frame: FrameConfig
+  cursor: CursorConfig
+  zoomKeyframes: ZoomKeyframe[]
 }
 
 export interface BackgroundConfig {
@@ -64,6 +67,30 @@ export interface FrameConfig {
   borderRadius: number
   shadow: boolean
   shadowIntensity: number // 0-1
+}
+
+export interface MouseEvent {
+  timeMs: number
+  x: number           // normalized 0-1 (fraction of screen width)
+  y: number           // normalized 0-1 (fraction of screen height)
+  type: "move" | "click" | "rightClick" | "scroll"
+}
+
+export interface ZoomKeyframe {
+  timeMs: number
+  x: number           // center of zoom region, normalized 0-1
+  y: number           // center of zoom region, normalized 0-1
+  scale: number       // 1.0 = no zoom, 2.0 = 2x zoom, etc.
+  easing: "ease-in-out" | "ease-in" | "ease-out" | "linear"
+  durationMs: number  // transition duration to reach this keyframe
+}
+
+export interface CursorConfig {
+  enabled: boolean
+  type: "highlight" | "spotlight"
+  size: number        // px radius (20-80)
+  color: string       // hex, used for highlight ring
+  opacity: number     // 0-1
 }
 
 export interface ExportConfig {

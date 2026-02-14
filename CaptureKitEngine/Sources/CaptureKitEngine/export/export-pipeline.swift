@@ -10,6 +10,24 @@ public struct ExportConfig: Codable {
     public let outputPath: String
 }
 
+// MARK: - Zoom / Cursor helper types
+
+private struct ZoomKF {
+    let timeMs: UInt64
+    let x: Double
+    let y: Double
+    let scale: Double
+    let easing: String
+    let durationMs: UInt64
+}
+
+private struct MouseEvt: Codable {
+    let timeMs: UInt64
+    let x: Double
+    let y: Double
+    let type: String
+}
+
 // MARK: - Export Progress (thread-safe, polled by C API)
 
 public final class ExportProgress {
@@ -148,6 +166,31 @@ public final class ExportPipeline {
         let systemAudioPath = tracks["systemAudio"] as? String
             ?? tracks["system_audio"] as? String
 
+        // Parse zoom keyframes
+        let zoomKeyframes: [ZoomKF] = {
+            guard let kfs = effectsDict["zoomKeyframes"] as? [[String: Any]] else { return [] }
+            return kfs.compactMap { kf in
+                guard let t = kf["timeMs"] as? UInt64,
+                      let x = kf["x"] as? Double,
+                      let y = kf["y"] as? Double,
+                      let s = kf["scale"] as? Double,
+                      let d = kf["durationMs"] as? UInt64 else { return nil }
+                return ZoomKF(timeMs: t, x: x, y: y, scale: s,
+                              easing: kf["easing"] as? String ?? "ease-in-out", durationMs: d)
+            }
+        }()
+
+        // Parse mouse events
+        var mouseEvents: [MouseEvt] = []
+        if let mouseEventsPath = tracks["mouseEvents"] as? String ?? tracks["mouse_events"] as? String {
+            let mouseURL = URL(fileURLWithPath: mouseEventsPath)
+            if let content = try? String(contentsOf: mouseURL, encoding: .utf8) {
+                mouseEvents = content.split(separator: "\n").compactMap { line in
+                    try? JSONDecoder().decode(MouseEvt.self, from: Data(line.utf8))
+                }
+            }
+        }
+
         // ---- Set up video decoder ----
         let screenURL = URL(fileURLWithPath: screenPath)
         let screenDecoder = try VideoDecoder(
@@ -250,12 +293,21 @@ public final class ExportPipeline {
 
             let cameraBuffer = cameraDecoder?.nextFrame()
 
+            let frameTimeMs = inPointMs + UInt64(Double(frameIndex) / Double(screenDecoder.fps) * 1000.0)
+            let (zx, zy, zs) = interpolateZoom(zoomKeyframes, at: frameTimeMs)
+            let cursorPos = cursorPosition(mouseEvents, at: frameTimeMs)
+
             let composited = try compositor.renderFrame(
                 screenPixelBuffer: screenBuffer,
                 cameraPixelBuffer: cameraBuffer,
                 effects: effects,
                 screenWidth: screenDecoder.naturalWidth,
-                screenHeight: screenDecoder.naturalHeight
+                screenHeight: screenDecoder.naturalHeight,
+                zoomX: zx,
+                zoomY: zy,
+                zoomScale: zs,
+                cursorX: cursorPos?.x,
+                cursorY: cursorPos?.y
             )
 
             let presentationTime = CMTimeAdd(
@@ -307,5 +359,51 @@ public final class ExportPipeline {
             durationMs: durationMs,
             fileSizeBytes: fileSize
         )
+    }
+
+    // MARK: - Zoom / Cursor Interpolation
+
+    private func interpolateZoom(_ keyframes: [ZoomKF], at timeMs: UInt64) -> (x: Double, y: Double, scale: Double) {
+        guard !keyframes.isEmpty else { return (0.5, 0.5, 1.0) }
+        if timeMs <= keyframes[0].timeMs { return (0.5, 0.5, 1.0) }
+
+        if let last = keyframes.last, timeMs >= last.timeMs + last.durationMs {
+            return (last.x, last.y, last.scale)
+        }
+
+        for (i, kf) in keyframes.enumerated() {
+            let end = kf.timeMs + kf.durationMs
+            if timeMs >= kf.timeMs && timeMs < end {
+                let t = Double(timeMs - kf.timeMs) / Double(kf.durationMs)
+                let et = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+
+                let prev: (x: Double, y: Double, scale: Double) = i > 0
+                    ? (keyframes[i-1].x, keyframes[i-1].y, keyframes[i-1].scale)
+                    : (0.5, 0.5, 1.0)
+
+                return (
+                    prev.x + (kf.x - prev.x) * et,
+                    prev.y + (kf.y - prev.y) * et,
+                    prev.scale + (kf.scale - prev.scale) * et
+                )
+            }
+
+            if i + 1 < keyframes.count && timeMs >= end && timeMs < keyframes[i+1].timeMs {
+                return (kf.x, kf.y, kf.scale)
+            }
+        }
+        return (0.5, 0.5, 1.0)
+    }
+
+    private func cursorPosition(_ events: [MouseEvt], at timeMs: UInt64) -> (x: Double, y: Double)? {
+        guard !events.isEmpty else { return nil }
+        // Binary search for last event at or before timeMs
+        var lo = 0, hi = events.count - 1
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2
+            if events[mid].timeMs <= timeMs { lo = mid } else { hi = mid - 1 }
+        }
+        if events[lo].timeMs > timeMs { return nil }
+        return (events[lo].x, events[lo].y)
     }
 }

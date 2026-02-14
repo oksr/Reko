@@ -1,6 +1,8 @@
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState, useCallback } from "react"
 import { assetUrl } from "@/lib/asset-url"
+import { interpolateZoom } from "@/lib/zoom-interpolation"
 import { useEditorStore } from "@/stores/editor-store"
+import { useMouseEvents } from "@/hooks/use-mouse-events"
 import type { useVideoSync } from "@/hooks/use-video-sync"
 
 interface PreviewCanvasProps {
@@ -9,8 +11,10 @@ interface PreviewCanvasProps {
 
 export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
   const project = useEditorStore((s) => s.project)
+  const currentTime = useEditorStore((s) => s.currentTime)
   const screenRef = useRef<HTMLVideoElement>(null)
   const cameraRef = useRef<HTMLVideoElement>(null)
+  const [videoAspect, setVideoAspect] = useState<number | null>(null)
 
   // Capture ref values at setup time for correct cleanup
   useEffect(() => {
@@ -24,10 +28,19 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
     }
   }, [videoSync, project])
 
+  const handleLoadedMetadata = useCallback(() => {
+    const v = screenRef.current
+    if (v && v.videoWidth && v.videoHeight) {
+      setVideoAspect(v.videoWidth / v.videoHeight)
+    }
+  }, [])
+
   if (!project) return null
 
   const { effects, tracks } = project
-  const { background, cameraBubble, frame } = effects
+  const { background, cameraBubble, frame, cursor } = effects
+  const { cursorPos } = useMouseEvents()
+  const zoomState = interpolateZoom(effects.zoomKeyframes, currentTime)
 
   const bgStyle: React.CSSProperties =
     background.type === "gradient" || background.type === "preset"
@@ -54,6 +67,9 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
 
   const cameraPos = cameraPosMap[cameraBubble.position]
 
+  // Use the video's native aspect ratio so the frame wraps the content tightly.
+  // max-width/max-height: 100% ensures it fits within the padded area without overflow.
+
   return (
     <div
       className="relative w-full aspect-video overflow-hidden ring-1 ring-white/5"
@@ -65,26 +81,69 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
     >
       {/* Screen recording */}
       <div
-        className="absolute inset-0"
+        className="absolute inset-0 flex items-center justify-center"
         style={{
           padding: `${background.padding}%`,
           transition: "padding 200ms ease",
         }}
       >
-        <video
-          ref={screenRef}
-          src={assetUrl(tracks.screen)}
-          className="w-full h-full object-contain"
+        {/* Frame wrapper — sized to match video aspect ratio */}
+        <div
+          className="relative overflow-hidden"
           style={{
+            maxWidth: "100%",
+            maxHeight: "100%",
+            aspectRatio: videoAspect ? `${videoAspect}` : "16 / 9",
             borderRadius: frame.borderRadius,
             boxShadow: multiLayerShadow,
             transition: "border-radius 200ms ease, box-shadow 200ms ease",
           }}
-          muted
-          playsInline
-          preload="auto"
-          onError={() => console.error("Failed to load screen video:", tracks.screen)}
-        />
+        >
+          {/* Zoom container — transforms both video and cursor together */}
+          <div
+            className="relative w-full h-full"
+            style={{
+              transform: zoomState.scale !== 1
+                ? `scale(${zoomState.scale}) translate(${(0.5 - zoomState.x) * 100 / zoomState.scale}%, ${(0.5 - zoomState.y) * 100 / zoomState.scale}%)`
+                : undefined,
+              transformOrigin: "center center",
+            }}
+          >
+            <video
+              ref={screenRef}
+              src={assetUrl(tracks.screen)}
+              className="w-full h-full object-cover"
+              muted
+              playsInline
+              preload="auto"
+              onLoadedMetadata={handleLoadedMetadata}
+            />
+
+            {/* Cursor effect overlay — inside zoom container so it follows zoom */}
+            {cursor.enabled && cursorPos && (
+              <div
+                className="absolute pointer-events-none"
+                style={{
+                  left: `${cursorPos.x * 100}%`,
+                  top: `${cursorPos.y * 100}%`,
+                  transform: "translate(-50%, -50%)",
+                  width: cursor.size * 2,
+                  height: cursor.size * 2,
+                  borderRadius: "50%",
+                  background:
+                    cursor.type === "highlight"
+                      ? `radial-gradient(circle, ${cursor.color}${Math.round(cursor.opacity * 255).toString(16).padStart(2, "0")} 0%, transparent 70%)`
+                      : undefined,
+                  boxShadow:
+                    cursor.type === "spotlight"
+                      ? `0 0 0 9999px rgba(0,0,0,${cursor.opacity})`
+                      : undefined,
+                  transition: "left 16ms linear, top 16ms linear",
+                }}
+              />
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Camera bubble */}
@@ -105,9 +164,9 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
           muted
           playsInline
           preload="auto"
-          onError={() => console.error("Failed to load camera video:", tracks.camera)}
         />
       )}
+
     </div>
   )
 }

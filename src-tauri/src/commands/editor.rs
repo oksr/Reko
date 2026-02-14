@@ -1,6 +1,7 @@
 use tauri::webview::WebviewWindowBuilder;
 use tauri::Manager;
 
+use crate::autozoom;
 use crate::project;
 
 #[tauri::command]
@@ -69,12 +70,54 @@ pub fn list_projects() -> Result<Vec<project::ProjectState>, String> {
 pub fn load_project(project_id: String) -> Result<project::ProjectState, String> {
     let path = project::project_dir(&project_id).join("project.json");
     let data = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&data).map_err(|e| e.to_string())
+    let mut p: project::ProjectState = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+
+    // Resolve relative track paths to absolute (files live in raw/ subdir)
+    let raw = project::raw_dir(&project_id);
+    let resolve = |rel: &str| -> String {
+        let abs = raw.join(rel);
+        if abs.exists() {
+            abs.to_string_lossy().to_string()
+        } else {
+            rel.to_string()
+        }
+    };
+    p.tracks.screen = resolve(&p.tracks.screen);
+    p.tracks.mic = p.tracks.mic.map(|m| resolve(&m));
+    p.tracks.system_audio = p.tracks.system_audio.map(|s| resolve(&s));
+    p.tracks.camera = p.tracks.camera.map(|c| resolve(&c));
+    p.tracks.mouse_events = p.tracks.mouse_events.map(|m| resolve(&m));
+
+    Ok(p)
 }
 
 #[tauri::command]
 pub fn save_project_state(project: project::ProjectState) -> Result<(), String> {
     project::save_project(&project)
+}
+
+#[tauri::command]
+pub fn generate_auto_zoom(project_id: String) -> Result<Vec<project::ZoomKeyframe>, String> {
+    let raw = project::raw_dir(&project_id);
+    let mouse_path = raw.join("mouse_events.jsonl");
+
+    if !mouse_path.exists() {
+        return Ok(vec![]);
+    }
+
+    let content = std::fs::read_to_string(&mouse_path).map_err(|e| e.to_string())?;
+    let events: Vec<autozoom::MouseEvent> = content
+        .lines()
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+
+    Ok(autozoom::generate_zoom_keyframes(
+        &events,
+        2.0,   // zoom_scale
+        300,   // transition_ms
+        1500,  // hold_ms
+        500,   // cluster_ms
+    ))
 }
 
 #[cfg(test)]

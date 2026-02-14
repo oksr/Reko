@@ -19,6 +19,10 @@ pub struct Effects {
     pub background: BackgroundConfig,
     pub camera_bubble: CameraBubbleConfig,
     pub frame: FrameConfig,
+    #[serde(default)]
+    pub cursor: Option<CursorConfig>,
+    #[serde(default)]
+    pub zoom_keyframes: Option<Vec<ZoomKeyframe>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -55,6 +59,28 @@ pub struct FrameConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct CursorConfig {
+    pub enabled: bool,
+    #[serde(rename = "type")]
+    pub cursor_type: String,      // "highlight" | "spotlight"
+    pub size: f64,                // px radius
+    pub color: String,            // hex
+    pub opacity: f64,             // 0-1
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoomKeyframe {
+    pub time_ms: u64,
+    pub x: f64,                   // 0-1 normalized
+    pub y: f64,                   // 0-1 normalized
+    pub scale: f64,               // 1.0 = no zoom
+    pub easing: String,           // "ease-in-out" | "ease-in" | "ease-out" | "linear"
+    pub duration_ms: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ExportConfig {
     pub resolution: String,        // "original" | "1080p" | "720p"
     pub output_path: String,
@@ -71,6 +97,7 @@ pub struct ExportProgress {
     pub phase: String,             // "compositing" | "finalizing" | "done" | "cancelled" | "error"
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportResult {
@@ -85,6 +112,8 @@ pub struct Tracks {
     pub mic: Option<String>,
     pub system_audio: Option<String>,
     pub camera: Option<String>,
+    #[serde(default)]
+    pub mouse_events: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -130,6 +159,7 @@ mod tests {
             mic: Some("mic.wav".to_string()),
             system_audio: None,
             camera: Some("camera.mov".to_string()),
+            mouse_events: None,
         };
         let json = serde_json::to_string(&tracks).unwrap();
         let parsed: Tracks = serde_json::from_str(&json).unwrap();
@@ -147,6 +177,7 @@ mod tests {
                 mic: None,
                 system_audio: None,
                 camera: None,
+                mouse_events: None,
             },
             timeline: Timeline {
                 duration_ms: 5000,
@@ -176,6 +207,8 @@ mod tests {
                     shadow: true,
                     shadow_intensity: 0.5,
                 },
+                cursor: None,
+                zoom_keyframes: None,
             }),
         };
         let json = serde_json::to_string(&project).unwrap();
@@ -203,10 +236,60 @@ mod tests {
             mic: None,
             system_audio: None,
             camera: None,
+            mouse_events: None,
         };
         let json = serde_json::to_string(&tracks).unwrap();
         let parsed: Tracks = serde_json::from_str(&json).unwrap();
         assert!(parsed.camera.is_none());
+    }
+
+    #[test]
+    fn test_cursor_config_serialization() {
+        let config = CursorConfig {
+            enabled: true,
+            cursor_type: "highlight".to_string(),
+            size: 40.0,
+            color: "#ffcc00".to_string(),
+            opacity: 0.6,
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"type\":\"highlight\""));
+        assert!(json.contains("\"opacity\":0.6"));
+        let parsed: CursorConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.cursor_type, "highlight");
+    }
+
+    #[test]
+    fn test_zoom_keyframe_serialization() {
+        let kf = ZoomKeyframe {
+            time_ms: 5000,
+            x: 0.5,
+            y: 0.3,
+            scale: 2.0,
+            easing: "ease-in-out".to_string(),
+            duration_ms: 500,
+        };
+        let json = serde_json::to_string(&kf).unwrap();
+        assert!(json.contains("\"timeMs\":5000"));
+        assert!(json.contains("\"durationMs\":500"));
+        let parsed: ZoomKeyframe = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.scale, 2.0);
+    }
+
+    #[test]
+    fn test_effects_with_cursor_and_zoom() {
+        let json = r##"{"background":{"type":"solid","color":"#000","gradientFrom":"#000","gradientTo":"#000","gradientAngle":0,"padding":8,"presetId":null},"cameraBubble":{"visible":false,"position":"bottom-right","size":15,"shape":"circle","borderWidth":3,"borderColor":"#fff"},"frame":{"borderRadius":12,"shadow":true,"shadowIntensity":0.5},"cursor":{"type":"highlight","enabled":true,"size":40,"color":"#ffcc00","opacity":0.6},"zoomKeyframes":[{"timeMs":5000,"x":0.5,"y":0.3,"scale":2.0,"easing":"ease-in-out","durationMs":500}]}"##;
+        let parsed: Effects = serde_json::from_str(json).unwrap();
+        assert!(parsed.cursor.is_some());
+        assert_eq!(parsed.zoom_keyframes.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_effects_without_cursor_backward_compat() {
+        let json = r##"{"background":{"type":"solid","color":"#000","gradientFrom":"#000","gradientTo":"#000","gradientAngle":0,"padding":8,"presetId":null},"cameraBubble":{"visible":false,"position":"bottom-right","size":15,"shape":"circle","borderWidth":3,"borderColor":"#fff"},"frame":{"borderRadius":12,"shadow":true,"shadowIntensity":0.5}}"##;
+        let parsed: Effects = serde_json::from_str(json).unwrap();
+        assert!(parsed.cursor.is_none());
+        assert!(parsed.zoom_keyframes.is_none());
     }
 
     #[test]

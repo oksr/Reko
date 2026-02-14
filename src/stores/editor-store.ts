@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { temporal } from "zundo"
-import type { EditorProject, Effects, BackgroundConfig, CameraBubbleConfig, FrameConfig } from "@/types/editor"
+import type { EditorProject, Effects, BackgroundConfig, CameraBubbleConfig, FrameConfig, CursorConfig, ZoomKeyframe } from "@/types/editor"
 
 const DEFAULT_EFFECTS: Effects = {
   background: {
@@ -25,6 +25,14 @@ const DEFAULT_EFFECTS: Effects = {
     shadow: true,
     shadowIntensity: 0.5,
   },
+  cursor: {
+    enabled: false,
+    type: "highlight",
+    size: 40,
+    color: "#ffcc00",
+    opacity: 0.6,
+  },
+  zoomKeyframes: [],
 }
 
 interface EditorState {
@@ -42,6 +50,10 @@ interface EditorState {
   setBackground: (bg: Partial<BackgroundConfig>) => void
   setCameraBubble: (config: Partial<CameraBubbleConfig>) => void
   setFrame: (config: Partial<FrameConfig>) => void
+  setCursor: (config: Partial<CursorConfig>) => void
+  addZoomKeyframe: (kf: ZoomKeyframe) => void
+  removeZoomKeyframe: (timeMs: number) => void
+  setZoomKeyframes: (kfs: ZoomKeyframe[]) => void
   setCurrentTime: (ms: number) => void
   setIsPlaying: (playing: boolean) => void
 }
@@ -76,10 +88,15 @@ export const useEditorStore = create<EditorState>()(
       isPlaying: false,
 
       loadProject: (project) => {
-        // Ensure project has effects
+        // Ensure project has effects with defaults for new fields
         const withEffects: EditorProject = {
           ...project,
-          effects: project.effects ?? { ...DEFAULT_EFFECTS },
+          effects: {
+            ...DEFAULT_EFFECTS,
+            ...(project.effects ?? {}),
+            cursor: { ...DEFAULT_EFFECTS.cursor, ...(project.effects?.cursor ?? {}) },
+            zoomKeyframes: project.effects?.zoomKeyframes ?? [],
+          },
         }
         set({ project: withEffects, currentTime: 0, isPlaying: false })
       },
@@ -149,6 +166,61 @@ export const useEditorStore = create<EditorState>()(
                 ...s.project.effects,
                 frame: { ...s.project.effects.frame, ...config },
               },
+            },
+          }
+        }),
+
+      setCursor: (config) =>
+        set((s) => {
+          if (!s.project) return s
+          return {
+            project: {
+              ...s.project,
+              effects: {
+                ...s.project.effects,
+                cursor: { ...s.project.effects.cursor, ...config },
+              },
+            },
+          }
+        }),
+
+      addZoomKeyframe: (kf) =>
+        set((s) => {
+          if (!s.project) return s
+          const existing = s.project.effects.zoomKeyframes
+          const filtered = existing.filter((k) => k.timeMs !== kf.timeMs)
+          const updated = [...filtered, kf].sort((a, b) => a.timeMs - b.timeMs)
+          return {
+            project: {
+              ...s.project,
+              effects: { ...s.project.effects, zoomKeyframes: updated },
+            },
+          }
+        }),
+
+      removeZoomKeyframe: (timeMs) =>
+        set((s) => {
+          if (!s.project) return s
+          return {
+            project: {
+              ...s.project,
+              effects: {
+                ...s.project.effects,
+                zoomKeyframes: s.project.effects.zoomKeyframes.filter(
+                  (k) => k.timeMs !== timeMs
+                ),
+              },
+            },
+          }
+        }),
+
+      setZoomKeyframes: (kfs) =>
+        set((s) => {
+          if (!s.project) return s
+          return {
+            project: {
+              ...s.project,
+              effects: { ...s.project.effects, zoomKeyframes: kfs },
             },
           }
         }),

@@ -11,6 +11,7 @@ const MOCK_PROJECT: EditorProject = {
     mic: "/path/to/mic.wav",
     system_audio: null,
     camera: "/path/to/camera.mov",
+    mouse_events: null,
   },
   timeline: {
     duration_ms: 10000,
@@ -40,6 +41,14 @@ const MOCK_PROJECT: EditorProject = {
       shadow: true,
       shadowIntensity: 0.5,
     },
+    cursor: {
+      enabled: false,
+      type: "highlight",
+      size: 40,
+      color: "#ffcc00",
+      opacity: 0.6,
+    },
+    zoomKeyframes: [],
   },
 }
 
@@ -118,5 +127,48 @@ describe("editor store", () => {
 
     const { pastStates } = useEditorStore.temporal.getState()
     expect(pastStates.length).toBe(0)
+  })
+
+  it("setCursor updates cursor config", () => {
+    useEditorStore.getState().setCursor({ enabled: true, type: "spotlight" })
+    expect(useEditorStore.getState().project!.effects.cursor.enabled).toBe(true)
+    expect(useEditorStore.getState().project!.effects.cursor.type).toBe("spotlight")
+  })
+
+  it("addZoomKeyframe inserts sorted", () => {
+    useEditorStore.getState().addZoomKeyframe({
+      timeMs: 2000, x: 0.5, y: 0.5, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+    })
+    useEditorStore.getState().addZoomKeyframe({
+      timeMs: 1000, x: 0.3, y: 0.7, scale: 1.5, easing: "ease-in-out", durationMs: 300,
+    })
+    const kfs = useEditorStore.getState().project!.effects.zoomKeyframes
+    expect(kfs.length).toBe(2)
+    expect(kfs[0].timeMs).toBe(1000)
+    expect(kfs[1].timeMs).toBe(2000)
+  })
+
+  it("removeZoomKeyframe removes by timeMs", () => {
+    useEditorStore.getState().addZoomKeyframe({
+      timeMs: 1000, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+    })
+    useEditorStore.getState().removeZoomKeyframe(1000)
+    expect(useEditorStore.getState().project!.effects.zoomKeyframes.length).toBe(0)
+  })
+
+  it("loadProject merges cursor defaults for old projects", () => {
+    const oldProject = {
+      ...MOCK_PROJECT,
+      effects: {
+        background: MOCK_PROJECT.effects.background,
+        cameraBubble: MOCK_PROJECT.effects.cameraBubble,
+        frame: MOCK_PROJECT.effects.frame,
+      } as any,
+    }
+    useEditorStore.getState().loadProject(oldProject)
+    const effects = useEditorStore.getState().project!.effects
+    expect(effects.cursor.enabled).toBe(false)
+    expect(effects.cursor.type).toBe("highlight")
+    expect(effects.zoomKeyframes).toEqual([])
   })
 })

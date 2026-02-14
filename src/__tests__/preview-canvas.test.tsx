@@ -12,12 +12,14 @@ const MOCK_PROJECT: EditorProject = {
   id: "test-1",
   name: "Test",
   created_at: 0,
-  tracks: { screen: "/screen.mov", mic: null, system_audio: null, camera: "/camera.mov" },
+  tracks: { screen: "/screen.mov", mic: null, system_audio: null, camera: "/camera.mov", mouse_events: null },
   timeline: { duration_ms: 10000, in_point: 0, out_point: 10000 },
   effects: {
     background: { type: "solid", color: "#000", gradientFrom: "#000", gradientTo: "#111", gradientAngle: 135, padding: 8, presetId: null },
     cameraBubble: { visible: true, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff" },
     frame: { borderRadius: 12, shadow: true, shadowIntensity: 0.5 },
+    cursor: { enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6 },
+    zoomKeyframes: [],
   },
 }
 

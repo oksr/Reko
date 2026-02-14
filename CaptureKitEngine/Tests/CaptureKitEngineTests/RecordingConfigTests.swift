@@ -42,6 +42,7 @@ final class RecordingConfigTests: XCTestCase {
             systemAudioPath: nil,
             micPath: nil,
             cameraPath: "camera.mov",
+            mouseEventsPath: nil,
             durationMs: 5000,
             frameCount: 300
         )
@@ -58,6 +59,7 @@ final class RecordingConfigTests: XCTestCase {
             systemAudioPath: nil,
             micPath: nil,
             cameraPath: nil,
+            mouseEventsPath: nil,
             durationMs: 5000,
             frameCount: 300
         )

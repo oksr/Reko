@@ -11,12 +11,14 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 const MOCK_PROJECT: EditorProject = {
   id: "t", name: "T", created_at: 0,
-  tracks: { screen: "/s.mov", mic: "/m.wav", system_audio: null, camera: "/c.mov" },
+  tracks: { screen: "/s.mov", mic: "/m.wav", system_audio: null, camera: "/c.mov", mouse_events: null },
   timeline: { duration_ms: 10000, in_point: 0, out_point: 10000 },
   effects: {
     background: { type: "solid", color: "#000", gradientFrom: "#000", gradientTo: "#111", gradientAngle: 135, padding: 8, presetId: null },
     cameraBubble: { visible: true, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff" },
     frame: { borderRadius: 12, shadow: false, shadowIntensity: 0 },
+    cursor: { enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6 },
+    zoomKeyframes: [],
   },
 }
 

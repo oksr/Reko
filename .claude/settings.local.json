@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git rm:*)",
+      "Bash(cargo build:*)",
+      "mcp__octocode__localViewStructure",
+      "Bash(find:*)",
+      "Bash(swift test:*)",
+      "Bash(npm test:*)",
+      "WebSearch",
+      "mcp__octocode__packageSearch",
+      "WebFetch(domain:v2.tauri.app)",
+      "WebFetch(domain:docs.rs)",
+      "mcp__octocode__githubViewRepoStructure",
+      "WebFetch(domain:github.com)",
+      "mcp__octocode__githubGetFileContent",
+      "mcp__octocode__githubSearchCode",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cargo test:*)",
+      "Bash(swift build:*)",
+      "Bash(python3:*)",
+      "Bash(cargo check:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(wc:*)"
+    ]
+  }
+}

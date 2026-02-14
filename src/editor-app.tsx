@@ -111,17 +111,17 @@ function EditorContent() {
 
       {/* Main area */}
       <div className="flex-1 flex min-h-0">
+        {/* Inspector */}
+        <aside className="w-80 border-r overflow-y-auto p-4">
+          <Inspector />
+        </aside>
+
         {/* Preview */}
         <div className="flex-1 flex items-center justify-center p-6 bg-muted/20 overflow-hidden">
           <div className="w-full max-w-5xl">
             <PreviewCanvas videoSync={videoSync} />
           </div>
         </div>
-
-        {/* Inspector */}
-        <aside className="w-80 border-l overflow-y-auto p-4">
-          <Inspector />
-        </aside>
       </div>
 
       {/* Timeline */}

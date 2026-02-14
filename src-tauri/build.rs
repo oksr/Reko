@@ -58,6 +58,23 @@ fn main() {
         swift_lib_path.display()
     );
 
+    // Add rpaths so the binary can find Swift dynamic libraries at runtime
+    // System path (resolves from dyld shared cache on macOS 14+)
+    println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
+    // Toolchain backdeployment path (has libswift_Concurrency.dylib)
+    let swift_55_path = PathBuf::from(swift_bin.trim())
+        .parent().unwrap()
+        .parent().unwrap()
+        .join("lib/swift-5.5/macosx");
+    println!(
+        "cargo:rustc-link-arg=-Wl,-rpath,{}",
+        swift_55_path.display()
+    );
+    println!(
+        "cargo:rustc-link-arg=-Wl,-rpath,{}",
+        swift_lib_path.display()
+    );
+
     // Rebuild when Swift sources change
     println!(
         "cargo:rerun-if-changed={}",

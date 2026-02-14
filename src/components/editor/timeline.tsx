@@ -94,6 +94,7 @@ export function Timeline({ videoSync }: TimelineProps) {
   if (!project) return null
 
   const { duration_ms, in_point, out_point } = project.timeline
+  const zoomKeyframes = project.effects.zoomKeyframes
   const playheadPct = (currentTime / duration_ms) * 100
   const inPct = (in_point / duration_ms) * 100
   const outPct = (out_point / duration_ms) * 100
@@ -178,6 +179,27 @@ export function Timeline({ videoSync }: TimelineProps) {
         >
           <div className={`w-1 h-full rounded-r ${dragging === "out" ? "bg-primary" : "bg-primary/80 hover:bg-primary"}`} />
         </div>
+
+        {/* Zoom keyframe markers */}
+        {zoomKeyframes.map((kf) => {
+          const pct = (kf.timeMs / duration_ms) * 100
+          const widthPct = (kf.durationMs / duration_ms) * 100
+          return (
+            <div key={kf.timeMs} className="absolute top-0 bottom-0 z-[3] pointer-events-none" style={{ left: `${pct}%` }}>
+              {/* Keyframe diamond marker */}
+              <div
+                className="absolute w-2 h-2 bg-amber-400 border border-amber-600 pointer-events-auto cursor-pointer"
+                style={{ transform: "translateX(-50%) rotate(45deg)", top: -1 }}
+                title={`${kf.scale}x zoom at ${Math.round(kf.timeMs / 1000)}s`}
+              />
+              {/* Transition duration bar */}
+              <div
+                className="absolute top-0 h-full bg-amber-400/20"
+                style={{ width: `max(${widthPct}cqw, 2px)` }}
+              />
+            </div>
+          )
+        })}
 
         {/* Playhead */}
         <div

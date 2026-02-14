@@ -80,11 +80,21 @@ public struct ExportEffects {
     // Camera
     public var camera: CameraEffects?
 
+    // Cursor
+    public var cursorEnabled: Bool
+    public var cursorType: String      // "highlight" | "spotlight"
+    public var cursorSize: Double      // px
+    public var cursorColor: String     // hex
+    public var cursorOpacity: Double   // 0-1
+
     public init(bgColorFrom: String = "#1a1a2e", bgColorTo: String = "#16213e",
                 bgAngleDeg: Double = 135, bgIsSolid: Bool = false,
                 padding: Double = 8, borderRadius: Double = 12,
                 hasShadow: Bool = true, shadowIntensity: Double = 0.5,
-                camera: CameraEffects? = nil) {
+                camera: CameraEffects? = nil,
+                cursorEnabled: Bool = false, cursorType: String = "highlight",
+                cursorSize: Double = 40, cursorColor: String = "#ffcc00",
+                cursorOpacity: Double = 0.6) {
         self.bgColorFrom = bgColorFrom
         self.bgColorTo = bgColorTo
         self.bgAngleDeg = bgAngleDeg
@@ -94,34 +104,56 @@ public struct ExportEffects {
         self.hasShadow = hasShadow
         self.shadowIntensity = shadowIntensity
         self.camera = camera
+        self.cursorEnabled = cursorEnabled
+        self.cursorType = cursorType
+        self.cursorSize = cursorSize
+        self.cursorColor = cursorColor
+        self.cursorOpacity = cursorOpacity
     }
 
     /// Convenience initializer that decodes from a loosely-typed dictionary
     /// (used when the project JSON is parsed via JSONSerialization).
+    /// Keys must match the Rust serde(rename_all = "camelCase") serialization.
     public init(from dict: [String: Any]) {
         let bg = dict["background"] as? [String: Any] ?? [:]
-        self.bgColorFrom = bg["colorFrom"] as? String ?? "#1a1a2e"
-        self.bgColorTo = bg["colorTo"] as? String ?? "#16213e"
-        self.bgAngleDeg = bg["angleDeg"] as? Double ?? 135
-        self.bgIsSolid = bg["isSolid"] as? Bool ?? false
+        let bgType = bg["type"] as? String ?? "gradient"
+        self.bgIsSolid = (bgType == "solid")
+        if self.bgIsSolid {
+            let color = bg["color"] as? String ?? "#000000"
+            self.bgColorFrom = color
+            self.bgColorTo = color
+        } else {
+            self.bgColorFrom = bg["gradientFrom"] as? String ?? "#1a1a2e"
+            self.bgColorTo = bg["gradientTo"] as? String ?? "#16213e"
+        }
+        self.bgAngleDeg = bg["gradientAngle"] as? Double ?? 135
+        self.padding = bg["padding"] as? Double ?? 8
 
         let frame = dict["frame"] as? [String: Any] ?? [:]
-        self.padding = frame["padding"] as? Double ?? 8
         self.borderRadius = frame["borderRadius"] as? Double ?? 12
-        self.hasShadow = frame["hasShadow"] as? Bool ?? true
+        self.hasShadow = frame["shadow"] as? Bool ?? true
         self.shadowIntensity = frame["shadowIntensity"] as? Double ?? 0.5
 
-        if let cam = dict["camera"] as? [String: Any] {
+        let cam = dict["cameraBubble"] as? [String: Any] ?? [:]
+        let camVisible = cam["visible"] as? Bool ?? false
+        if camVisible {
             self.camera = CameraEffects(
-                sizePercent: cam["sizePercent"] as? Double ?? 15,
+                sizePercent: cam["size"] as? Double ?? 15,
                 position: cam["position"] as? String ?? "bottom-right",
-                isCircle: cam["isCircle"] as? Bool ?? true,
+                isCircle: (cam["shape"] as? String ?? "circle") == "circle",
                 borderWidth: cam["borderWidth"] as? Double ?? 3,
                 borderColor: cam["borderColor"] as? String ?? "#ffffff"
             )
         } else {
             self.camera = nil
         }
+
+        let cur = dict["cursor"] as? [String: Any] ?? [:]
+        self.cursorEnabled = cur["enabled"] as? Bool ?? false
+        self.cursorType = cur["type"] as? String ?? "highlight"
+        self.cursorSize = cur["size"] as? Double ?? 40
+        self.cursorColor = cur["color"] as? String ?? "#ffcc00"
+        self.cursorOpacity = cur["opacity"] as? Double ?? 0.6
     }
 }
 
@@ -131,11 +163,19 @@ public struct ExportEffects {
 public enum LayoutMath {
 
     /// Map a resolution string to concrete pixel dimensions.
+    /// Preserves the recording's aspect ratio — width is scaled proportionally to height.
+    /// Dimensions are rounded to even numbers for H.264 compatibility.
     public static func outputSize(resolution: String, recordingWidth: Int, recordingHeight: Int) -> (width: Int, height: Int) {
+        guard recordingHeight > 0 else { return (width: recordingWidth, height: recordingHeight) }
         switch resolution {
-        case "1080p": return (width: 1920, height: 1080)
-        case "720p":  return (width: 1280, height: 720)
-        default:      return (width: recordingWidth, height: recordingHeight)
+        case "1080p":
+            let w = Int(round(1080.0 * Double(recordingWidth) / Double(recordingHeight)))
+            return (width: w & ~1, height: 1080)
+        case "720p":
+            let w = Int(round(720.0 * Double(recordingWidth) / Double(recordingHeight)))
+            return (width: w & ~1, height: 720)
+        default:
+            return (width: recordingWidth, height: recordingHeight)
         }
     }
 
@@ -242,8 +282,24 @@ struct CompositeUniforms {
     // Canvas dimensions (pixels)
     var canvasWidth: Float              // 4
     var canvasHeight: Float             // 4
-    var _pad0: Float = 0               // 4
+    var cameraAspect: Float = 1.0      // 4  camera texture width/height (for object-cover)
     var _pad1: Float = 0               // 4
+
+    // Zoom
+    var zoomCenterX: Float = 0.5       // 4  (normalised 0..1)
+    var zoomCenterY: Float = 0.5       // 4
+    var zoomScale: Float = 1.0         // 4  (1.0 = no zoom)
+    var _pad2: Float = 0               // 4
+
+    // Cursor
+    var hasCursor: Float = 0           // 4  (0 or 1)
+    var cursorX: Float = 0             // 4  (normalised 0..1)
+    var cursorY: Float = 0             // 4
+    var cursorRadius: Float = 0        // 4  (pixels)
+    var cursorIsSpotlight: Float = 0   // 4  (0=highlight, 1=spotlight)
+    var cursorOpacity: Float = 0       // 4
+    var _pad3: SIMD2<Float> = .zero    // 8
+    var cursorColor: SIMD4<Float> = .zero // 16
 }
 
 // MARK: - Embedded Metal Shader Source
@@ -278,8 +334,24 @@ struct CompositeUniforms {
 
     float  canvasWidth;
     float  canvasHeight;
-    float  _pad0;
+    float  cameraAspect;    // camera texture width/height
     float  _pad1;
+
+    // Zoom
+    float  zoomCenterX;
+    float  zoomCenterY;
+    float  zoomScale;
+    float  _pad2;
+
+    // Cursor
+    float  hasCursor;
+    float  cursorX;
+    float  cursorY;
+    float  cursorRadius;
+    float  cursorIsSpotlight;
+    float  cursorOpacity;
+    float2 _pad3;
+    float4 cursorColor;
 };
 
 struct VertexOut {
@@ -367,15 +439,22 @@ fragment float4 composite_fragment(
         }
     }
 
-    // ---- Layer 3: Screen content (rounded corners via SDF) ----
+    // ---- Layer 3: Screen content (rounded corners via SDF, with zoom crop) ----
     {
         float d = roundedRectSDF(px, scrCenter, scrHalf, scrRadius);
         if (d < 0.5) {
             // Map pixel to screen texture UV
             float2 scrUV = (px - scrOrigin) / scrSize;
+
+            // Apply zoom crop: zoom into (zoomCenterX, zoomCenterY) by zoomScale
+            if (u.zoomScale > 1.001) {
+                float invScale = 1.0 / u.zoomScale;
+                float2 zoomCenter = float2(u.zoomCenterX, u.zoomCenterY);
+                scrUV = zoomCenter + (scrUV - zoomCenter) * invScale;
+            }
+
             scrUV = saturate(scrUV);
             float4 scrColor = screenTex.sample(texSampler, scrUV);
-            // Anti-aliased edge
             float aa = 1.0 - smoothstep(-0.5, 0.5, d);
             color = mix(color, scrColor, aa);
         }
@@ -406,13 +485,46 @@ fragment float4 composite_fragment(
             color = mix(color, u.cameraBorderColor, ring);
         }
 
-        // Camera content
+        // Camera content (object-cover: center-crop to fill square bubble)
         if (d < 0.5) {
             float2 camUV = (px - camOrigin) / camSize;
+            // Adjust UV for object-cover (center-crop the camera texture)
+            float a = u.cameraAspect;
+            if (a > 1.0) {
+                // Camera wider than bubble — crop sides, fit by height
+                camUV.x = camUV.x / a + (a - 1.0) / (2.0 * a);
+            } else if (a < 1.0) {
+                // Camera taller than bubble — crop top/bottom, fit by width
+                camUV.y = camUV.y * a + (1.0 - a) / 2.0;
+            }
             camUV = saturate(camUV);
             float4 camColor = cameraTex.sample(texSampler, camUV);
             float aa = 1.0 - smoothstep(-0.5, 0.5, d);
             color = mix(color, camColor, aa);
+        }
+    }
+
+    // ---- Layer 5: Cursor effect ----
+    if (u.hasCursor > 0.5) {
+        // Cursor position in pixel space (relative to screen rect)
+        float2 cursorPx = scrOrigin + float2(u.cursorX, u.cursorY) * scrSize;
+
+        // Apply same zoom transform as screen content
+        if (u.zoomScale > 1.001) {
+            float2 zoomCenter = scrOrigin + float2(u.zoomCenterX, u.zoomCenterY) * scrSize;
+            cursorPx = zoomCenter + (cursorPx - zoomCenter) * u.zoomScale;
+        }
+
+        float dist = length(px - cursorPx);
+
+        if (u.cursorIsSpotlight > 0.5) {
+            // Spotlight: darken everything except around cursor
+            float spotlightMask = smoothstep(u.cursorRadius * 0.8, u.cursorRadius * 1.2, dist);
+            color = mix(color, color * (1.0 - u.cursorOpacity), spotlightMask);
+        } else {
+            // Highlight: bright ring/glow around cursor
+            float ring = 1.0 - smoothstep(u.cursorRadius * 0.6, u.cursorRadius, dist);
+            color = mix(color, u.cursorColor, ring * u.cursorOpacity);
         }
     }
 
@@ -543,7 +655,12 @@ public final class MetalCompositor {
         cameraPixelBuffer: CVPixelBuffer?,
         effects: ExportEffects,
         screenWidth: Int,
-        screenHeight: Int
+        screenHeight: Int,
+        zoomX: Double = 0.5,
+        zoomY: Double = 0.5,
+        zoomScale: Double = 1.0,
+        cursorX: Double? = nil,
+        cursorY: Double? = nil
     ) throws -> CVPixelBuffer {
         guard let pool = outputPool else { throw ExportError.notConfigured }
 
@@ -586,7 +703,7 @@ public final class MetalCompositor {
             canvasHeight: Float(canvasH)
         )
 
-        if let cam = effects.camera, cameraPixelBuffer != nil {
+        if let cam = effects.camera, let camBuf = cameraPixelBuffer {
             let camOrigin = LayoutMath.cameraOrigin(
                 canvasWidth: canvasW, canvasHeight: canvasH,
                 sizePercent: cam.sizePercent, position: cam.position
@@ -601,6 +718,27 @@ public final class MetalCompositor {
             uniforms.cameraIsCircle = cam.isCircle ? 1.0 : 0.0
             uniforms.cameraBorderWidth = Float(cam.borderWidth / canvasW)
             uniforms.cameraBorderColor = parseHexColor(cam.borderColor)
+
+            // Camera texture aspect ratio for object-cover center-cropping
+            let camTexW = CVPixelBufferGetWidth(camBuf)
+            let camTexH = CVPixelBufferGetHeight(camBuf)
+            uniforms.cameraAspect = Float(camTexW) / max(Float(camTexH), 1.0)
+        }
+
+        // --- Zoom ---
+        uniforms.zoomCenterX = Float(zoomX)
+        uniforms.zoomCenterY = Float(zoomY)
+        uniforms.zoomScale = Float(zoomScale)
+
+        // --- Cursor ---
+        if effects.cursorEnabled, let cx = cursorX, let cy = cursorY {
+            uniforms.hasCursor = 1.0
+            uniforms.cursorX = Float(cx)
+            uniforms.cursorY = Float(cy)
+            uniforms.cursorRadius = Float(effects.cursorSize)
+            uniforms.cursorIsSpotlight = effects.cursorType == "spotlight" ? 1.0 : 0.0
+            uniforms.cursorOpacity = Float(effects.cursorOpacity)
+            uniforms.cursorColor = parseHexColor(effects.cursorColor)
         }
 
         // --- Textures ---

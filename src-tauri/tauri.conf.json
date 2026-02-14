@@ -10,22 +10,28 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "recorder",
         "title": "CaptureKit",
-        "width": 420,
-        "height": 520,
-        "resizable": true,
+        "width": 700,
+        "height": 300,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
         "center": true
       }
     ],
     "security": {
       "csp": null,
       "assetProtocol": {
-        "enable": true,
         "scope": {
-          "allow": ["$APPDATA/com.capturekit.app/**"]
+          "allow": [
+            "$APPDATA/com.capturekit.app/**",
+            "$HOME/Library/Application Support/com.capturekit.app/**"
+          ]
         }
       }
     }

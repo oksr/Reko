@@ -32,12 +32,16 @@ public final class VideoWriter {
     }
 
     public func appendVideoSample(_ sampleBuffer: CMSampleBuffer) {
+        // Defense-in-depth: skip buffers without pixel data (e.g. ScreenCaptureKit
+        // status frames that slipped past the frame-status filter).
         guard CMSampleBufferGetImageBuffer(sampleBuffer) != nil else { return }
         if !isStarted {
             assetWriter.startWriting()
             assetWriter.startSession(atSourceTime: CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
             isStarted = true
         }
+        // If the writer entered a failed state (e.g. from an incompatible buffer),
+        // bail out rather than silently dropping frames.
         guard assetWriter.status == .writing else { return }
         guard videoInput.isReadyForMoreMediaData else { return }
         videoInput.append(sampleBuffer)
