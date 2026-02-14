@@ -41,8 +41,13 @@ export function useVideoSync(options: VideoSyncOptions = {}) {
       const project = useEditorStore.getState().project
 
       // Stop playback at out-point or when video naturally ends
-      if (primary.paused || primary.ended || (project && timeMs >= project.timeline.out_point)) {
-        onTimeUpdateRef.current?.(timeMs)
+      const outPoint = project?.timeline.out_point ?? Infinity
+      if (primary.paused || primary.ended || timeMs >= outPoint) {
+        // Snap to out-point when video ends — the video element's native
+        // duration can be slightly shorter than the recorded duration_ms,
+        // so report out-point to keep the playhead at 100%.
+        const finalTime = (primary.ended || primary.paused) ? outPoint : timeMs
+        onTimeUpdateRef.current?.(finalTime)
         pause()
         useEditorStore.getState().setIsPlaying(false)
         return
