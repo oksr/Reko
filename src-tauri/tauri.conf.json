@@ -15,13 +15,13 @@
       {
         "label": "recorder",
         "title": "CaptureKit",
-        "width": 700,
-        "height": 300,
+        "width": 684,
+        "height": 58,
         "resizable": false,
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
-        "center": true
+        "visible": false
       }
     ],
     "security": {

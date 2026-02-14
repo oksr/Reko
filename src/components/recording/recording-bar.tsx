@@ -21,7 +21,7 @@ export function RecordingBar({
   systemAudioEnabled,
 }: Props) {
   return (
-    <div className="flex w-full items-center toolbar-content-enter">
+    <div className="flex items-center">
       {/* Stop button */}
       <div className="toolbar-group">
         <button
@@ -59,7 +59,7 @@ export function RecordingBar({
       <div className="toolbar-divider" />
 
       {/* Audio levels */}
-      <div className="toolbar-group flex-1">
+      <div className="toolbar-group">
         <MiniAudioLevels
           isPaused={isPaused}
           micEnabled={micEnabled}
@@ -97,7 +97,7 @@ function RecordingTimer({ isPaused }: { isPaused: boolean }) {
 
   return (
     <div className="flex items-center gap-2" aria-live="polite">
-      <span className={isPaused ? "recording-dot" : "recording-dot"} style={isPaused ? { animation: "none", opacity: 0.4 } : undefined} />
+      <span className="recording-dot" style={isPaused ? { animation: "none", opacity: 0.4 } : undefined} />
       <span
         className="text-sm font-semibold text-white/90"
         style={{ fontVariantNumeric: "tabular-nums" }}
@@ -153,7 +153,7 @@ function MiniAudioLevels({
 
 function MiniLevelBar({ label, level }: { label: string; level: number }) {
   const percent = Math.round(level * 100)
-  const color = level > 0.8 ? "#ef4444" : level > 0.5 ? "#eab308" : "#22c55e"
+  const color = level > 0.8 ? "var(--level-red)" : level > 0.5 ? "var(--level-yellow)" : "var(--level-green)"
 
   return (
     <div className="flex items-center gap-1.5">
@@ -162,7 +162,7 @@ function MiniLevelBar({ label, level }: { label: string; level: number }) {
       </span>
       <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
         <div
-          className="h-full rounded-full"
+          className="level-bar-fill h-full rounded-full"
           style={{ width: `${percent}%`, background: color }}
         />
       </div>

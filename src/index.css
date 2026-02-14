@@ -132,6 +132,7 @@
 body:has(.recorder-window),
 body:has(.window-picker) {
   background: transparent !important;
+  overflow: hidden;
 }
 
 /* Recorder Toolbar */
@@ -158,12 +159,9 @@ body:has(.window-picker) {
   align-items: center;
   gap: 0;
   margin: 0 auto 8px;
-  transition: max-width 250ms cubic-bezier(0.2, 0, 0, 1);
-  max-width: 700px;
-}
-
-.recorder-toolbar.recording {
-  max-width: 420px;
+  width: fit-content;
+  align-self: center;
+  overflow: hidden;
 }
 
 .toolbar-group {
@@ -311,25 +309,6 @@ body:has(.window-picker) {
   }
 }
 
-/* Morph transition */
-.toolbar-content-enter {
-  animation: content-fade-in 120ms ease-out;
-}
-
-.toolbar-content-exit {
-  animation: content-fade-out 120ms ease-out;
-}
-
-@keyframes content-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes content-fade-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
 /* Recording pulse */
 .recording-dot {
   width: 8px;
@@ -343,9 +322,6 @@ body:has(.window-picker) {
   .recording-dot {
     animation: none;
   }
-  .recorder-toolbar {
-    transition: none;
-  }
   .toolbar-popover {
     animation: none;
   }
@@ -354,31 +330,6 @@ body:has(.window-picker) {
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
-}
-
-/* Countdown */
-.countdown-number {
-  font-size: 28px;
-  font-weight: 700;
-  color: white;
-  animation: countdown-scale 1s cubic-bezier(0.2, 0, 0, 1);
-}
-
-@keyframes countdown-scale {
-  from {
-    transform: scale(1.2);
-    opacity: 0.5;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .countdown-number {
-    animation: none;
-  }
 }
 
 /* Window picker card animation */

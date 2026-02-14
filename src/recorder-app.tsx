@@ -1,19 +1,34 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { getCurrentWindow } from "@tauri-apps/api/window"
+import { getCurrentWindow, currentMonitor } from "@tauri-apps/api/window"
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut"
+import { motion, AnimatePresence, useReducedMotion } from "motion/react"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { PermissionCheck } from "@/components/recording/permission-check"
 import { SourceTypeButton, type SourceType } from "@/components/recording/source-type-button"
 import { InputToggle } from "@/components/recording/input-toggle"
-import { Countdown } from "@/components/recording/countdown"
 import { RecordingBar } from "@/components/recording/recording-bar"
 import { SettingsPopover } from "@/components/recording/settings-popover"
 import { X, Circle } from "lucide-react"
 import type { DisplayInfo, AudioInputInfo, CameraInfo, ProjectState } from "@/types"
 
-type AppState = "permission-check" | "idle" | "countdown" | "recording"
+type AppState = "permission-check" | "idle" | "recording"
+
+// ease-in-out-quart — for on-screen morphing (Emil: "elements already on screen that move")
+const MORPH_EASE = [0.77, 0, 0.175, 1] as const
+const MORPH_DURATION = 0.3
+
+const contentVariants = {
+  initial: { opacity: 0, scale: 0.96 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.96 },
+}
+
+const contentTransition = {
+  duration: MORPH_DURATION * 0.4, // 120ms — fast enough to feel snappy within the 300ms morph
+  ease: MORPH_EASE,
+}
 
 export function RecorderApp() {
   const [appState, setAppState] = useState<AppState>("permission-check")
@@ -36,12 +51,12 @@ export function RecorderApp() {
   // Recording state
   const [isPaused, setIsPaused] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const windowHiddenRef = useRef(false)
 
   // Source type
   const [sourceType, setSourceType] = useState<SourceType>("display")
 
   // Settings
-  const [countdownEnabled, setCountdownEnabled] = useState(true)
   const [recentProjects, setRecentProjects] = useState<ProjectState[]>([])
 
   // Permission granted -> load devices
@@ -69,26 +84,71 @@ export function RecorderApp() {
       .catch(() => {})
   }, [])
 
-  // Position window on mount
+  // Position window at bottom-center on mount
   useEffect(() => {
-    const positionWindow = async () => {
+    const init = async () => {
+      const win = getCurrentWindow()
       try {
-        const win = getCurrentWindow()
-        const monitor = await win.currentMonitor()
+        const monitor = await currentMonitor()
         if (monitor) {
-          const { width: screenW, height: screenH } = monitor.size
-          const scaleFactor = monitor.scaleFactor
-          const winW = 700
-          const winH = 300
-          const x = Math.round((screenW / scaleFactor - winW) / 2)
-          const y = Math.round(screenH / scaleFactor - winH - 80)
-          await win.setPosition(new (await import("@tauri-apps/api/dpi")).LogicalPosition(x, y))
+          const factor = monitor.scaleFactor
+          const screenW = monitor.size.width / factor
+          const screenH = monitor.size.height / factor
+          const winH = 58
+          const margin = 50
+          const x = Math.round((screenW - 684) / 2)
+          const y = Math.round(screenH - winH - margin)
+          const { LogicalPosition } = await import("@tauri-apps/api/dpi")
+          await win.setPosition(new LogicalPosition(x, y))
         }
-      } catch {
-        // Fallback: window is already centered
+      } catch (e) {
+        console.error("Failed to position window:", e)
+      }
+      if (!windowHiddenRef.current) {
+        await win.show().catch(() => {})
       }
     }
-    positionWindow()
+    init()
+  }, [])
+
+  // Sync window size to toolbar's rendered width via callback ref
+  const observerRef = useRef<ResizeObserver | null>(null)
+
+  const toolbarRef = useCallback((el: HTMLDivElement | null) => {
+    // Clean up previous observer
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
+    }
+    if (!el) return
+
+    const sync = async (width: number) => {
+      const win = getCurrentWindow()
+      try {
+        const monitor = await currentMonitor()
+        if (!monitor) return
+        const factor = monitor.scaleFactor
+        const screenW = monitor.size.width / factor
+        const screenH = monitor.size.height / factor
+        const winW = Math.round(width)
+        const winH = 58
+        const margin = 50
+        const x = Math.round((screenW - winW) / 2)
+        const y = Math.round(screenH - winH - margin)
+        const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi")
+        await win.setResizable(true)
+        await win.setSize(new LogicalSize(winW, winH))
+        await win.setResizable(false)
+        await win.setPosition(new LogicalPosition(x, y))
+      } catch (e) {
+        console.error("Failed to sync window size:", e)
+      }
+    }
+
+    observerRef.current = new ResizeObserver(() => {
+      sync(el.offsetWidth)
+    })
+    observerRef.current.observe(el)
   }, [])
 
   // Refs for stale closure avoidance in event listeners
@@ -168,12 +228,7 @@ export function RecorderApp() {
       return
     }
     if (!selectedDisplay) return
-
-    if (countdownEnabled) {
-      setAppState("countdown")
-    } else {
-      await startRecording()
-    }
+    await startRecording()
   }
 
   const startRecording = async () => {
@@ -199,18 +254,12 @@ export function RecorderApp() {
     }
   }
 
-  const handleCountdownComplete = async () => {
-    await startRecording()
-  }
-
-  const handleCountdownCancel = () => {
-    setAppState("idle")
-  }
-
   const handleStop = async () => {
     setIsLoading(true)
     try {
       const project = await invoke<ProjectState>("stop_recording")
+      windowHiddenRef.current = true
+      await getCurrentWindow().hide()
       setAppState("idle")
       setIsPaused(false)
       setRecentProjects((prev) => [project, ...prev.slice(0, 4)])
@@ -300,125 +349,128 @@ export function RecorderApp() {
     }
   }
 
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="recorder-window">
-        {appState === "permission-check" && (
+        {appState === "permission-check" ? (
           <div className="recorder-toolbar" style={{ justifyContent: "center" }}>
             <PermissionCheck onPermissionGranted={handlePermissionGranted} />
           </div>
-        )}
-
-        {appState === "idle" && (
+        ) : (
           <div
+            ref={toolbarRef}
             className="recorder-toolbar"
             onMouseDown={handleDrag}
             role="toolbar"
             aria-label="Recording controls"
           >
-            {/* Close button */}
-            <div className="toolbar-group">
-              <button
-                className="toolbar-btn-icon"
-                onClick={handleClose}
-                aria-label="Close"
-              >
-                <X size={16} strokeWidth={2} />
-              </button>
-            </div>
+            <AnimatePresence mode="wait" initial={false}>
+              {appState === "idle" && (
+                <motion.div
+                  key="idle"
+                  className="flex w-full items-center"
+                  variants={contentVariants}
+                  initial={shouldReduceMotion ? false : "initial"}
+                  animate="animate"
+                  exit={shouldReduceMotion ? undefined : "exit"}
+                  transition={contentTransition}
+                >
+                  {/* Close button */}
+                  <div className="toolbar-group">
+                    <button
+                      className="toolbar-btn-icon"
+                      onClick={handleClose}
+                      aria-label="Close"
+                    >
+                      <X size={16} strokeWidth={2} />
+                    </button>
+                  </div>
 
-            <div className="toolbar-divider" />
+                  <div className="toolbar-divider" />
 
-            {/* Source type */}
-            <div className="toolbar-group">
-              <SourceTypeButton
-                sourceType={sourceType}
-                onSourceTypeChange={handleSourceTypeChange}
-              />
-            </div>
+                  {/* Source type */}
+                  <div className="toolbar-group">
+                    <SourceTypeButton
+                      sourceType={sourceType}
+                      onSourceTypeChange={handleSourceTypeChange}
+                    />
+                  </div>
 
-            <div className="toolbar-divider" />
+                  <div className="toolbar-divider" />
 
-            {/* Input toggles */}
-            <div className="toolbar-group">
-              <InputToggle
-                type="camera"
-                enabled={cameraEnabled}
-                onToggle={handleToggleCamera}
-                selectedDeviceId={selectedCamera}
-                onDeviceSelect={setSelectedCamera}
-                devices={cameras}
-              />
-              <InputToggle
-                type="mic"
-                enabled={micEnabled}
-                onToggle={handleToggleMic}
-                selectedDeviceId={selectedMic}
-                onDeviceSelect={setSelectedMic}
-                devices={mics}
-              />
-              <InputToggle
-                type="system-audio"
-                enabled={systemAudioEnabled}
-                onToggle={setSystemAudioEnabled}
-                selectedDeviceId={null}
-                onDeviceSelect={() => {}}
-                devices={[]}
-              />
-            </div>
+                  {/* Input toggles */}
+                  <div className="toolbar-group">
+                    <InputToggle
+                      type="camera"
+                      enabled={cameraEnabled}
+                      onToggle={handleToggleCamera}
+                      selectedDeviceId={selectedCamera}
+                      onDeviceSelect={setSelectedCamera}
+                      devices={cameras}
+                    />
+                    <InputToggle
+                      type="mic"
+                      enabled={micEnabled}
+                      onToggle={handleToggleMic}
+                      selectedDeviceId={selectedMic}
+                      onDeviceSelect={setSelectedMic}
+                      devices={mics}
+                    />
+                    <InputToggle
+                      type="system-audio"
+                      enabled={systemAudioEnabled}
+                      onToggle={setSystemAudioEnabled}
+                      selectedDeviceId={null}
+                      onDeviceSelect={() => {}}
+                      devices={[]}
+                    />
+                  </div>
 
-            <div className="toolbar-divider" />
+                  <div className="toolbar-divider" />
 
-            {/* Record button */}
-            <div className="toolbar-group">
-              <button
-                className={`record-btn ${(sourceType === "display" && !selectedDisplay) || isLoading ? "disabled" : ""}`}
-                onClick={handleStartRecording}
-                disabled={(sourceType === "display" && !selectedDisplay) || isLoading}
-                aria-label="Start Recording (Cmd+Shift+R)"
-                title="Start Recording (Cmd+Shift+R)"
-              >
-                <Circle size={24} fill="#ef4444" stroke="none" />
-              </button>
+                  {/* Record button */}
+                  <div className="toolbar-group">
+                    <button
+                      className={`record-btn ${(sourceType === "display" && !selectedDisplay) || isLoading ? "disabled" : ""}`}
+                      onClick={handleStartRecording}
+                      disabled={(sourceType === "display" && !selectedDisplay) || isLoading}
+                      aria-label="Start Recording (Cmd+Shift+R)"
+                      title="Start Recording (Cmd+Shift+R)"
+                    >
+                      <Circle size={24} fill="#ef4444" stroke="none" />
+                    </button>
 
-              <SettingsPopover
-                countdownEnabled={countdownEnabled}
-                onCountdownToggle={setCountdownEnabled}
-                recentProjects={recentProjects}
-                onOpenEditor={handleOpenEditor}
-              />
-            </div>
-          </div>
-        )}
+                    <SettingsPopover
+                      recentProjects={recentProjects}
+                      onOpenEditor={handleOpenEditor}
+                    />
+                  </div>
+                </motion.div>
+              )}
 
-        {appState === "countdown" && (
-          <div
-            className="recorder-toolbar"
-            style={{ justifyContent: "center" }}
-            onMouseDown={handleDrag}
-          >
-            <Countdown
-              onComplete={handleCountdownComplete}
-              onCancel={handleCountdownCancel}
-            />
-          </div>
-        )}
-
-        {appState === "recording" && (
-          <div
-            className="recorder-toolbar recording"
-            onMouseDown={handleDrag}
-            role="toolbar"
-            aria-label="Recording controls"
-          >
-            <RecordingBar
-              isPaused={isPaused}
-              onStop={handleStop}
-              onPause={handlePause}
-              onResume={handleResume}
-              micEnabled={micEnabled}
-              systemAudioEnabled={systemAudioEnabled}
-            />
+              {appState === "recording" && (
+                <motion.div
+                  key="recording"
+                  className="flex items-center"
+                  variants={contentVariants}
+                  initial={shouldReduceMotion ? false : "initial"}
+                  animate="animate"
+                  exit={shouldReduceMotion ? undefined : "exit"}
+                  transition={contentTransition}
+                >
+                  <RecordingBar
+                    isPaused={isPaused}
+                    onStop={handleStop}
+                    onPause={handlePause}
+                    onResume={handleResume}
+                    micEnabled={micEnabled}
+                    systemAudioEnabled={systemAudioEnabled}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
       </div>
