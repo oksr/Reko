@@ -54,6 +54,12 @@ interface EditorState {
   addZoomKeyframe: (kf: ZoomKeyframe) => void
   removeZoomKeyframe: (timeMs: number) => void
   setZoomKeyframes: (kfs: ZoomKeyframe[]) => void
+  selectedZoomIndex: number | null
+  zoomPopoverOpen: boolean
+  setSelectedZoomIndex: (index: number | null) => void
+  setZoomPopoverOpen: (open: boolean) => void
+  updateZoomKeyframe: (index: number, updates: Partial<ZoomKeyframe>) => void
+  moveZoomKeyframe: (index: number, newTimeMs: number) => void
   setCurrentTime: (ms: number) => void
   setIsPlaying: (playing: boolean) => void
 }
@@ -86,6 +92,8 @@ export const useEditorStore = create<EditorState>()(
       project: null,
       currentTime: 0,
       isPlaying: false,
+      selectedZoomIndex: null,
+      zoomPopoverOpen: false,
 
       loadProject: (project) => {
         // Ensure project has effects with defaults for new fields
@@ -217,6 +225,38 @@ export const useEditorStore = create<EditorState>()(
       setZoomKeyframes: (kfs) =>
         set((s) => {
           if (!s.project) return s
+          return {
+            project: {
+              ...s.project,
+              effects: { ...s.project.effects, zoomKeyframes: kfs },
+            },
+          }
+        }),
+
+      setSelectedZoomIndex: (index) => set({ selectedZoomIndex: index }),
+      setZoomPopoverOpen: (open) => set({ zoomPopoverOpen: open }),
+
+      updateZoomKeyframe: (index, updates) =>
+        set((s) => {
+          if (!s.project) return s
+          const kfs = [...s.project.effects.zoomKeyframes]
+          if (index < 0 || index >= kfs.length) return s
+          kfs[index] = { ...kfs[index], ...updates }
+          return {
+            project: {
+              ...s.project,
+              effects: { ...s.project.effects, zoomKeyframes: kfs },
+            },
+          }
+        }),
+
+      moveZoomKeyframe: (index, newTimeMs) =>
+        set((s) => {
+          if (!s.project) return s
+          const kfs = [...s.project.effects.zoomKeyframes]
+          if (index < 0 || index >= kfs.length) return s
+          kfs[index] = { ...kfs[index], timeMs: newTimeMs }
+          kfs.sort((a, b) => a.timeMs - b.timeMs)
           return {
             project: {
               ...s.project,

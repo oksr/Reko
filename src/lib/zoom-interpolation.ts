@@ -1,53 +1,50 @@
 import type { ZoomKeyframe } from "@/types/editor"
 
+const RAMP_MS = 200
+
 function easeInOut(t: number): number {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
 }
 
 /**
- * Interpolate zoom state at a given time from keyframe list.
- * Returns { x, y, scale } where x,y are normalized center coords (0-1).
+ * Segment-based zoom interpolation.
+ * Each keyframe defines a zoom segment: ramp in -> hold -> ramp out.
+ * Between segments, zoom is 1x (no zoom).
  * Must match Rust `interpolate_zoom` exactly for preview/export parity.
  */
 export function interpolateZoom(
   keyframes: ZoomKeyframe[],
   timeMs: number
 ): { x: number; y: number; scale: number } {
-  if (keyframes.length === 0) return { x: 0.5, y: 0.5, scale: 1 }
+  const none = { x: 0.5, y: 0.5, scale: 1 }
+  if (keyframes.length === 0) return none
 
-  // Before first keyframe
-  if (timeMs <= keyframes[0].timeMs) return { x: 0.5, y: 0.5, scale: 1 }
+  for (const kf of keyframes) {
+    const segEnd = kf.timeMs + kf.durationMs
+    if (timeMs < kf.timeMs || timeMs >= segEnd) continue
 
-  // After last keyframe
-  const last = keyframes[keyframes.length - 1]
-  if (timeMs >= last.timeMs + last.durationMs) {
-    return { x: last.x, y: last.y, scale: last.scale }
-  }
+    // We're inside this segment
+    const elapsed = timeMs - kf.timeMs
+    const ramp = Math.min(RAMP_MS, kf.durationMs / 2)
 
-  // Find active keyframe
-  for (let i = 0; i < keyframes.length; i++) {
-    const kf = keyframes[i]
-    const end = kf.timeMs + kf.durationMs
-    if (timeMs >= kf.timeMs && timeMs < end) {
-      const t = (timeMs - kf.timeMs) / kf.durationMs
-      const et = easeInOut(t)
-
-      const prev = i > 0
-        ? { x: keyframes[i - 1].x, y: keyframes[i - 1].y, scale: keyframes[i - 1].scale }
-        : { x: 0.5, y: 0.5, scale: 1 }
-
-      return {
-        x: prev.x + (kf.x - prev.x) * et,
-        y: prev.y + (kf.y - prev.y) * et,
-        scale: prev.scale + (kf.scale - prev.scale) * et,
-      }
+    let t: number
+    if (elapsed < ramp) {
+      // Ramp in
+      t = easeInOut(elapsed / ramp)
+    } else if (elapsed > kf.durationMs - ramp) {
+      // Ramp out
+      t = easeInOut((segEnd - timeMs) / ramp)
+    } else {
+      // Hold
+      t = 1
     }
 
-    // Between keyframes (hold state)
-    if (i + 1 < keyframes.length && timeMs >= end && timeMs < keyframes[i + 1].timeMs) {
-      return { x: kf.x, y: kf.y, scale: kf.scale }
+    return {
+      x: none.x + (kf.x - none.x) * t,
+      y: none.y + (kf.y - none.y) * t,
+      scale: none.scale + (kf.scale - none.scale) * t,
     }
   }
 
-  return { x: 0.5, y: 0.5, scale: 1 }
+  return none
 }

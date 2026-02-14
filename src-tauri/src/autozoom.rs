@@ -91,51 +91,42 @@ pub fn generate_zoom_keyframes(
     keyframes
 }
 
-/// Interpolate the zoom state at a given time from the keyframe list.
-/// Returns (x, y, scale) at `time_ms`.
+const RAMP_MS: u64 = 200;
+
+/// Segment-based zoom interpolation.
+/// Each keyframe defines a zoom segment: ramp in -> hold -> ramp out.
+/// Between segments, zoom is 1x (no zoom).
+/// Must match TypeScript `interpolateZoom` exactly for preview/export parity.
 pub fn interpolate_zoom(keyframes: &[ZoomKeyframe], time_ms: u64) -> (f64, f64, f64) {
     if keyframes.is_empty() {
         return (0.5, 0.5, 1.0);
     }
 
-    // Before first keyframe
-    if time_ms <= keyframes[0].time_ms {
-        return (0.5, 0.5, 1.0);
-    }
-
-    // After last keyframe
-    if let Some(last) = keyframes.last() {
-        if time_ms >= last.time_ms + last.duration_ms {
-            return (last.x, last.y, last.scale);
-        }
-    }
-
-    // Find the active keyframe (the one we're transitioning into)
-    for (i, kf) in keyframes.iter().enumerate() {
-        let end = kf.time_ms + kf.duration_ms;
-        if time_ms >= kf.time_ms && time_ms < end {
-            // We're in a transition — interpolate
-            let t = (time_ms - kf.time_ms) as f64 / kf.duration_ms as f64;
-            let eased_t = ease_in_out(t);
-
-            // Previous state
-            let (px, py, ps) = if i > 0 {
-                let prev = &keyframes[i - 1];
-                (prev.x, prev.y, prev.scale)
-            } else {
-                (0.5, 0.5, 1.0)
-            };
-
-            let x = px + (kf.x - px) * eased_t;
-            let y = py + (kf.y - py) * eased_t;
-            let s = ps + (kf.scale - ps) * eased_t;
-            return (x, y, s);
+    for kf in keyframes {
+        let seg_end = kf.time_ms + kf.duration_ms;
+        if time_ms < kf.time_ms || time_ms >= seg_end {
+            continue;
         }
 
-        // Between this keyframe's end and next keyframe's start — hold
-        if i + 1 < keyframes.len() && time_ms >= end && time_ms < keyframes[i + 1].time_ms {
-            return (kf.x, kf.y, kf.scale);
-        }
+        // Inside this segment
+        let elapsed = time_ms - kf.time_ms;
+        let ramp = RAMP_MS.min(kf.duration_ms / 2);
+
+        let t = if elapsed < ramp {
+            // Ramp in
+            ease_in_out(elapsed as f64 / ramp as f64)
+        } else if elapsed > kf.duration_ms - ramp {
+            // Ramp out
+            ease_in_out((seg_end - time_ms) as f64 / ramp as f64)
+        } else {
+            // Hold
+            1.0
+        };
+
+        let x = 0.5 + (kf.x - 0.5) * t;
+        let y = 0.5 + (kf.y - 0.5) * t;
+        let s = 1.0 + (kf.scale - 1.0) * t;
+        return (x, y, s);
     }
 
     (0.5, 0.5, 1.0)
@@ -208,33 +199,56 @@ mod tests {
     }
 
     #[test]
-    fn test_interpolate_before_first_keyframe() {
-        let kfs = vec![ZoomKeyframe {
-            time_ms: 1000, x: 0.3, y: 0.7, scale: 2.0,
-            easing: "ease-in-out".to_string(), duration_ms: 300,
-        }];
-        let (x, y, s) = interpolate_zoom(&kfs, 500);
-        assert_eq!(x, 0.5);
-        assert_eq!(y, 0.5);
-        assert_eq!(s, 1.0);
+    fn test_interpolate_empty() {
+        assert_eq!(interpolate_zoom(&[], 1000), (0.5, 0.5, 1.0));
     }
 
     #[test]
-    fn test_interpolate_mid_transition() {
+    fn test_interpolate_before_segment() {
         let kfs = vec![ZoomKeyframe {
             time_ms: 1000, x: 0.3, y: 0.7, scale: 2.0,
             easing: "ease-in-out".to_string(), duration_ms: 1000,
         }];
-        let (x, y, s) = interpolate_zoom(&kfs, 1500); // 50% through
-        // At t=0.5 with ease-in-out, eased_t ≈ 0.5
-        assert!(s > 1.0 && s < 2.0);
-        assert!(x < 0.5 && x > 0.3);
-        let _ = y; // suppress unused warning
+        assert_eq!(interpolate_zoom(&kfs, 500), (0.5, 0.5, 1.0));
     }
 
     #[test]
-    fn test_interpolate_empty_keyframes() {
-        let (x, y, s) = interpolate_zoom(&[], 1000);
-        assert_eq!((x, y, s), (0.5, 0.5, 1.0));
+    fn test_interpolate_after_segment() {
+        let kfs = vec![ZoomKeyframe {
+            time_ms: 1000, x: 0.3, y: 0.7, scale: 2.0,
+            easing: "ease-in-out".to_string(), duration_ms: 1000,
+        }];
+        assert_eq!(interpolate_zoom(&kfs, 2500), (0.5, 0.5, 1.0));
+    }
+
+    #[test]
+    fn test_interpolate_hold_phase() {
+        let kfs = vec![ZoomKeyframe {
+            time_ms: 1000, x: 0.3, y: 0.7, scale: 2.0,
+            easing: "ease-in-out".to_string(), duration_ms: 1000,
+        }];
+        let (x, y, s) = interpolate_zoom(&kfs, 1500); // in hold phase
+        assert!((x - 0.3).abs() < 0.001);
+        assert!((y - 0.7).abs() < 0.001);
+        assert!((s - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_interpolate_ramp_in() {
+        let kfs = vec![ZoomKeyframe {
+            time_ms: 1000, x: 0.3, y: 0.7, scale: 2.0,
+            easing: "ease-in-out".to_string(), duration_ms: 1000,
+        }];
+        let (_, _, s) = interpolate_zoom(&kfs, 1100); // 100ms into 200ms ramp
+        assert!(s > 1.0 && s < 2.0);
+    }
+
+    #[test]
+    fn test_interpolate_between_segments() {
+        let kfs = vec![
+            ZoomKeyframe { time_ms: 1000, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out".to_string(), duration_ms: 500 },
+            ZoomKeyframe { time_ms: 3000, x: 0.5, y: 0.5, scale: 1.5, easing: "ease-in-out".to_string(), duration_ms: 500 },
+        ];
+        assert_eq!(interpolate_zoom(&kfs, 2000), (0.5, 0.5, 1.0));
     }
 }

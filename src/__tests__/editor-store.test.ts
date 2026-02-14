@@ -156,6 +156,44 @@ describe("editor store", () => {
     expect(useEditorStore.getState().project!.effects.zoomKeyframes.length).toBe(0)
   })
 
+  it("tracks selectedZoomIndex", () => {
+    useEditorStore.getState().setSelectedZoomIndex(2)
+    expect(useEditorStore.getState().selectedZoomIndex).toBe(2)
+    useEditorStore.getState().setSelectedZoomIndex(null)
+    expect(useEditorStore.getState().selectedZoomIndex).toBeNull()
+  })
+
+  it("updateZoomKeyframe updates properties at index", () => {
+    useEditorStore.getState().addZoomKeyframe({
+      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "ease-in-out", durationMs: 500,
+    })
+    useEditorStore.getState().updateZoomKeyframe(0, { scale: 1.5, easing: "linear" })
+    const kf = useEditorStore.getState().project!.effects.zoomKeyframes[0]
+    expect(kf.scale).toBe(1.5)
+    expect(kf.easing).toBe("linear")
+    expect(kf.x).toBe(0.5) // unchanged
+  })
+
+  it("moveZoomKeyframe updates timeMs and re-sorts", () => {
+    useEditorStore.getState().addZoomKeyframe({
+      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "ease-in-out", durationMs: 500,
+    })
+    useEditorStore.getState().addZoomKeyframe({
+      timeMs: 3000, x: 0.3, y: 0.7, scale: 1.5, easing: "ease-in-out", durationMs: 500,
+    })
+    // Move first segment to after the second
+    useEditorStore.getState().moveZoomKeyframe(0, 4000)
+    const kfs = useEditorStore.getState().project!.effects.zoomKeyframes
+    expect(kfs[0].timeMs).toBe(3000)
+    expect(kfs[1].timeMs).toBe(4000)
+  })
+
+  it("selectedZoomIndex is NOT tracked by undo", () => {
+    useEditorStore.getState().setSelectedZoomIndex(1)
+    const { pastStates } = useEditorStore.temporal.getState()
+    expect(pastStates.length).toBe(0)
+  })
+
   it("loadProject merges cursor defaults for old projects", () => {
     const oldProject = {
       ...MOCK_PROJECT,
