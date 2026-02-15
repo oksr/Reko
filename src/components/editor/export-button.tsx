@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
 import { Download, X, Check, Loader2 } from "lucide-react"
 import { useEditorStore } from "@/stores/editor-store"
+import { sanitizeProject } from "@/hooks/use-auto-save"
 import type { ExportConfig, ExportProgress } from "@/types/editor"
 
 type Resolution = "original" | "1080p" | "720p"
@@ -38,14 +39,7 @@ export function ExportButton() {
         try {
             // Save project state first
             await invoke("save_project_state", {
-                project: {
-                    id: project.id,
-                    name: project.name,
-                    created_at: project.created_at,
-                    tracks: project.tracks,
-                    timeline: project.timeline,
-                    effects: project.effects,
-                },
+                project: sanitizeProject(project),
             })
 
             // Build output path

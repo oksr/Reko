@@ -33,7 +33,11 @@
       "Bash(npx vitest:*)",
       "Bash(npx tsc:*)",
       "Bash(npx tauri build:*)",
-      "mcp__octocode__githubSearchRepositories"
+      "mcp__octocode__githubSearchRepositories",
+      "Bash(codesign:*)",
+      "Bash(git -C /Users/ofekseroussi/Dev/reko show 3400fb3:src-tauri/tauri.conf.json)",
+      "Bash(sqlite3:*)",
+      "Bash(sips:*)"
     ]
   }
 }

@@ -24,6 +24,7 @@ extern "C" {
     fn ck_check_microphone_permission() -> i32;
     fn ck_check_camera_permission() -> i32;
     fn ck_check_accessibility_permission() -> i32;
+    fn ck_check_screen_recording_permission() -> i32;
 }
 
 unsafe fn call_json(call: impl FnOnce(*mut *const c_char) -> i32) -> Result<String, String> {
@@ -151,5 +152,9 @@ impl RekoEngine {
 
     pub fn check_accessibility_permission() -> i32 {
         unsafe { ck_check_accessibility_permission() }
+    }
+
+    pub fn check_screen_recording_permission() -> i32 {
+        unsafe { ck_check_screen_recording_permission() }
     }
 }

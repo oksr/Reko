@@ -44,6 +44,25 @@ public func ck_check_accessibility_permission() -> Int32 {
     return AXIsProcessTrusted() ? 1 : 0
 }
 
+@_cdecl("ck_check_screen_recording_permission")
+public func ck_check_screen_recording_permission() -> Int32 {
+    let semaphore = DispatchSemaphore(value: 0)
+    var result: Int32 = 0
+
+    Task {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
+            result = content.displays.isEmpty ? 0 : 1
+        } catch {
+            result = 0
+        }
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return result
+}
+
 @_cdecl("ck_list_displays")
 public func ck_list_displays(outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32 {
     let semaphore = DispatchSemaphore(value: 0)

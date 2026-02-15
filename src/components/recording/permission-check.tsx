@@ -9,17 +9,21 @@ interface Props {
 export function PermissionCheck({ onPermissionGranted }: Props) {
   const [checking, setChecking] = useState(true)
 
+  // Check screen recording permission using SCShareableContent (ScreenCaptureKit).
+  // Unlike CGPreflightScreenCaptureAccess, this works reliably with ad-hoc
+  // signed builds — it actually tests the permission via ScreenCaptureKit
+  // and only triggers a macOS prompt once per app launch if needed.
   useEffect(() => {
     let cancelled = false
     const check = async () => {
       try {
-        const displays = await invoke<unknown[]>("list_displays")
-        if (!cancelled && displays.length > 0) {
+        const status = await invoke<string>("check_permission", { kind: "screen" })
+        if (!cancelled && status === "granted") {
           onPermissionGranted()
           return
         }
       } catch {
-        // Permission not granted yet
+        // Permission not granted
       }
       if (!cancelled) {
         setChecking(false)
@@ -29,13 +33,13 @@ export function PermissionCheck({ onPermissionGranted }: Props) {
     return () => { cancelled = true }
   }, [onPermissionGranted])
 
-  // Poll for permission grant every 2 seconds
+  // Poll every 2 seconds after initial check fails
   useEffect(() => {
     if (checking) return
     const interval = setInterval(async () => {
       try {
-        const displays = await invoke<unknown[]>("list_displays")
-        if (displays.length > 0) {
+        const status = await invoke<string>("check_permission", { kind: "screen" })
+        if (status === "granted") {
           onPermissionGranted()
         }
       } catch {

@@ -30,7 +30,7 @@ pub fn open_editor(
         "Reko Editor".to_string()
     };
 
-    let url = format!("/editor?project={}", project_id);
+    let url = format!("/?project={}", project_id);
     WebviewWindowBuilder::new(
         &app_handle,
         &label,

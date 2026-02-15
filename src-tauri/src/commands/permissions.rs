@@ -1,18 +1,9 @@
 use crate::swift_ffi::RekoEngine;
 
-#[link(name = "CoreGraphics", kind = "framework")]
-extern "C" {
-    fn CGPreflightScreenCaptureAccess() -> bool;
-}
-
 #[tauri::command]
 pub async fn check_permission(kind: String) -> Result<String, String> {
     let status = match kind.as_str() {
-        "screen" => {
-            // CGPreflightScreenCaptureAccess: synchronous, no deadlock risk
-            let granted = unsafe { CGPreflightScreenCaptureAccess() };
-            if granted { 1 } else { 0 }
-        }
+        "screen" => RekoEngine::check_screen_recording_permission(),
         "microphone" => RekoEngine::check_microphone_permission(),
         "camera" => RekoEngine::check_camera_permission(),
         "accessibility" => RekoEngine::check_accessibility_permission(),

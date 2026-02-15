@@ -83,7 +83,7 @@ export function OnboardingApp() {
       cancelled = true
       clearInterval(interval)
     }
-  }, [step])
+  }, [step?.kind])
 
   // Track when mandatory permission is granted
   useEffect(() => {
