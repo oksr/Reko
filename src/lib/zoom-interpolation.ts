@@ -15,7 +15,8 @@ function easeInOut(t: number): number {
  */
 export function interpolateZoom(
   keyframes: ZoomKeyframe[],
-  timeMs: number
+  timeMs: number,
+  cursorPos?: { x: number; y: number } | null
 ): { x: number; y: number; scale: number } {
   const none = { x: 0.5, y: 0.5, scale: 1 }
   if (keyframes.length === 0) return none
@@ -40,9 +41,11 @@ export function interpolateZoom(
       t = 1
     }
 
+    const targetX = cursorPos?.x ?? kf.x
+    const targetY = cursorPos?.y ?? kf.y
     return {
-      x: none.x + (kf.x - none.x) * t,
-      y: none.y + (kf.y - none.y) * t,
+      x: none.x + (targetX - none.x) * t,
+      y: none.y + (targetY - none.y) * t,
       scale: none.scale + (kf.scale - none.scale) * t,
     }
   }
@@ -53,12 +56,14 @@ export function interpolateZoom(
 export function interpolateZoomAtSequenceTime(
   seqTime: number,
   clips: Clip[],
-  transitions: (Transition | null)[]
+  transitions: (Transition | null)[],
+  getCursorAt?: (timeMs: number) => { x: number; y: number } | null
 ): { x: number; y: number; scale: number } {
   const mapping = sequenceTimeToSourceTime(seqTime, clips, transitions)
   if (!mapping) return { x: 0.5, y: 0.5, scale: 1 }
 
   const clip = clips[mapping.clipIndex]
   const clipRelativeTime = mapping.sourceTime - clip.sourceStart
-  return interpolateZoom(clip.zoomKeyframes, clipRelativeTime)
+  const cursorPos = getCursorAt?.(mapping.sourceTime) ?? null
+  return interpolateZoom(clip.zoomKeyframes, clipRelativeTime, cursorPos)
 }

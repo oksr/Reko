@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import { assetUrl } from "@/lib/asset-url"
 import { interpolateZoomAtSequenceTime } from "@/lib/zoom-interpolation"
+import { getSmoothedCursorAt } from "@/lib/cursor-smoothing"
 import { useEditorStore, pauseUndo, resumeUndo } from "@/stores/editor-store"
 import { useMouseEvents } from "@/hooks/use-mouse-events"
 import type { useVideoSync } from "@/hooks/use-video-sync"
@@ -43,15 +44,21 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
     }
   }, [clampClips])
 
+  const { cursorPos, getCursorAt } = useMouseEvents()
+  const getSmoothedCursor = useCallback(
+    (timeMs: number) => getSmoothedCursorAt(getCursorAt, timeMs),
+    [getCursorAt]
+  )
+
   if (!project) return null
 
   const { effects, tracks } = project
   const { background, cameraBubble, frame, cursor } = effects
-  const { cursorPos } = useMouseEvents()
   const zoomState = interpolateZoomAtSequenceTime(
     currentTime,
     project.sequence.clips,
-    project.sequence.transitions
+    project.sequence.transitions,
+    getSmoothedCursor
   )
 
   const bgStyle: React.CSSProperties =

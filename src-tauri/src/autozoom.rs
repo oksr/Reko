@@ -92,6 +92,14 @@ const RAMP_MS: u64 = 200;
 /// Between segments, zoom is 1x (no zoom).
 /// Must match TypeScript `interpolateZoom` exactly for preview/export parity.
 pub fn interpolate_zoom(keyframes: &[ZoomKeyframe], time_ms: u64) -> (f64, f64, f64) {
+    interpolate_zoom_with_cursor(keyframes, time_ms, None)
+}
+
+pub fn interpolate_zoom_with_cursor(
+    keyframes: &[ZoomKeyframe],
+    time_ms: u64,
+    cursor: Option<(f64, f64)>,
+) -> (f64, f64, f64) {
     if keyframes.is_empty() {
         return (0.5, 0.5, 1.0);
     }
@@ -117,13 +125,67 @@ pub fn interpolate_zoom(keyframes: &[ZoomKeyframe], time_ms: u64) -> (f64, f64, 
             1.0
         };
 
-        let x = 0.5 + (kf.x - 0.5) * t;
-        let y = 0.5 + (kf.y - 0.5) * t;
+        let target_x = cursor.map(|c| c.0).unwrap_or(kf.x);
+        let target_y = cursor.map(|c| c.1).unwrap_or(kf.y);
+        let x = 0.5 + (target_x - 0.5) * t;
+        let y = 0.5 + (target_y - 0.5) * t;
         let s = 1.0 + (kf.scale - 1.0) * t;
         return (x, y, s);
     }
 
     (0.5, 0.5, 1.0)
+}
+
+/// Smooth cursor position using a weighted moving average over a trailing window.
+pub fn smoothed_cursor_position(events: &[MouseEvent], time_ms: u64, window_ms: u64) -> Option<(f64, f64)> {
+    if events.is_empty() {
+        return None;
+    }
+    let samples = 7usize;
+    let mut total_weight = 0.0f64;
+    let mut wx = 0.0f64;
+    let mut wy = 0.0f64;
+    let mut hit_count = 0usize;
+
+    for i in 0..samples {
+        let t = if time_ms >= window_ms {
+            time_ms - window_ms + (window_ms * i as u64) / (samples as u64 - 1)
+        } else {
+            (time_ms * i as u64) / (samples as u64 - 1)
+        };
+
+        // Binary search for last event at or before t
+        let pos = {
+            let mut lo = 0usize;
+            let mut hi = events.len() - 1;
+            while lo < hi {
+                let mid = (lo + hi + 1) / 2;
+                if events[mid].time_ms <= t {
+                    lo = mid;
+                } else {
+                    hi = mid - 1;
+                }
+            }
+            if events[lo].time_ms <= t {
+                Some((events[lo].x, events[lo].y))
+            } else {
+                None
+            }
+        };
+
+        if let Some((px, py)) = pos {
+            let weight = ((i as f64 - (samples as f64 - 1.0)) / 2.0).exp();
+            wx += px * weight;
+            wy += py * weight;
+            total_weight += weight;
+            hit_count += 1;
+        }
+    }
+
+    if hit_count == 0 {
+        return None;
+    }
+    Some((wx / total_weight, wy / total_weight))
 }
 
 /// Sequence-aware zoom interpolation.
@@ -133,6 +195,15 @@ pub fn interpolate_zoom_at_sequence_time(
     seq_time: u64,
     clips: &[Clip],
     transitions: &[Option<SequenceTransition>],
+) -> (f64, f64, f64) {
+    interpolate_zoom_at_sequence_time_with_cursor(seq_time, clips, transitions, None)
+}
+
+pub fn interpolate_zoom_at_sequence_time_with_cursor(
+    seq_time: u64,
+    clips: &[Clip],
+    transitions: &[Option<SequenceTransition>],
+    mouse_events: Option<&[MouseEvent]>,
 ) -> (f64, f64, f64) {
     let mut elapsed: i64 = 0;
     for (i, clip) in clips.iter().enumerate() {
@@ -149,7 +220,11 @@ pub fn interpolate_zoom_at_sequence_time(
 
         if (seq_time as i64) < elapsed + clip_duration - overlap_before {
             let time_in_clip = seq_time as i64 - (elapsed - overlap_before);
-            return interpolate_zoom(&clip.zoom_keyframes, time_in_clip.max(0) as u64);
+            let clip_time = time_in_clip.max(0) as u64;
+            let source_time = clip.source_start + clip_time;
+            let cursor = mouse_events
+                .and_then(|evts| smoothed_cursor_position(evts, source_time, 150));
+            return interpolate_zoom_with_cursor(&clip.zoom_keyframes, clip_time, cursor);
         }
 
         elapsed += clip_duration;

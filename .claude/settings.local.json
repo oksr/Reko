@@ -37,7 +37,8 @@
       "Bash(codesign:*)",
       "Bash(git -C /Users/ofekseroussi/Dev/reko show 3400fb3:src-tauri/tauri.conf.json)",
       "Bash(sqlite3:*)",
-      "Bash(sips:*)"
+      "Bash(sips:*)",
+      "Bash(git status:*)"
     ]
   }
 }

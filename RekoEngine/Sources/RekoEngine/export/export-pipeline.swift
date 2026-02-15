@@ -10,16 +10,250 @@ public struct ExportConfig: Codable {
     public let outputPath: String
 }
 
-// MARK: - Zoom / Cursor helper types
+// MARK: - Sequence Export Types
 
-private struct ZoomKF {
-    let timeMs: UInt64
-    let x: Double
-    let y: Double
-    let scale: Double
-    let easing: String
-    let durationMs: UInt64
+public struct ExportClip {
+    public let sourceStartMs: UInt64
+    public let sourceEndMs: UInt64
+    public let speed: Double
+    public let zoomKeyframes: [ExportZoomKeyframe]
+
+    public init(sourceStartMs: UInt64, sourceEndMs: UInt64, speed: Double, zoomKeyframes: [ExportZoomKeyframe]) {
+        self.sourceStartMs = sourceStartMs
+        self.sourceEndMs = sourceEndMs
+        self.speed = speed
+        self.zoomKeyframes = zoomKeyframes
+    }
+
+    public var durationMs: UInt64 {
+        UInt64(Double(sourceEndMs - sourceStartMs) / speed)
+    }
 }
+
+public struct ExportZoomKeyframe {
+    public let timeMs: UInt64
+    public let x: Double
+    public let y: Double
+    public let scale: Double
+    public let easing: String
+    public let durationMs: UInt64
+
+    public init(timeMs: UInt64, x: Double, y: Double, scale: Double, easing: String, durationMs: UInt64) {
+        self.timeMs = timeMs
+        self.x = x
+        self.y = y
+        self.scale = scale
+        self.easing = easing
+        self.durationMs = durationMs
+    }
+}
+
+public struct ExportTransition {
+    public let type: String
+    public let durationMs: UInt64
+
+    public init(type: String, durationMs: UInt64) {
+        self.type = type
+        self.durationMs = durationMs
+    }
+}
+
+// MARK: - Export Math (testable)
+
+public enum ExportMath {
+    /// Total duration of the sequence accounting for transition overlaps.
+    /// Mirrors `getSequenceDuration()` from `src/lib/sequence.ts`.
+    public static func sequenceDurationMs(clips: [ExportClip], transitions: [ExportTransition?]) -> UInt64 {
+        var total: UInt64 = 0
+        for clip in clips {
+            total += clip.durationMs
+        }
+        for t in transitions {
+            if let t = t, t.type != "cut" {
+                total -= t.durationMs
+            }
+        }
+        return total
+    }
+
+    // MARK: - Clip Output Ranges
+
+    public struct ClipOutputRange {
+        public let clipIndex: Int
+        public let sourceStartMs: UInt64
+        public let sourceEndMs: UInt64
+        public let outputStartMs: UInt64
+        public let outputEndMs: UInt64
+        public let speed: Double
+        public let zoomKeyframes: [ExportZoomKeyframe]
+    }
+
+    /// Compute the output time range for each clip, accounting for transition overlaps.
+    /// Mirrors `sequenceTimeToSourceTime()` logic from `src/lib/sequence.ts`.
+    public static func computeClipOutputRanges(clips: [ExportClip], transitions: [ExportTransition?]) -> [ClipOutputRange] {
+        var ranges: [ClipOutputRange] = []
+        var elapsed: UInt64 = 0
+
+        for (i, clip) in clips.enumerated() {
+            let clipDuration = clip.durationMs
+            var overlapBefore: UInt64 = 0
+            if i > 0 && (i - 1) < transitions.count, let t = transitions[i - 1], t.type != "cut" {
+                overlapBefore = t.durationMs
+            }
+            let outputStart = elapsed >= overlapBefore ? elapsed - overlapBefore : 0
+
+            ranges.append(ClipOutputRange(
+                clipIndex: i,
+                sourceStartMs: clip.sourceStartMs,
+                sourceEndMs: clip.sourceEndMs,
+                outputStartMs: outputStart,
+                outputEndMs: outputStart + clipDuration,
+                speed: clip.speed,
+                zoomKeyframes: clip.zoomKeyframes
+            ))
+
+            elapsed += clipDuration
+            if i < transitions.count, let t = transitions[i], t.type != "cut" {
+                elapsed -= t.durationMs
+            }
+        }
+        return ranges
+    }
+
+    // MARK: - JSON Parsing
+
+    /// Parse sequence clips and transitions from project JSON dictionary.
+    /// Returns empty arrays if sequence key is missing (fallback to single-clip export).
+    public static func parseSequenceClips(from project: [String: Any]) -> ([ExportClip], [ExportTransition?]) {
+        guard let sequence = project["sequence"] as? [String: Any],
+              let clipsArray = sequence["clips"] as? [[String: Any]],
+              !clipsArray.isEmpty else {
+            return ([], [])
+        }
+
+        let clips: [ExportClip] = clipsArray.compactMap { dict in
+            guard let sourceStart = (dict["sourceStart"] as? NSNumber)?.uint64Value,
+                  let sourceEnd = (dict["sourceEnd"] as? NSNumber)?.uint64Value else {
+                return nil
+            }
+            let speed = (dict["speed"] as? NSNumber)?.doubleValue ?? 1.0
+
+            var zoomKeyframes: [ExportZoomKeyframe] = []
+            if let kfs = dict["zoomKeyframes"] as? [[String: Any]] {
+                zoomKeyframes = kfs.compactMap { kf in
+                    guard let t = (kf["timeMs"] as? NSNumber)?.uint64Value,
+                          let x = (kf["x"] as? NSNumber)?.doubleValue,
+                          let y = (kf["y"] as? NSNumber)?.doubleValue,
+                          let s = (kf["scale"] as? NSNumber)?.doubleValue,
+                          let d = (kf["durationMs"] as? NSNumber)?.uint64Value else { return nil }
+                    return ExportZoomKeyframe(
+                        timeMs: t, x: x, y: y, scale: s,
+                        easing: kf["easing"] as? String ?? "ease-in-out", durationMs: d
+                    )
+                }
+            }
+
+            return ExportClip(
+                sourceStartMs: sourceStart, sourceEndMs: sourceEnd,
+                speed: speed, zoomKeyframes: zoomKeyframes
+            )
+        }
+
+        var transitions: [ExportTransition?] = []
+        if let transArray = sequence["transitions"] as? [Any] {
+            transitions = transArray.map { item in
+                guard let dict = item as? [String: Any],
+                      let type = dict["type"] as? String,
+                      let duration = (dict["durationMs"] as? NSNumber)?.uint64Value else {
+                    return nil
+                }
+                return ExportTransition(type: type, durationMs: duration)
+            }
+        }
+
+        return (clips, transitions)
+    }
+
+    // MARK: - Zoom Interpolation (segment model, matches frontend)
+
+    private static let RAMP_MS: Double = 200.0
+
+    private static func easeInOut(_ t: Double) -> Double {
+        t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+    }
+
+    /// Segment-based zoom interpolation matching `interpolateZoom()` from `src/lib/zoom-interpolation.ts`.
+    /// Each keyframe defines a zoom segment: ramp in → hold → ramp out.
+    /// Between segments, zoom is 1x (no zoom).
+    public static func interpolateZoom(
+        _ keyframes: [ExportZoomKeyframe],
+        at timeMs: UInt64,
+        cursor: (x: Double, y: Double)? = nil
+    ) -> (x: Double, y: Double, scale: Double) {
+        let none = (x: 0.5, y: 0.5, scale: 1.0)
+        guard !keyframes.isEmpty else { return none }
+
+        for kf in keyframes {
+            let segEnd = kf.timeMs + kf.durationMs
+            guard timeMs >= kf.timeMs && timeMs < segEnd else { continue }
+
+            // Inside this segment
+            let elapsed = Double(timeMs - kf.timeMs)
+            let ramp = min(RAMP_MS, Double(kf.durationMs) / 2.0)
+
+            let t: Double
+            if elapsed < ramp {
+                // Ramp in
+                t = easeInOut(elapsed / ramp)
+            } else if elapsed > Double(kf.durationMs) - ramp {
+                // Ramp out
+                t = easeInOut(Double(segEnd - timeMs) / ramp)
+            } else {
+                // Hold
+                t = 1.0
+            }
+
+            let targetX = cursor?.x ?? kf.x
+            let targetY = cursor?.y ?? kf.y
+            return (
+                x: none.x + (targetX - none.x) * t,
+                y: none.y + (targetY - none.y) * t,
+                scale: none.scale + (kf.scale - none.scale) * t
+            )
+        }
+
+        return none
+    }
+
+    // MARK: - Audio Timestamp Remapping
+
+    /// Shift a CMSampleBuffer's presentation timestamp by offsetMs (output - source time).
+    public static func remapAudioTimestamp(_ buffer: CMSampleBuffer, offsetMs: Int64) -> CMSampleBuffer? {
+        let pts = CMSampleBufferGetPresentationTimeStamp(buffer)
+        let offset = CMTime(value: offsetMs, timescale: 1000)
+        let newPts = CMTimeAdd(pts, offset)
+
+        var timing = CMSampleTimingInfo(
+            duration: CMSampleBufferGetDuration(buffer),
+            presentationTimeStamp: newPts,
+            decodeTimeStamp: .invalid
+        )
+
+        var newBuffer: CMSampleBuffer?
+        let status = CMSampleBufferCreateCopyWithNewTiming(
+            allocator: nil,
+            sampleBuffer: buffer,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &newBuffer
+        )
+        return status == noErr ? newBuffer : nil
+    }
+}
+
+// MARK: - Zoom / Cursor helper types (private, used internally by ExportPipeline)
+
+private typealias ZoomKF = ExportZoomKeyframe
 
 private struct MouseEvt: Codable {
     let timeMs: UInt64
@@ -83,14 +317,15 @@ public final class ExportProgress {
         }
 
         let percentage = _totalFrames > 0
-            ? Double(_framesRendered) / Double(_totalFrames) * 100.0
+            ? min(100.0, Double(_framesRendered) / Double(_totalFrames) * 100.0)
             : 0
         let msPerFrame = _framesRendered > 0
             ? Double(elapsedMs) / Double(_framesRendered)
             : 0
-        let remaining = _framesRendered > 0
-            ? UInt64(msPerFrame * Double(_totalFrames - _framesRendered))
-            : 0
+        let remaining: UInt64 = {
+            guard _framesRendered > 0 && _totalFrames > _framesRendered else { return 0 }
+            return UInt64(msPerFrame * Double(_totalFrames - _framesRendered))
+        }()
 
         if let error = _error {
             return """
@@ -155,7 +390,6 @@ public final class ExportPipeline {
         }
 
         let timeline = project["timeline"] as? [String: Any] ?? [:]
-        // Handle both camelCase (from Rust serde rename_all) and snake_case keys
         let inPointMs = (timeline["inPoint"] as? UInt64)
             ?? (timeline["in_point"] as? UInt64)
             ?? 0
@@ -171,20 +405,6 @@ public final class ExportPipeline {
         let systemAudioPath = tracks["systemAudio"] as? String
             ?? tracks["system_audio"] as? String
 
-        // Parse zoom keyframes
-        let zoomKeyframes: [ZoomKF] = {
-            guard let kfs = effectsDict["zoomKeyframes"] as? [[String: Any]] else { return [] }
-            return kfs.compactMap { kf in
-                guard let t = kf["timeMs"] as? UInt64,
-                      let x = kf["x"] as? Double,
-                      let y = kf["y"] as? Double,
-                      let s = kf["scale"] as? Double,
-                      let d = kf["durationMs"] as? UInt64 else { return nil }
-                return ZoomKF(timeMs: t, x: x, y: y, scale: s,
-                              easing: kf["easing"] as? String ?? "ease-in-out", durationMs: d)
-            }
-        }()
-
         // Parse mouse events
         var mouseEvents: [MouseEvt] = []
         if let mouseEventsPath = tracks["mouseEvents"] as? String ?? tracks["mouse_events"] as? String {
@@ -196,43 +416,59 @@ public final class ExportPipeline {
             }
         }
 
-        // ---- Set up video decoder ----
-        let screenURL = URL(fileURLWithPath: screenPath)
-        let screenDecoder = try VideoDecoder(
-            url: screenURL, inPointMs: inPointMs, outPointMs: outPointMs
-        )
+        // ---- Parse sequence clips or create single-clip fallback ----
+        let (seqClips, seqTransitions) = ExportMath.parseSequenceClips(from: project)
 
-        var cameraDecoder: VideoDecoder?
-        if let camPath = cameraPath {
-            cameraDecoder = try VideoDecoder(
-                url: URL(fileURLWithPath: camPath),
-                inPointMs: inPointMs, outPointMs: outPointMs
-            )
+        // Parse global zoom keyframes from effects (used as fallback for legacy single-clip)
+        let globalZoomKeyframes: [ExportZoomKeyframe] = {
+            guard let kfs = effectsDict["zoomKeyframes"] as? [[String: Any]] else { return [] }
+            return kfs.compactMap { kf in
+                guard let t = kf["timeMs"] as? UInt64,
+                      let x = kf["x"] as? Double,
+                      let y = kf["y"] as? Double,
+                      let s = kf["scale"] as? Double,
+                      let d = kf["durationMs"] as? UInt64 else { return nil }
+                return ExportZoomKeyframe(
+                    timeMs: t, x: x, y: y, scale: s,
+                    easing: kf["easing"] as? String ?? "ease-in-out", durationMs: d
+                )
+            }
+        }()
+
+        let clips: [ExportClip]
+        let transitions: [ExportTransition?]
+        if !seqClips.isEmpty {
+            clips = seqClips
+            transitions = seqTransitions
+        } else {
+            // Single synthetic clip from timeline in/out with global zoom keyframes
+            clips = [ExportClip(
+                sourceStartMs: inPointMs,
+                sourceEndMs: outPointMs,
+                speed: 1.0,
+                zoomKeyframes: globalZoomKeyframes
+            )]
+            transitions = []
         }
+
+        let clipRanges = ExportMath.computeClipOutputRanges(clips: clips, transitions: transitions)
+
+        // ---- Probe screen file for dimensions & fps ----
+        let screenURL = URL(fileURLWithPath: screenPath)
+        let probeDecoder = try VideoDecoder(url: screenURL, inPointMs: inPointMs, outPointMs: outPointMs)
+        let fps = probeDecoder.fps
+        let naturalWidth = probeDecoder.naturalWidth
+        let naturalHeight = probeDecoder.naturalHeight
+        probeDecoder.cancel()
 
         // ---- Set up Metal compositor ----
         let compositor = try MetalCompositor()
         let outSize = LayoutMath.outputSize(
             resolution: exportConfig.resolution,
-            recordingWidth: screenDecoder.naturalWidth,
-            recordingHeight: screenDecoder.naturalHeight
+            recordingWidth: naturalWidth,
+            recordingHeight: naturalHeight
         )
         try compositor.configure(width: outSize.width, height: outSize.height)
-
-        // ---- Set up audio mixer ----
-        let audioMixer = AudioMixer()
-        if let micURL = micPath {
-            try? audioMixer.addTrack(
-                url: URL(fileURLWithPath: micURL),
-                inPointMs: inPointMs, outPointMs: outPointMs
-            )
-        }
-        if let sysURL = systemAudioPath {
-            try? audioMixer.addTrack(
-                url: URL(fileURLWithPath: sysURL),
-                inPointMs: inPointMs, outPointMs: outPointMs
-            )
-        }
 
         // ---- Set up AVAssetWriter ----
         let outputURL = URL(fileURLWithPath: exportConfig.outputPath)
@@ -248,7 +484,7 @@ public final class ExportPipeline {
             AVVideoHeightKey: outSize.height,
             AVVideoCompressionPropertiesKey: [
                 AVVideoAverageBitRateKey: 20_000_000,
-                AVVideoMaxKeyFrameIntervalKey: Int(screenDecoder.fps),
+                AVVideoMaxKeyFrameIntervalKey: Int(fps),
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
             ] as [String: Any],
         ]
@@ -267,10 +503,19 @@ public final class ExportPipeline {
         )
         writer.add(videoInput)
 
+        // Audio input will be set up if any clip has audio
         var audioInput: AVAssetWriterInput?
-        if audioMixer.hasAudio {
+        // Check if audio exists by probing
+        let hasAudio = micPath != nil || systemAudioPath != nil
+        if hasAudio {
+            let audioOutputSettings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 48000,
+                AVNumberOfChannelsKey: 2,
+                AVEncoderBitRateKey: 192_000,
+            ]
             let aInput = AVAssetWriterInput(
-                mediaType: .audio, outputSettings: audioMixer.outputSettings
+                mediaType: .audio, outputSettings: audioOutputSettings
             )
             aInput.expectsMediaDataInRealTime = false
             writer.add(aInput)
@@ -278,65 +523,125 @@ public final class ExportPipeline {
         }
 
         writer.startWriting()
-        let startTime = CMTime(value: Int64(inPointMs), timescale: 1000)
-        writer.startSession(atSourceTime: startTime)
+        writer.startSession(atSourceTime: .zero)
 
-        // ---- Frame loop ----
-        let totalFrames = screenDecoder.trimmedFrameCount
+        // ---- Compute total frames for progress ----
+        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(fps))
+        var totalFrames = 0
+        for range in clipRanges {
+            let clipDurationSec = Double(range.outputEndMs - range.outputStartMs) / 1000.0
+            totalFrames += max(1, Int(clipDurationSec * Double(fps)))
+        }
         progress.start(totalFrames: totalFrames)
-        var frameIndex = 0
-        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(screenDecoder.fps))
+        var globalFrameIndex = 0
 
-        while let screenBuffer = screenDecoder.nextFrame() {
-            if isCancelled {
-                writer.cancelWriting()
-                screenDecoder.cancel()
-                cameraDecoder?.cancel()
-                audioMixer.cancel()
-                throw ExportError.cancelled
-            }
+        // ---- Clip-by-clip frame loop ----
+        for range in clipRanges {
+            if isCancelled { break }
 
-            let cameraBuffer = cameraDecoder?.nextFrame()
-
-            let frameTimeMs = inPointMs + UInt64(Double(frameIndex) / Double(screenDecoder.fps) * 1000.0)
-            let smoothedCursor = smoothedCursorPosition(mouseEvents, at: frameTimeMs)
-            let (zx, zy, zs) = interpolateZoom(zoomKeyframes, at: frameTimeMs, cursor: smoothedCursor)
-            let cursorPos = cursorPosition(mouseEvents, at: frameTimeMs)
-
-            let composited = try compositor.renderFrame(
-                screenPixelBuffer: screenBuffer,
-                cameraPixelBuffer: cameraBuffer,
-                effects: effects,
-                screenWidth: screenDecoder.naturalWidth,
-                screenHeight: screenDecoder.naturalHeight,
-                zoomX: zx,
-                zoomY: zy,
-                zoomScale: zs,
-                cursorX: cursorPos?.x,
-                cursorY: cursorPos?.y
+            // Create decoders scoped to this clip's source range
+            let screenDecoder = try VideoDecoder(
+                url: screenURL, inPointMs: range.sourceStartMs, outPointMs: range.sourceEndMs
             )
 
-            let presentationTime = CMTimeAdd(
-                startTime,
-                CMTimeMultiply(frameDuration, multiplier: Int32(frameIndex))
-            )
-
-            // Wait until the writer input is ready
-            while !videoInput.isReadyForMoreMediaData {
-                Thread.sleep(forTimeInterval: 0.001)
+            var cameraDecoder: VideoDecoder?
+            if let camPath = cameraPath {
+                cameraDecoder = try VideoDecoder(
+                    url: URL(fileURLWithPath: camPath),
+                    inPointMs: range.sourceStartMs, outPointMs: range.sourceEndMs
+                )
             }
-            pixelBufferAdaptor.append(composited, withPresentationTime: presentationTime)
 
-            // Interleave audio samples
-            if let aInput = audioInput {
+            // Create audio mixer scoped to this clip's source range
+            let audioMixer = AudioMixer()
+            if let micURL = micPath {
+                try? audioMixer.addTrack(
+                    url: URL(fileURLWithPath: micURL),
+                    inPointMs: range.sourceStartMs, outPointMs: range.sourceEndMs
+                )
+            }
+            if let sysURL = systemAudioPath {
+                try? audioMixer.addTrack(
+                    url: URL(fileURLWithPath: sysURL),
+                    inPointMs: range.sourceStartMs, outPointMs: range.sourceEndMs
+                )
+            }
+            // Audio offset: shift from source time to output time
+            let audioOffsetMs = Int64(range.outputStartMs) - Int64(range.sourceStartMs)
+
+            var clipFrameIndex = 0
+
+            while let screenBuffer = screenDecoder.nextFrame() {
+                if isCancelled {
+                    writer.cancelWriting()
+                    screenDecoder.cancel()
+                    cameraDecoder?.cancel()
+                    audioMixer.cancel()
+                    throw ExportError.cancelled
+                }
+
+                let cameraBuffer = cameraDecoder?.nextFrame()
+
+                // clipRelativeTimeMs — for zoom keyframes (stored clip-relative)
+                let clipRelativeTimeMs = UInt64(Double(clipFrameIndex) / Double(fps) * 1000.0)
+                // sourceTimeMs — for mouse events (recorded at absolute source time)
+                let sourceTimeMs = range.sourceStartMs + clipRelativeTimeMs
+
+                let smoothedCursor = smoothedCursorPosition(mouseEvents, at: sourceTimeMs)
+                let (zx, zy, zs) = ExportMath.interpolateZoom(
+                    range.zoomKeyframes, at: clipRelativeTimeMs, cursor: smoothedCursor
+                )
+                let cursorPos = cursorPosition(mouseEvents, at: sourceTimeMs)
+
+                let composited = try compositor.renderFrame(
+                    screenPixelBuffer: screenBuffer,
+                    cameraPixelBuffer: cameraBuffer,
+                    effects: effects,
+                    screenWidth: naturalWidth,
+                    screenHeight: naturalHeight,
+                    zoomX: zx,
+                    zoomY: zy,
+                    zoomScale: zs,
+                    cursorX: cursorPos?.x,
+                    cursorY: cursorPos?.y
+                )
+
+                // Monotonic presentation time from globalFrameIndex
+                let presentationTime = CMTimeMultiply(frameDuration, multiplier: Int32(globalFrameIndex))
+
+                while !videoInput.isReadyForMoreMediaData {
+                    Thread.sleep(forTimeInterval: 0.001)
+                }
+                pixelBufferAdaptor.append(composited, withPresentationTime: presentationTime)
+
+                // Interleave audio samples with timestamp remapping
+                if let aInput = audioInput, audioMixer.hasAudio {
+                    while aInput.isReadyForMoreMediaData,
+                          let audioSample = audioMixer.nextMixedSample() {
+                        if let remapped = ExportMath.remapAudioTimestamp(audioSample, offsetMs: audioOffsetMs) {
+                            aInput.append(remapped)
+                        } else {
+                            aInput.append(audioSample)
+                        }
+                    }
+                }
+
+                clipFrameIndex += 1
+                globalFrameIndex += 1
+                progress.updateFrame(globalFrameIndex)
+            }
+
+            // Drain remaining audio for this clip
+            if let aInput = audioInput, audioMixer.hasAudio {
                 while aInput.isReadyForMoreMediaData,
                       let audioSample = audioMixer.nextMixedSample() {
-                    aInput.append(audioSample)
+                    if let remapped = ExportMath.remapAudioTimestamp(audioSample, offsetMs: audioOffsetMs) {
+                        aInput.append(remapped)
+                    } else {
+                        aInput.append(audioSample)
+                    }
                 }
             }
-
-            frameIndex += 1
-            progress.updateFrame(frameIndex)
         }
 
         // ---- Finalize ----
@@ -357,55 +662,17 @@ public final class ExportPipeline {
         let attrs = try FileManager.default.attributesOfItem(atPath: outputURL.path)
         let fileSize = attrs[.size] as? UInt64 ?? 0
 
-        let durationMs = outPointMs - inPointMs
+        let totalDurationMs = ExportMath.sequenceDurationMs(clips: clips, transitions: transitions)
         progress.setPhase("done")
 
         return ExportResult(
             outputPath: exportConfig.outputPath,
-            durationMs: durationMs,
+            durationMs: totalDurationMs,
             fileSizeBytes: fileSize
         )
     }
 
-    // MARK: - Zoom / Cursor Interpolation
-
-    private func interpolateZoom(_ keyframes: [ZoomKF], at timeMs: UInt64, cursor: (x: Double, y: Double)? = nil) -> (x: Double, y: Double, scale: Double) {
-        guard !keyframes.isEmpty else { return (0.5, 0.5, 1.0) }
-        if timeMs <= keyframes[0].timeMs { return (0.5, 0.5, 1.0) }
-
-        if let last = keyframes.last, timeMs >= last.timeMs + last.durationMs {
-            let tx = cursor?.x ?? last.x
-            let ty = cursor?.y ?? last.y
-            return (tx, ty, last.scale)
-        }
-
-        for (i, kf) in keyframes.enumerated() {
-            let end = kf.timeMs + kf.durationMs
-            if timeMs >= kf.timeMs && timeMs < end {
-                let t = Double(timeMs - kf.timeMs) / Double(kf.durationMs)
-                let et = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
-
-                let prev: (x: Double, y: Double, scale: Double) = i > 0
-                    ? (keyframes[i-1].x, keyframes[i-1].y, keyframes[i-1].scale)
-                    : (0.5, 0.5, 1.0)
-
-                let targetX = cursor?.x ?? kf.x
-                let targetY = cursor?.y ?? kf.y
-                return (
-                    prev.x + (targetX - prev.x) * et,
-                    prev.y + (targetY - prev.y) * et,
-                    prev.scale + (kf.scale - prev.scale) * et
-                )
-            }
-
-            if i + 1 < keyframes.count && timeMs >= end && timeMs < keyframes[i+1].timeMs {
-                let tx = cursor?.x ?? kf.x
-                let ty = cursor?.y ?? kf.y
-                return (tx, ty, kf.scale)
-            }
-        }
-        return (0.5, 0.5, 1.0)
-    }
+    // MARK: - Cursor Helpers (private)
 
     private func smoothedCursorPosition(_ events: [MouseEvt], at timeMs: UInt64, windowMs: UInt64 = 150) -> (x: Double, y: Double)? {
         let samples = 7
