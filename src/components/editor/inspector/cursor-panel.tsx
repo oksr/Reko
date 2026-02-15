@@ -1,7 +1,5 @@
-import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { useEditorStore } from "@/stores/editor-store"
+import { SegmentedControl } from "./segmented-control"
 import { StyledSlider } from "./styled-slider"
 
 export function CursorPanel() {
@@ -12,48 +10,44 @@ export function CursorPanel() {
   if (!cursor) return null
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4 py-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium">Cursor</h3>
-        <Button
-          size="sm"
-          variant={cursor.enabled ? "default" : "ghost"}
-          className="text-xs h-7 px-2"
+        <h3 className="text-[13px] font-semibold tracking-tight">Cursor</h3>
+        <button
+          className={`text-[11px] px-2 py-0.5 rounded-md transition-colors ${
+            cursor.enabled
+              ? "bg-violet-400/20 text-violet-300"
+              : "bg-white/[0.05] text-muted-foreground hover:text-foreground"
+          }`}
           onClick={() => setCursor({ enabled: !cursor.enabled })}
         >
           {cursor.enabled ? "On" : "Off"}
-        </Button>
+        </button>
       </div>
 
       {!hasMouseEvents && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
           No mouse events recorded. Re-record with Accessibility permission to see cursor effects.
         </p>
       )}
 
       {cursor.enabled && hasMouseEvents && (
         <>
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant={cursor.type === "highlight" ? "default" : "ghost"}
-              className="text-xs h-7 px-2"
-              onClick={() => setCursor({ type: "highlight" })}
-            >
-              Highlight
-            </Button>
-            <Button
-              size="sm"
-              variant={cursor.type === "spotlight" ? "default" : "ghost"}
-              className="text-xs h-7 px-2"
-              onClick={() => setCursor({ type: "spotlight" })}
-            >
-              Spotlight
-            </Button>
-          </div>
+          <SegmentedControl
+            options={[
+              { value: "highlight", label: "Highlight" },
+              { value: "spotlight", label: "Spotlight" },
+            ]}
+            value={cursor.type}
+            onChange={(v) => setCursor({ type: v })}
+          />
 
-          <div className="space-y-1">
-            <Label className="text-xs">Size: {cursor.size}px</Label>
+          {/* Size */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] text-muted-foreground">Size</label>
+              <span className="text-[11px] text-muted-foreground tabular-nums">{cursor.size}px</span>
+            </div>
             <StyledSlider
               min={20}
               max={80}
@@ -63,8 +57,12 @@ export function CursorPanel() {
             />
           </div>
 
-          <div className="space-y-1">
-            <Label className="text-xs">Opacity: {Math.round(cursor.opacity * 100)}%</Label>
+          {/* Opacity */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] text-muted-foreground">Opacity</label>
+              <span className="text-[11px] text-muted-foreground tabular-nums">{Math.round(cursor.opacity * 100)}%</span>
+            </div>
             <StyledSlider
               min={0}
               max={100}
@@ -74,14 +72,15 @@ export function CursorPanel() {
             />
           </div>
 
+          {/* Color (highlight mode only) */}
           {cursor.type === "highlight" && (
-            <div className="space-y-1">
-              <Label className="text-xs">Color</Label>
-              <Input
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-muted-foreground">Color</label>
+              <input
                 type="color"
                 value={cursor.color}
                 onChange={(e) => setCursor({ color: e.target.value })}
-                className="h-8"
+                className="w-full h-8 rounded-md cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-none"
               />
             </div>
           )}

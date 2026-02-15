@@ -1,4 +1,3 @@
-import { Separator } from "@/components/ui/separator"
 import { BackgroundPanel } from "./background-panel"
 import { CameraPanel } from "./camera-panel"
 import { CursorPanel } from "./cursor-panel"
@@ -7,16 +6,15 @@ import { ZoomPanel } from "./zoom-panel"
 
 export function Inspector() {
   return (
-    <div className="space-y-4">
-      <h2 className="text-sm font-semibold">Inspector</h2>
+    <div className="space-y-1">
       <BackgroundPanel />
-      <Separator />
+      <div className="border-t border-white/[0.06]" />
       <FramePanel />
-      <Separator />
+      <div className="border-t border-white/[0.06]" />
       <CameraPanel />
-      <Separator />
+      <div className="border-t border-white/[0.06]" />
       <CursorPanel />
-      <Separator />
+      <div className="border-t border-white/[0.06]" />
       <ZoomPanel />
     </div>
   )

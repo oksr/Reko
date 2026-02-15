@@ -1,8 +1,6 @@
-import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { useEditorStore } from "@/stores/editor-store"
 import { GRADIENT_PRESETS } from "@/types/editor"
+import { SegmentedControl } from "./segmented-control"
 import { StyledSlider } from "./styled-slider"
 
 export function BackgroundPanel() {
@@ -10,6 +8,8 @@ export function BackgroundPanel() {
   const setBackground = useEditorStore((s) => s.setBackground)
 
   if (!background) return null
+
+  const bgType = background.type === "preset" ? "gradient" : background.type
 
   const handlePresetClick = (preset: typeof GRADIENT_PRESETS[number]) => {
     setBackground({
@@ -22,40 +22,29 @@ export function BackgroundPanel() {
   }
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-medium">Background</h3>
+    <div className="space-y-4 py-4">
+      <h3 className="text-[13px] font-semibold tracking-tight">Background</h3>
 
-      <div className="flex gap-1">
-        <Button
-          size="sm"
-          variant={background.type === "solid" ? "default" : "ghost"}
-          className="text-xs h-7 px-2"
-          onClick={() => setBackground({ type: "solid" })}
-        >
-          Solid
-        </Button>
-        <Button
-          size="sm"
-          variant={background.type === "gradient" ? "default" : "ghost"}
-          className="text-xs h-7 px-2"
-          onClick={() => setBackground({ type: "gradient" })}
-        >
-          Gradient
-        </Button>
-      </div>
+      <SegmentedControl
+        options={[
+          { value: "solid", label: "Solid" },
+          { value: "gradient", label: "Gradient" },
+        ]}
+        value={bgType}
+        onChange={(v) => setBackground({ type: v })}
+      />
 
-      {/* Gradient presets — 8 curated swatches */}
       {(background.type === "gradient" || background.type === "preset") && (
-        <div className="space-y-2">
-          <Label className="text-xs">Presets</Label>
-          <div className="grid grid-cols-4 gap-1.5">
+        <div className="space-y-4">
+          {/* Gradient presets grid */}
+          <div className="grid grid-cols-4 gap-2">
             {GRADIENT_PRESETS.map((preset) => (
               <button
                 key={preset.id}
-                className={`h-8 rounded-md border-2 transition-all ${
+                className={`aspect-square rounded-lg transition-all duration-150 ${
                   background.presetId === preset.id
-                    ? "border-primary scale-105"
-                    : "border-transparent hover:border-muted-foreground/30"
+                    ? "ring-2 ring-violet-400 ring-offset-1 ring-offset-background scale-[1.04]"
+                    : "hover:scale-[1.06] hover:ring-1 hover:ring-white/20"
                 }`}
                 style={{
                   background: `linear-gradient(${preset.angle}deg, ${preset.from}, ${preset.to})`,
@@ -66,28 +55,38 @@ export function BackgroundPanel() {
             ))}
           </div>
 
-          <div className="flex gap-2">
-            <div className="flex-1 space-y-1">
-              <Label className="text-xs">From</Label>
-              <Input
-                type="color"
-                value={background.gradientFrom}
-                onChange={(e) => setBackground({ gradientFrom: e.target.value, presetId: null, type: "gradient" })}
-                className="h-8"
-              />
+          {/* Custom color pickers */}
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-1.5">
+              <label className="text-[11px] text-muted-foreground">From</label>
+              <div className="relative">
+                <input
+                  type="color"
+                  value={background.gradientFrom}
+                  onChange={(e) => setBackground({ gradientFrom: e.target.value, presetId: null, type: "gradient" })}
+                  className="w-full h-8 rounded-md cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-none"
+                />
+              </div>
             </div>
-            <div className="flex-1 space-y-1">
-              <Label className="text-xs">To</Label>
-              <Input
-                type="color"
-                value={background.gradientTo}
-                onChange={(e) => setBackground({ gradientTo: e.target.value, presetId: null, type: "gradient" })}
-                className="h-8"
-              />
+            <div className="flex-1 space-y-1.5">
+              <label className="text-[11px] text-muted-foreground">To</label>
+              <div className="relative">
+                <input
+                  type="color"
+                  value={background.gradientTo}
+                  onChange={(e) => setBackground({ gradientTo: e.target.value, presetId: null, type: "gradient" })}
+                  className="w-full h-8 rounded-md cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-none"
+                />
+              </div>
             </div>
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Angle: {background.gradientAngle}&deg;</Label>
+
+          {/* Angle slider */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] text-muted-foreground">Angle</label>
+              <span className="text-[11px] text-muted-foreground tabular-nums">{background.gradientAngle}&deg;</span>
+            </div>
             <StyledSlider
               min={0}
               max={360}
@@ -99,24 +98,30 @@ export function BackgroundPanel() {
       )}
 
       {background.type === "solid" && (
-        <div className="space-y-1">
-          <Label className="text-xs">Color</Label>
-          <Input
+        <div className="space-y-1.5">
+          <label className="text-[11px] text-muted-foreground">Color</label>
+          <input
             type="color"
             value={background.color}
             onChange={(e) => setBackground({ color: e.target.value })}
-            className="h-8 w-full"
+            className="w-full h-9 rounded-md cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-none"
           />
         </div>
       )}
 
-      <div className="space-y-1">
-        <Label className="text-xs">Padding: {background.padding}%</Label>
+      {/* Padding slider */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-[11px] text-muted-foreground">Padding</label>
+          <span className="text-[11px] text-muted-foreground tabular-nums">{background.padding}%</span>
+        </div>
         <StyledSlider
           min={0}
           max={20}
           value={background.padding}
           onChange={(v) => setBackground({ padding: v })}
+          showReset={background.padding !== 0}
+          onReset={() => setBackground({ padding: 0 })}
         />
       </div>
     </div>

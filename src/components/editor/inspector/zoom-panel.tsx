@@ -1,10 +1,8 @@
-import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
 import { useEditorStore } from "@/stores/editor-store"
 import { sourceTimeToSequenceTime } from "@/lib/sequence"
 import { invoke } from "@tauri-apps/api/core"
 import { useState } from "react"
-import { Wand2, Plus, Trash2 } from "lucide-react"
+import { Wand2, Plus, X } from "lucide-react"
 import type { ZoomKeyframe } from "@/types/editor"
 
 export function ZoomPanel() {
@@ -31,12 +29,10 @@ export function ZoomPanel() {
       const kfs = await invoke<ZoomKeyframe[]>("generate_auto_zoom", {
         projectId: project.id,
       })
-      // Filter keyframes to those within the selected clip's source range
       const clip = sequence.clips[selectedClipIndex]
       const clipRelativeKfs = kfs
         .filter((kf) => kf.timeMs >= clip.sourceStart && kf.timeMs < clip.sourceEnd)
         .map((kf) => ({ ...kf, timeMs: kf.timeMs - clip.sourceStart }))
-      // Replace clip's keyframes
       clearClipZoomKeyframes(selectedClipIndex)
       for (const kf of clipRelativeKfs) {
         addZoomKeyframeToClip(selectedClipIndex, kf)
@@ -73,76 +69,77 @@ export function ZoomPanel() {
   }
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-medium">Zoom</h3>
+    <div className="space-y-4 py-4">
+      <h3 className="text-[13px] font-semibold tracking-tight">Zoom</h3>
 
       {selectedClipIndex === null && (
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
           Select a clip to edit zoom keyframes.
         </p>
       )}
 
       {selectedClipIndex !== null && (
         <>
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs h-7 flex-1"
+          <div className="flex gap-1.5">
+            <button
+              className="flex items-center gap-1.5 flex-1 text-[11px] font-medium py-2 px-3 rounded-lg bg-white/[0.05] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
               onClick={handleAutoZoom}
               disabled={generating || !project.tracks.mouse_events}
             >
-              <Wand2 className="w-3 h-3 mr-1" />
+              <Wand2 className="w-3.5 h-3.5" />
               {generating ? "Generating..." : "Auto-Zoom"}
-            </Button>
-            <Button size="sm" variant="outline" className="text-xs h-7" onClick={handleAddKeyframe}>
-              <Plus className="w-3 h-3" />
-            </Button>
+            </button>
+            <button
+              className="flex items-center justify-center w-9 text-[11px] rounded-lg bg-white/[0.05] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground transition-colors"
+              onClick={handleAddKeyframe}
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           {!project.tracks.mouse_events && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
               No mouse events recorded. Re-record with Accessibility permission to enable auto-zoom.
             </p>
           )}
 
           {keyframes.length > 0 && (
-            <div className="space-y-1">
-              <Label className="text-xs">Keyframes ({keyframes.length})</Label>
-              <div className="max-h-32 overflow-y-auto space-y-0.5">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] text-muted-foreground">Keyframes ({keyframes.length})</label>
+                <button
+                  className="text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors"
+                  onClick={() => clearClipZoomKeyframes(selectedClipIndex)}
+                >
+                  Clear all
+                </button>
+              </div>
+              <div className="max-h-36 overflow-y-auto space-y-0.5 rounded-lg">
                 {keyframes.map((kf, i) => (
                   <div
                     key={kf.timeMs}
-                    className={`flex items-center justify-between text-xs rounded px-2 py-1 cursor-pointer ${
-                      selectedZoomIndex === i ? "bg-primary/20 ring-1 ring-primary" : "bg-muted/50 hover:bg-muted"
+                    className={`flex items-center justify-between text-[11px] rounded-md px-2.5 py-1.5 cursor-pointer transition-colors ${
+                      selectedZoomIndex === i
+                        ? "bg-violet-400/15 text-violet-200"
+                        : "bg-white/[0.03] hover:bg-white/[0.06] text-muted-foreground"
                     }`}
                     onClick={() => setSelectedZoomIndex(i)}
                   >
-                    <span className="font-mono">{formatTime(kf.timeMs)}</span>
-                    <span>{kf.scale}x</span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-5 w-5 p-0"
-                      onClick={() => removeZoomKeyframeFromClip(selectedClipIndex, kf.timeMs)}
+                    <span className="font-mono tabular-nums">{formatTime(kf.timeMs)}</span>
+                    <span className="tabular-nums">{kf.scale}x</span>
+                    <button
+                      className="p-0.5 rounded hover:bg-white/[0.1] text-muted-foreground/50 hover:text-foreground transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeZoomKeyframeFromClip(selectedClipIndex, kf.timeMs)
+                      }}
                     >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
                 ))}
               </div>
             </div>
-          )}
-
-          {keyframes.length > 0 && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-xs h-7 text-destructive"
-              onClick={() => clearClipZoomKeyframes(selectedClipIndex)}
-            >
-              Clear All
-            </Button>
           )}
         </>
       )}
