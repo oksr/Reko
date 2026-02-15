@@ -54,10 +54,9 @@ describe("PlaybackControls", () => {
     expect(screen.getByText(/00:00\.0/)).toBeTruthy()
   })
 
-  it("skip back seeks to in point", async () => {
-    useEditorStore.getState().setInPoint(2000)
+  it("skip back seeks to start of sequence", async () => {
     render(<PlaybackControls videoSync={mockVideoSync} />)
     await userEvent.click(screen.getByTitle("Go to start"))
-    expect(mockVideoSync.seek).toHaveBeenCalledWith(2000)
+    expect(mockVideoSync.seek).toHaveBeenCalledWith(0)
   })
 })

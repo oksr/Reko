@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react"
 import { assetUrl } from "@/lib/asset-url"
 import { interpolateZoomAtSequenceTime } from "@/lib/zoom-interpolation"
-import { useEditorStore } from "@/stores/editor-store"
+import { useEditorStore, pauseUndo, resumeUndo } from "@/stores/editor-store"
 import { useMouseEvents } from "@/hooks/use-mouse-events"
 import type { useVideoSync } from "@/hooks/use-video-sync"
 
@@ -28,12 +28,20 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
     }
   }, [videoSync, project])
 
+  const clampClips = useEditorStore((s) => s.clampClipsToVideoDuration)
   const handleLoadedMetadata = useCallback(() => {
     const v = screenRef.current
-    if (v && v.videoWidth && v.videoHeight) {
+    if (!v) return
+    if (v.videoWidth && v.videoHeight) {
       setVideoAspect(v.videoWidth / v.videoHeight)
     }
-  }, [])
+    if (v.duration && isFinite(v.duration)) {
+      // Clamp clips outside undo tracking — this is a data correction, not a user edit
+      pauseUndo()
+      clampClips(v.duration * 1000)
+      resumeUndo()
+    }
+  }, [clampClips])
 
   if (!project) return null
 

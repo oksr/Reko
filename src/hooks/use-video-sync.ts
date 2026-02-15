@@ -84,7 +84,30 @@ export function useVideoSync(options: VideoSyncOptions = {}) {
     })
 
     playingRef.current = true
-    await Promise.all(videosRef.current.map((v) => v.play().catch(() => {})))
+    const playVideo = (v: HTMLVideoElement) =>
+      v.play().catch((e) => {
+        if (e.name !== "AbortError") console.warn("Playback failed:", e)
+      })
+    await Promise.all(videosRef.current.map(playVideo))
+
+    const transitionToClip = (
+      nextIndex: number,
+      seq: { clips: typeof sequence.clips; transitions: typeof sequence.transitions },
+      tick: () => void
+    ) => {
+      const nextClip = seq.clips[nextIndex]
+      const nextSeqStart = sourceTimeToSequenceTime(
+        nextClip.sourceStart, nextIndex, seq.clips, seq.transitions
+      )
+      clipRef.current = { index: nextIndex, seqStart: nextSeqStart }
+      videosRef.current.forEach((v) => {
+        v.currentTime = nextClip.sourceStart / 1000
+        v.playbackRate = nextClip.speed
+        playVideo(v)
+      })
+      onTimeUpdateRef.current?.(nextSeqStart)
+      rafRef.current = requestAnimationFrame(tick)
+    }
 
     const tick = () => {
       if (!playingRef.current) return
@@ -100,15 +123,14 @@ export function useVideoSync(options: VideoSyncOptions = {}) {
 
       const sourceTimeMs = primary.currentTime * 1000
       const seqDuration = getSequenceDuration(sequence.clips, sequence.transitions)
-      const outPoint = useEditorStore.getState().project?.timeline.out_point ?? Infinity
 
       // Compute current sequence time from source position within clip
       const timeInClipMs = (sourceTimeMs - clip.sourceStart) / clip.speed
       const currentSeqTime = ci.seqStart + timeInClipMs
 
-      // Check end conditions
-      if (currentSeqTime >= outPoint || currentSeqTime >= seqDuration) {
-        onTimeUpdateRef.current?.(Math.min(outPoint, seqDuration))
+      // Check end condition
+      if (currentSeqTime >= seqDuration) {
+        onTimeUpdateRef.current?.(seqDuration)
         stopLoop()
         useEditorStore.getState().setIsPlaying(false)
         return
@@ -123,23 +145,19 @@ export function useVideoSync(options: VideoSyncOptions = {}) {
           useEditorStore.getState().setIsPlaying(false)
           return
         }
-        // Transition to next clip
-        const nextClip = sequence.clips[nextIndex]
-        clipRef.current = {
-          index: nextIndex,
-          seqStart: sourceTimeToSequenceTime(
-            nextClip.sourceStart, nextIndex, sequence.clips, sequence.transitions
-          ),
-        }
-        videosRef.current.forEach((v) => {
-          v.currentTime = nextClip.sourceStart / 1000
-          v.playbackRate = nextClip.speed
-        })
+        transitionToClip(nextIndex, sequence, tick)
+        return
       }
 
-      // Video ended naturally (source file shorter than expected)
+      // Video file ended naturally (playable content shorter than metadata duration)
       if (primary.ended) {
-        onTimeUpdateRef.current?.(currentSeqTime)
+        const nextIndex = ci.index + 1
+        if (nextIndex < sequence.clips.length) {
+          transitionToClip(nextIndex, sequence, tick)
+          return
+        }
+        // Last clip — treat as end of sequence
+        onTimeUpdateRef.current?.(seqDuration)
         stopLoop()
         useEditorStore.getState().setIsPlaying(false)
         return

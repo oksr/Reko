@@ -110,6 +110,7 @@ interface EditorState {
   removeZoomKeyframeFromClip: (clipIndex: number, timeMs: number) => void
   updateClipZoomKeyframe: (clipIndex: number, kfIndex: number, updates: Partial<ZoomKeyframe>) => void
   clearClipZoomKeyframes: (clipIndex: number) => void
+  clampClipsToVideoDuration: (videoDurationMs: number) => void
 
   // Overlay actions
   addOverlayTrack: (type: OverlayTrack["type"]) => void
@@ -580,6 +581,33 @@ export const useEditorStore = create<EditorState>()(
             project: {
               ...s.project,
               sequence: { ...sequence, clips: newClips },
+            },
+          }
+        }),
+
+      clampClipsToVideoDuration: (videoDurationMs) =>
+        set((s) => {
+          if (!s.project) return s
+          const { sequence } = s.project
+          let changed = false
+          const newClips = sequence.clips.map((clip) => {
+            if (clip.sourceEnd > videoDurationMs) {
+              changed = true
+              const clampedEnd = videoDurationMs
+              // Ensure sourceStart doesn't exceed clamped sourceEnd (minimum 0ms duration)
+              const clampedStart = Math.min(clip.sourceStart, clampedEnd)
+              return { ...clip, sourceStart: clampedStart, sourceEnd: clampedEnd }
+            }
+            return clip
+          })
+          if (!changed) return s
+          // Filter out zero-duration clips
+          const validClips = newClips.filter((c) => c.sourceEnd > c.sourceStart)
+          if (validClips.length === 0) return s // don't remove all clips
+          return {
+            project: {
+              ...s.project,
+              sequence: { ...sequence, clips: validClips },
             },
           }
         }),

@@ -31,7 +31,9 @@ export interface SourceTimeResult {
   sourceTime: number
 }
 
-/** Convert sequence playback time to a source time within a specific clip */
+/** Convert sequence playback time to a source time within a specific clip.
+ *  Uses <= for the last clip so that seeking to exactly seqDuration resolves
+ *  to the last frame of the last clip instead of returning null. */
 export function sequenceTimeToSourceTime(
   seqTime: number,
   clips: Clip[],
@@ -47,9 +49,11 @@ export function sequenceTimeToSourceTime(
         ? transitions[i - 1]!.durationMs
         : 0
     const clipStart = elapsed - overlapBefore
+    const clipEnd = elapsed + clipDuration - overlapBefore
+    const isLast = i === clips.length - 1
 
-    if (seqTime < elapsed + clipDuration - overlapBefore) {
-      const timeInClip = seqTime - clipStart
+    if (seqTime < clipEnd || (isLast && seqTime <= clipEnd)) {
+      const timeInClip = Math.min(seqTime - clipStart, clipDuration)
       return {
         clipIndex: i,
         clipId: clip.id,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -29,6 +29,34 @@ function EditorContent() {
   useKeyboardShortcuts(videoSync)
   useAutoSave()
 
+  // Re-seek video when clip data changes (reorder, trim, speed) so preview
+  // shows the correct frame for the current timeline position.
+  // Use a fingerprint string so unrelated project mutations (background, etc.)
+  // don't trigger spurious seeks.
+  const clipFingerprint = useEditorStore((s) =>
+    s.project?.sequence.clips
+      .map((c) => `${c.id}:${c.sourceStart}:${c.sourceEnd}:${c.speed}`)
+      .join("|")
+  )
+  const transitionFingerprint = useEditorStore((s) =>
+    s.project?.sequence.transitions
+      .map((t) => (t ? `${t.type}:${t.durationMs}` : "cut"))
+      .join("|")
+  )
+  const prevClipFP = useRef(clipFingerprint)
+  const prevTransFP = useRef(transitionFingerprint)
+  useEffect(() => {
+    if (prevClipFP.current === clipFingerprint && prevTransFP.current === transitionFingerprint) {
+      prevClipFP.current = clipFingerprint
+      prevTransFP.current = transitionFingerprint
+      return
+    }
+    prevClipFP.current = clipFingerprint
+    prevTransFP.current = transitionFingerprint
+    if (useEditorStore.getState().isPlaying) return
+    videoSync.seek(useEditorStore.getState().currentTime)
+  }, [clipFingerprint, transitionFingerprint, videoSync])
+
   // Stable dependency array — loadProject is a zustand action (never changes)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -40,17 +68,13 @@ function EditorContent() {
 
     invoke<ProjectState>("load_project", { projectId })
       .then((p) => {
+        // Cast to EditorProject — loadProject() handles migration
+        // (sequence creation via migrateToSequence, effects defaults, etc.)
         const editorProject: EditorProject = {
           ...p,
           tracks: { ...p.tracks, mouse_events: null },
-          sequence: {
-            clips: [{
-              id: "main",
-              sourceStart: p.timeline.in_point,
-              sourceEnd: p.timeline.out_point,
-              speed: 1,
-              zoomKeyframes: [],
-            }],
+          sequence: (p as unknown as EditorProject).sequence ?? {
+            clips: [],
             transitions: [],
             overlayTracks: [],
             overlays: [],

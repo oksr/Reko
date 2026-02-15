@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Play, Pause, SkipBack, SkipForward } from "lucide-react"
 import { useEditorStore } from "@/stores/editor-store"
+import { getSequenceDuration } from "@/lib/sequence"
 import type { useVideoSync } from "@/hooks/use-video-sync"
 
 interface PlaybackControlsProps {
@@ -24,7 +25,10 @@ export function PlaybackControls({ videoSync }: PlaybackControlsProps) {
 
   if (!project) return null
 
-  const { in_point, out_point } = project.timeline
+  const seqDuration = getSequenceDuration(
+    project.sequence.clips,
+    project.sequence.transitions
+  )
 
   const handlePlayPause = async () => {
     if (isPlaying) {
@@ -37,13 +41,13 @@ export function PlaybackControls({ videoSync }: PlaybackControlsProps) {
   }
 
   const handleSkipBack = () => {
-    videoSync.seek(in_point)
-    setCurrentTime(in_point)
+    videoSync.seek(0)
+    setCurrentTime(0)
   }
 
   const handleSkipForward = () => {
-    videoSync.seek(out_point)
-    setCurrentTime(out_point)
+    videoSync.seek(seqDuration)
+    setCurrentTime(seqDuration)
   }
 
   return (
@@ -62,7 +66,7 @@ export function PlaybackControls({ videoSync }: PlaybackControlsProps) {
 
       {/* tabular-nums for stable digit widths */}
       <span className="text-xs font-mono text-muted-foreground ml-2" style={{ fontVariantNumeric: "tabular-nums" }}>
-        {formatTime(currentTime)} / {formatTime(out_point - in_point)}
+        {formatTime(currentTime)} / {formatTime(seqDuration)}
       </span>
     </div>
   )
