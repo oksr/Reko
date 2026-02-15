@@ -325,6 +325,9 @@ body:has(.window-picker) {
   .toolbar-popover {
     animation: none;
   }
+  .picker-card {
+    animation: none;
+  }
 }
 
 @keyframes pulse-dot {

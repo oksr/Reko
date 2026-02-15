@@ -1,6 +1,7 @@
 import Foundation
 import ScreenCaptureKit
 import CoreMedia
+import AppKit
 
 public struct WindowInfo: Codable {
     public let id: UInt32
@@ -64,6 +65,28 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         return order
     }
 
+    /// Returns a base64-encoded PNG of the app icon for the given bundle ID, or "" on failure.
+    private static func appIconBase64(bundleId: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
+            return ""
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        // Render at 64x64
+        let size = NSSize(width: 64, height: 64)
+        let bitmapRep = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height),
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        )
+        guard let rep = bitmapRep else { return "" }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        icon.draw(in: NSRect(origin: .zero, size: size))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let pngData = rep.representation(using: .png, properties: [:]) else { return "" }
+        return pngData.base64EncodedString()
+    }
+
     public static func listWindows(zOrder: [UInt32: Int]) async throws -> [WindowInfo] {
         let content = try await SCShareableContent.excludingDesktopWindows(
             true, onScreenWindowsOnly: true
@@ -107,7 +130,7 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
                 width: Int(frame.width),
                 height: Int(frame.height),
                 bundleId: bundleId,
-                appIcon: ""
+                appIcon: appIconBase64(bundleId: bundleId)
             )
         }
 
