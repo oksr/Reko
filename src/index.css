@@ -328,6 +328,9 @@ body:has(.window-picker) {
   .picker-card {
     animation: none;
   }
+  [data-testid="clip-block"] {
+    transition: none;
+  }
 }
 
 @keyframes pulse-dot {
@@ -345,4 +348,9 @@ body:has(.window-picker) {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
   }
+}
+
+/* Razor/cut tool cursor */
+.cursor-razor {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='6' cy='6' r='3'/%3E%3Cpath d='M8.12 8.12 12 12'/%3E%3Cpath d='M20 4 8.12 15.88'/%3E%3Ccircle cx='6' cy='18' r='3'/%3E%3Cpath d='M14.8 14.8 20 20'/%3E%3C/svg%3E") 12 12, crosshair;
 }

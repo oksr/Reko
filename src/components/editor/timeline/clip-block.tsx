@@ -9,11 +9,14 @@ interface ClipBlockProps {
   leftPercent: number
   widthPercent: number
   ctx: TimelineContext
+  onDragUpdate?: (fromIndex: number, toIndex: number | null) => void
+  previewTranslateXPct?: number
+  isDragPreview?: boolean
 }
 
 const DRAG_THRESHOLD = 5
 
-export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipBlockProps) {
+export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx, onDragUpdate, previewTranslateXPct = 0, isDragPreview }: ClipBlockProps) {
   const selectedClipIndex = useEditorStore((s) => s.selectedClipIndex)
   const setSelectedClipIndex = useEditorStore((s) => s.setSelectedClipIndex)
   const activeTool = useEditorStore((s) => s.activeTool)
@@ -104,49 +107,60 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
     const startX = e.clientX
     isDraggingRef.current = false
 
+    const computeTargetIndex = (clientX: number): number => {
+      if (!ctx.containerRef.current) return index
+      const rect = ctx.containerRef.current.getBoundingClientRect()
+      const dropPct = (clientX - rect.left) / rect.width
+      const sequence = useEditorStore.getState().project?.sequence
+      if (!sequence) return index
+      let accumulated = 0
+      let toIndex = sequence.clips.length - 1
+      for (let i = 0; i < sequence.clips.length; i++) {
+        const c = sequence.clips[i]
+        const dur = (c.sourceEnd - c.sourceStart) / c.speed
+        const pct = ctx.msToPercent(dur) / 100
+        accumulated += pct
+        if (dropPct < accumulated) {
+          toIndex = i
+          break
+        }
+      }
+      return toIndex
+    }
+
     const onMove = (me: MouseEvent) => {
       if (!ctx.containerRef.current) return
       const dx = me.clientX - startX
       if (!isDraggingRef.current && Math.abs(dx) < DRAG_THRESHOLD) return
-      isDraggingRef.current = true
+      if (!isDraggingRef.current) {
+        isDraggingRef.current = true
+        document.body.style.cursor = "grabbing"
+      }
       const rect = ctx.containerRef.current.getBoundingClientRect()
       const dxPct = (dx / rect.width) * 100
       setDragOffset(dxPct)
+      const toIndex = computeTargetIndex(me.clientX)
+      onDragUpdate?.(index, toIndex)
     }
 
     const onUp = (me: MouseEvent) => {
       document.removeEventListener("mousemove", onMove)
       document.removeEventListener("mouseup", onUp)
+      document.body.style.cursor = ""
 
       if (isDraggingRef.current && ctx.containerRef.current) {
         // Swallow click
         document.addEventListener("click", (ev) => ev.stopPropagation(), { capture: true, once: true })
-        // Compute drop target
-        const rect = ctx.containerRef.current.getBoundingClientRect()
-        const dropPct = (me.clientX - rect.left) / rect.width
-        const sequence = useEditorStore.getState().project?.sequence
-        if (sequence) {
-          let accumulated = 0
-          let toIndex = sequence.clips.length - 1
-          for (let i = 0; i < sequence.clips.length; i++) {
-            const c = sequence.clips[i]
-            const dur = (c.sourceEnd - c.sourceStart) / c.speed
-            const pct = ctx.msToPercent(dur) / 100
-            accumulated += pct
-            if (dropPct < accumulated) {
-              toIndex = i
-              break
-            }
-          }
-          if (index !== toIndex) {
-            moveClip(index, toIndex)
-          }
+        const toIndex = computeTargetIndex(me.clientX)
+        if (index !== toIndex) {
+          moveClip(index, toIndex)
         }
       } else {
         // Was a click, not a drag — select the clip
         setSelectedClipIndex(index)
       }
 
+      onDragUpdate?.(index, null)
       setDragOffset(null)
       isDraggingRef.current = false
     }
@@ -166,9 +180,9 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
       visWidth = widthPercent + trimDelta.pct
     }
   }
-  if (dragOffset !== null) {
-    visLeft = leftPercent + dragOffset
-  }
+  // Drag offset applied via transform, not left
+  const dragTranslatePct = dragOffset ?? 0
+  const totalTranslatePct = dragOffset !== null ? dragTranslatePct : previewTranslateXPct
 
   const visDuration = trimDelta
     ? (trimDelta.edge === "left"
@@ -179,7 +193,8 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
   return (
     <div
       data-testid="clip-block"
-      className={`absolute top-0 bottom-0 rounded-md cursor-pointer transition-none ${
+      className={`absolute top-0 bottom-0 rounded-md ${
+        activeTool === "razor" ? "cursor-razor" : dragOffset !== null ? "cursor-grabbing" : "cursor-grab active:cursor-grabbing"} ${
         isSelected
           ? "ring-2 ring-amber-300"
           : "hover:brightness-110"
@@ -189,6 +204,9 @@ export function ClipBlock({ clip, index, leftPercent, widthPercent, ctx }: ClipB
         width: `${Math.max(0, visWidth)}%`,
         minWidth: "2px",
         background: "linear-gradient(to bottom, #d4a054, #c4903e)",
+        transform: totalTranslatePct ? `translateX(${(totalTranslatePct / widthPercent) * 100}%)` : undefined,
+        willChange: isDragPreview || dragOffset !== null ? "transform" : undefined,
+        transition: dragOffset !== null ? "none" : isDragPreview ? "transform 200ms cubic-bezier(0.455, 0.03, 0.515, 0.955)" : "none",
       }}
       onMouseDown={handleBodyMouseDown}
     >

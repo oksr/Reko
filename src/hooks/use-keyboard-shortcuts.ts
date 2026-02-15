@@ -1,5 +1,6 @@
 import { useEffect } from "react"
 import { useEditorStore } from "@/stores/editor-store"
+import { getSequenceDuration } from "@/lib/sequence"
 import type { useVideoSync } from "@/hooks/use-video-sync"
 
 const SEEK_STEP_MS = 1000
@@ -19,6 +20,13 @@ export function useKeyboardShortcuts(videoSync: ReturnType<typeof useVideoSync>)
           videoSync.pause()
           useEditorStore.getState().setIsPlaying(false)
         } else {
+          // If at the end of the sequence, restart from beginning
+          const seq = state.project?.sequence
+          const duration = seq ? getSequenceDuration(seq.clips, seq.transitions) : 0
+          if (duration > 0 && state.currentTime >= duration - 1) {
+            videoSync.seek(0)
+            useEditorStore.getState().setCurrentTime(0)
+          }
           videoSync.play()
           useEditorStore.getState().setIsPlaying(true)
         }
