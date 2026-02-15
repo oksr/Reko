@@ -9,5 +9,7 @@
     <string>Reko needs camera access for webcam overlay</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Reko needs microphone access to record audio</string>
+    <key>NSAccessibilityUsageDescription</key>
+    <string>Reko needs Accessibility access to capture mouse events for cursor effects</string>
 </dict>
 </plist>

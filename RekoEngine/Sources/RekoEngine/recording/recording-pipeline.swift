@@ -94,6 +94,21 @@ public final class RecordingPipeline {
             }
             captureWidth = Int(window.frame.width) * 2
             captureHeight = Int(window.frame.height) * 2
+
+            // Start mouse logging — use the main display dimensions for coordinate normalization
+            // since CGEvent reports absolute screen coordinates
+            let mainDisplay = CGMainDisplayID()
+            let displayWidth = CGDisplayPixelsWide(mainDisplay)
+            let displayHeight = CGDisplayPixelsHigh(mainDisplay)
+            let mouseOutputURL = outputDir.appendingPathComponent("mouse_events.jsonl")
+            let logger = MouseLogger(
+                outputURL: mouseOutputURL,
+                screenWidth: displayWidth,
+                screenHeight: displayHeight
+            )
+            if logger.start() {
+                mouseLogger = logger
+            }
         } else if let displayId = config.displayId {
             let displays = try await ScreenCapture.listDisplays()
             guard let display = displays.first(where: { $0.id == displayId }) else {
@@ -206,6 +221,7 @@ public final class RecordingPipeline {
         micWriter?.finish()
         cameraCapture?.stopCapture()
         await cameraWriter?.finish()
+        let hasMouseLogger = mouseLogger != nil
         mouseLogger?.stop()
 
         var timebaseInfo = mach_timebase_info_data_t()
@@ -218,7 +234,7 @@ public final class RecordingPipeline {
             systemAudioPath: config.captureSystemAudio ? "system_audio.wav" : nil,
             micPath: micCapture != nil ? "mic.wav" : nil,
             cameraPath: cameraCapture != nil ? "camera.mov" : nil,
-            mouseEventsPath: mouseLogger != nil ? "mouse_events.jsonl" : nil,
+            mouseEventsPath: hasMouseLogger ? "mouse_events.jsonl" : nil,
             durationMs: durationMs,
             frameCount: frameCount
         )

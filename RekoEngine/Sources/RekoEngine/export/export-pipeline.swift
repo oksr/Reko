@@ -71,11 +71,16 @@ public final class ExportProgress {
         lock.lock()
         defer { lock.unlock() }
 
-        var timebaseInfo = mach_timebase_info_data_t()
-        mach_timebase_info(&timebaseInfo)
-        let elapsedNano = (mach_absolute_time() - _startTime)
-            * UInt64(timebaseInfo.numer) / UInt64(timebaseInfo.denom)
-        let elapsedMs = elapsedNano / 1_000_000
+        let elapsedMs: UInt64
+        if _startTime > 0 {
+            var timebaseInfo = mach_timebase_info_data_t()
+            mach_timebase_info(&timebaseInfo)
+            // Divide before multiply to avoid UInt64 overflow
+            let elapsed = mach_absolute_time() - _startTime
+            elapsedMs = elapsed / UInt64(timebaseInfo.denom) * UInt64(timebaseInfo.numer) / 1_000_000
+        } else {
+            elapsedMs = 0
+        }
 
         let percentage = _totalFrames > 0
             ? Double(_framesRendered) / Double(_totalFrames) * 100.0
@@ -294,7 +299,8 @@ public final class ExportPipeline {
             let cameraBuffer = cameraDecoder?.nextFrame()
 
             let frameTimeMs = inPointMs + UInt64(Double(frameIndex) / Double(screenDecoder.fps) * 1000.0)
-            let (zx, zy, zs) = interpolateZoom(zoomKeyframes, at: frameTimeMs)
+            let smoothedCursor = smoothedCursorPosition(mouseEvents, at: frameTimeMs)
+            let (zx, zy, zs) = interpolateZoom(zoomKeyframes, at: frameTimeMs, cursor: smoothedCursor)
             let cursorPos = cursorPosition(mouseEvents, at: frameTimeMs)
 
             let composited = try compositor.renderFrame(
@@ -363,12 +369,14 @@ public final class ExportPipeline {
 
     // MARK: - Zoom / Cursor Interpolation
 
-    private func interpolateZoom(_ keyframes: [ZoomKF], at timeMs: UInt64) -> (x: Double, y: Double, scale: Double) {
+    private func interpolateZoom(_ keyframes: [ZoomKF], at timeMs: UInt64, cursor: (x: Double, y: Double)? = nil) -> (x: Double, y: Double, scale: Double) {
         guard !keyframes.isEmpty else { return (0.5, 0.5, 1.0) }
         if timeMs <= keyframes[0].timeMs { return (0.5, 0.5, 1.0) }
 
         if let last = keyframes.last, timeMs >= last.timeMs + last.durationMs {
-            return (last.x, last.y, last.scale)
+            let tx = cursor?.x ?? last.x
+            let ty = cursor?.y ?? last.y
+            return (tx, ty, last.scale)
         }
 
         for (i, kf) in keyframes.enumerated() {
@@ -381,18 +389,49 @@ public final class ExportPipeline {
                     ? (keyframes[i-1].x, keyframes[i-1].y, keyframes[i-1].scale)
                     : (0.5, 0.5, 1.0)
 
+                let targetX = cursor?.x ?? kf.x
+                let targetY = cursor?.y ?? kf.y
                 return (
-                    prev.x + (kf.x - prev.x) * et,
-                    prev.y + (kf.y - prev.y) * et,
+                    prev.x + (targetX - prev.x) * et,
+                    prev.y + (targetY - prev.y) * et,
                     prev.scale + (kf.scale - prev.scale) * et
                 )
             }
 
             if i + 1 < keyframes.count && timeMs >= end && timeMs < keyframes[i+1].timeMs {
-                return (kf.x, kf.y, kf.scale)
+                let tx = cursor?.x ?? kf.x
+                let ty = cursor?.y ?? kf.y
+                return (tx, ty, kf.scale)
             }
         }
         return (0.5, 0.5, 1.0)
+    }
+
+    private func smoothedCursorPosition(_ events: [MouseEvt], at timeMs: UInt64, windowMs: UInt64 = 150) -> (x: Double, y: Double)? {
+        let samples = 7
+        var totalWeight = 0.0
+        var wx = 0.0
+        var wy = 0.0
+        var hitCount = 0
+
+        for i in 0..<samples {
+            let t: UInt64
+            if timeMs >= windowMs {
+                t = timeMs - windowMs + (windowMs * UInt64(i)) / UInt64(samples - 1)
+            } else {
+                t = (timeMs * UInt64(i)) / UInt64(samples - 1)
+            }
+            guard let pos = cursorPosition(events, at: t) else { continue }
+
+            let weight = exp(Double(i - (samples - 1)) / 2.0)
+            wx += pos.x * weight
+            wy += pos.y * weight
+            totalWeight += weight
+            hitCount += 1
+        }
+
+        guard hitCount > 0 else { return nil }
+        return (wx / totalWeight, wy / totalWeight)
     }
 
     private func cursorPosition(_ events: [MouseEvt], at timeMs: UInt64) -> (x: Double, y: Double)? {

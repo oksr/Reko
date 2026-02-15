@@ -72,7 +72,7 @@ function EditorContent() {
         // (sequence creation via migrateToSequence, effects defaults, etc.)
         const editorProject: EditorProject = {
           ...p,
-          tracks: { ...p.tracks, mouse_events: null },
+          tracks: p.tracks,
           sequence: (p as unknown as EditorProject).sequence ?? {
             clips: [],
             transitions: [],
