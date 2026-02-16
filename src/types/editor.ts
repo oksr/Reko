@@ -16,6 +16,7 @@ export interface EditorProject {
   }
   effects: Effects
   sequence: Sequence
+  autoZoomSettings?: AutoZoomSettings
 }
 
 export interface Effects {
@@ -27,13 +28,24 @@ export interface Effects {
 }
 
 export interface BackgroundConfig {
-  type: "solid" | "gradient" | "preset"
+  type: "solid" | "gradient" | "preset" | "image" | "wallpaper" | "custom"
   color: string
   gradientFrom: string
   gradientTo: string
   gradientAngle: number
   padding: number
   presetId: string | null
+  imageUrl: string | null
+  imageBlur: number
+  unsplashId: string | null
+  unsplashAuthor: string | null
+  wallpaperId: string | null
+}
+
+export interface WallpaperInfo {
+  id: string
+  name: string
+  path: string
 }
 
 export interface GradientPreset {
@@ -82,8 +94,20 @@ export interface ZoomKeyframe {
   x: number           // center of zoom region, normalized 0-1
   y: number           // center of zoom region, normalized 0-1
   scale: number       // 1.0 = no zoom, 2.0 = 2x zoom, etc.
-  easing: "ease-in-out" | "ease-in" | "ease-out" | "linear"
-  durationMs: number  // transition duration to reach this keyframe
+  easing: "spring" | "ease-out" | "linear"  // transition TO this keyframe
+  durationMs?: number  // legacy field (migration only)
+}
+
+export interface AutoZoomSettings {
+  zoomScale: number           // 1.5 - 3.0, default 2.0
+  transitionSpeed: "slow" | "medium" | "fast"  // maps to spring response
+  cursorFollowStrength: number  // 0.0 - 1.0, default 0.3
+}
+
+export const DEFAULT_AUTO_ZOOM_SETTINGS: AutoZoomSettings = {
+  zoomScale: 2.0,
+  transitionSpeed: "medium",
+  cursorFollowStrength: 0.3,
 }
 
 export interface Clip {
@@ -133,9 +157,21 @@ export interface CursorConfig {
   opacity: number     // 0-1
 }
 
+export type ExportResolution = "original" | "4k" | "1080p" | "720p"
+export type ExportQuality = "low" | "medium" | "high" | "best"
+
 export interface ExportConfig {
-  resolution: "original" | "1080p" | "720p"
+  resolution: ExportResolution
+  quality: ExportQuality
+  bitrate: number
   outputPath: string
+}
+
+export const BITRATE_MAP: Record<ExportQuality, Record<string, number>> = {
+  low:    { "720p": 5_000_000,  "1080p": 10_000_000, "4k": 25_000_000 },
+  medium: { "720p": 10_000_000, "1080p": 15_000_000, "4k": 35_000_000 },
+  high:   { "720p": 15_000_000, "1080p": 20_000_000, "4k": 50_000_000 },
+  best:   { "720p": 20_000_000, "1080p": 30_000_000, "4k": 80_000_000 },
 }
 
 export interface ExportProgress {
