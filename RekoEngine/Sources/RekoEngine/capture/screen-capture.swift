@@ -163,7 +163,11 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             throw CaptureError.displayNotFound
         }
 
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        // Exclude our own windows so the recording bar doesn't appear in capture
+        let ownPid = ProcessInfo.processInfo.processIdentifier
+        let ownWindows = content.windows.filter { $0.owningApplication?.processID == ownPid }
+
+        let filter = SCContentFilter(display: display, excludingWindows: ownWindows)
         let config = SCStreamConfiguration()
         config.width = display.width * 2
         config.height = display.height * 2
