@@ -52,6 +52,7 @@ export interface ProjectState {
     mic: string | null
     system_audio: string | null
     camera: string | null
+    mouse_events: string | null
   }
   timeline: {
     duration_ms: number

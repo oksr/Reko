@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { invoke } from "@tauri-apps/api/core"
-import { Circle, X } from "lucide-react"
+import { X } from "lucide-react"
 import type { WindowInfo } from "@/types"
 
 const DIM = "rgba(0,0,0,0.5)"

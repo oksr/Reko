@@ -26,7 +26,7 @@ export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTi
   const [popoverOpen, setPopoverOpen] = useState(false)
 
   const leftPct = msToPercent(segment.timeMs)
-  const widthPct = msToPercent(segment.timeMs + segment.durationMs) - leftPct
+  const widthPct = msToPercent(segment.timeMs + (segment.durationMs ?? 0)) - leftPct
   const isAuto = segment.x !== 0.5 || segment.y !== 0.5
 
   // Drag to move the whole segment
@@ -38,7 +38,7 @@ export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTi
       const rect = containerRef.current.getBoundingClientRect()
       const startX = e.clientX
       const origSeqTimeMs = segment.timeMs
-      const segDuration = segment.durationMs
+      const segDuration = segment.durationMs ?? 0
       // Snapshot the current kf data for cross-clip moves
       const kfData = { scale: segment.scale, x: segment.x, y: segment.y, easing: segment.easing }
       let lastClipIndex = clipIndex
@@ -118,12 +118,12 @@ export function ZoomSegment({ segment, index, clipIndex, kfIndex, clipRelativeTi
         const seqTimeMs = Math.round(pct * durationMs)
 
         if (edge === "left") {
-          const maxStart = seqStartMs + segment.durationMs - MIN_DURATION
+          const maxStart = seqStartMs + (segment.durationMs ?? 0) - MIN_DURATION
           const newSeqStart = Math.max(0, Math.min(seqTimeMs, maxStart))
           const delta = newSeqStart - seqStartMs
           updateClipZoomKeyframe(clipIndex, kfIndex, {
             timeMs: Math.max(0, origClipTime + delta),
-            durationMs: Math.max(MIN_DURATION, segment.durationMs - delta),
+            durationMs: Math.max(MIN_DURATION, (segment.durationMs ?? 0) - delta),
           })
         } else {
           const minEnd = seqStartMs + MIN_DURATION

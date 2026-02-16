@@ -20,7 +20,7 @@ export function sanitizeProject(project: EditorProject): EditorProject {
       zoomKeyframes: project.effects.zoomKeyframes.map((kf) => ({
         ...kf,
         timeMs: Math.round(kf.timeMs),
-        durationMs: Math.round(kf.durationMs),
+        ...(kf.durationMs != null && { durationMs: Math.round(kf.durationMs) }),
       })),
     },
     sequence: {
@@ -32,7 +32,7 @@ export function sanitizeProject(project: EditorProject): EditorProject {
         zoomKeyframes: clip.zoomKeyframes.map((kf) => ({
           ...kf,
           timeMs: Math.round(kf.timeMs),
-          durationMs: Math.round(kf.durationMs),
+          ...(kf.durationMs != null && { durationMs: Math.round(kf.durationMs) }),
         })),
       })),
       transitions: project.sequence.transitions.map((t) =>
@@ -73,7 +73,7 @@ export function useAutoSave() {
 
       timerRef.current = setTimeout(async () => {
         try {
-          await invoke("save_project_state", { project: sanitizeProject(state.project) })
+          await invoke("save_project_state", { project: sanitizeProject(state.project!) })
           pendingSaveRef.current = false
         } catch (e) {
           console.error("Auto-save failed:", e)

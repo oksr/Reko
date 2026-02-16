@@ -54,26 +54,33 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
 
   const { effects, tracks } = project
   const { background, cameraBubble, frame, cursor } = effects
+  const autoZoomSettings = project.autoZoomSettings
   const zoomState = interpolateZoomAtSequenceTime(
     currentTime,
     project.sequence.clips,
     project.sequence.transitions,
-    getSmoothedCursor
+    getSmoothedCursor,
+    autoZoomSettings?.cursorFollowStrength ?? 0,
+    autoZoomSettings?.transitionSpeed ?? "medium"
   )
+
+  const hasImageBg = (background.type === "image" || background.type === "wallpaper" || background.type === "custom") && background.imageUrl
 
   const bgStyle: React.CSSProperties =
     background.type === "gradient" || background.type === "preset"
       ? {
           background: `linear-gradient(${background.gradientAngle}deg, ${background.gradientFrom}, ${background.gradientTo})`,
         }
-      : { backgroundColor: background.color }
+      : hasImageBg
+        ? {} // handled by <img> element below
+        : { backgroundColor: background.color }
 
   // Multi-layer shadow for realistic depth
   const multiLayerShadow = frame.shadow
     ? [
-        `0 4px 6px rgba(0,0,0,${frame.shadowIntensity * 0.1})`,
-        `0 12px 24px rgba(0,0,0,${frame.shadowIntensity * 0.15})`,
-        `0 24px 48px rgba(0,0,0,${frame.shadowIntensity * 0.2})`,
+        `0 4px 6px rgba(0,0,0,${frame.shadowIntensity * 0.3})`,
+        `0 12px 24px rgba(0,0,0,${frame.shadowIntensity * 0.5})`,
+        `0 24px 48px rgba(0,0,0,${frame.shadowIntensity * 0.6})`,
       ].join(", ")
     : "none"
 
@@ -98,6 +105,20 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
         transition: "background 200ms ease",
       }}
     >
+      {/* Background image */}
+      {hasImageBg && (
+        <img
+          src={assetUrl(background.imageUrl ?? "")}
+          className="absolute inset-0 w-full h-full object-cover"
+          style={{
+            filter: background.imageBlur > 0 ? `blur(${background.imageBlur}px)` : undefined,
+            transform: background.imageBlur > 0 ? "scale(1.05)" : undefined, // prevent blur edge artifacts
+          }}
+          alt=""
+          draggable={false}
+        />
+      )}
+
       {/* Screen recording */}
       <div
         className="absolute inset-0 flex items-center justify-center"

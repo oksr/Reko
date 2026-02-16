@@ -14,11 +14,11 @@ export interface SequenceZoomSegment {
   kfIndex: number
   seqTimeMs: number
   clipRelativeTimeMs: number
-  durationMs: number
+  durationMs: number | undefined
   scale: number
   x: number
   y: number
-  easing: "ease-in-out" | "ease-in" | "ease-out" | "linear"
+  easing: "spring" | "ease-out" | "linear"
 }
 
 export function ZoomTrack({ ctx }: ZoomTrackProps) {
@@ -59,7 +59,7 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
   const isOverlapping = (timeMs: number, durationMs: number): boolean => {
     const end = timeMs + durationMs
     return segments.some((seg) => {
-      const segEnd = seg.seqTimeMs + seg.durationMs
+      const segEnd = seg.seqTimeMs + (seg.durationMs ?? 0)
       return timeMs < segEnd && end > seg.seqTimeMs
     })
   }
@@ -117,7 +117,7 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
         x: 0.5,
         y: 0.5,
         scale: 1.5,
-        easing: "ease-in-out",
+        easing: "ease-out",
       })
     },
     [ctx, sequence, segments, addZoomKeyframeToClip]

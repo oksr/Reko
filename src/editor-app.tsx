@@ -14,7 +14,9 @@ import { Timeline } from "@/components/editor/timeline"
 import { ExportButton } from "@/components/editor/export-button"
 import { Inspector } from "@/components/editor/inspector"
 import type { ProjectState } from "@/types"
-import type { EditorProject } from "@/types/editor"
+import type { EditorProject, WallpaperInfo } from "@/types/editor"
+
+const DEFAULT_WALLPAPER_ID = "12-Dark-thumbnail"
 
 function EditorContent() {
   const [error, setError] = useState<string | null>(null)
@@ -66,8 +68,14 @@ function EditorContent() {
       return
     }
 
-    invoke<ProjectState>("load_project", { projectId })
-      .then((p) => {
+    Promise.all([
+      invoke<ProjectState>("load_project", { projectId }),
+      invoke<WallpaperInfo[]>("list_wallpapers").catch(() => [] as WallpaperInfo[]),
+    ])
+      .then(([p, wallpapers]) => {
+        // Resolve default wallpaper path
+        const defaultWallpaper = wallpapers.find((w) => w.id === DEFAULT_WALLPAPER_ID)
+
         // Cast to EditorProject — loadProject() handles migration
         // (sequence creation via migrateToSequence, effects defaults, etc.)
         const editorProject: EditorProject = {
@@ -81,13 +89,18 @@ function EditorContent() {
           },
           effects: p.effects ?? {
             background: {
-              type: "gradient",
+              type: defaultWallpaper ? "wallpaper" : "gradient",
               color: "#1a1a2e",
               gradientFrom: "#1a1a2e",
               gradientTo: "#16213e",
               gradientAngle: 135,
-              padding: 8,
-              presetId: "midnight",
+              padding: 4,
+              presetId: defaultWallpaper ? null : "midnight",
+              imageUrl: defaultWallpaper?.path ?? null,
+              imageBlur: 0,
+              unsplashId: null,
+              unsplashAuthor: null,
+              wallpaperId: defaultWallpaper?.id ?? null,
             },
             cameraBubble: {
               visible: !!p.tracks.camera,
@@ -98,9 +111,9 @@ function EditorContent() {
               borderColor: "#ffffff",
             },
             frame: {
-              borderRadius: 12,
+              borderRadius: 8,
               shadow: true,
-              shadowIntensity: 0.5,
+              shadowIntensity: 0.7,
             },
             cursor: {
               enabled: false,
@@ -108,6 +121,12 @@ function EditorContent() {
               size: 40,
               color: "#facc15",
               opacity: 0.5,
+              clickHighlight: {
+                enabled: true,
+                color: "#ffffff",
+                opacity: 0.5,
+                size: 60,
+              },
             },
             zoomKeyframes: [],
           },
@@ -139,19 +158,24 @@ function EditorContent() {
   return (
     <div className="h-screen flex flex-col bg-background text-foreground">
       {/* Header */}
-      <header className="h-12 border-b flex items-center px-4 gap-3 shrink-0">
-        <h1 className="text-sm font-medium truncate">{project.name}</h1>
-        <div className="flex-1" />
-        <PlaybackControls videoSync={videoSync} />
-        <Separator orientation="vertical" className="h-6" />
-        <Button variant="ghost" size="icon" onClick={handleUndo} title="Undo (Cmd+Z)">
-          <Undo2 className="w-4 h-4" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleRedo} title="Redo (Cmd+Shift+Z)">
-          <Redo2 className="w-4 h-4" />
-        </Button>
-        <Separator orientation="vertical" className="h-6" />
-        <ExportButton />
+      <header className="h-12 border-b border-white/[0.06] flex items-center pr-4 pl-[78px] gap-3 shrink-0 relative">
+        <div data-tauri-drag-region className="absolute inset-0" />
+        <h1 data-tauri-drag-region className="absolute left-1/2 -translate-x-1/2 text-xs text-muted-foreground font-medium truncate pointer-events-none">
+          {project.name}
+        </h1>
+        <div data-tauri-drag-region className="flex-1" />
+        <div className="relative flex items-center gap-3">
+          <PlaybackControls videoSync={videoSync} />
+          <Separator orientation="vertical" className="h-6" />
+          <Button variant="ghost" size="icon" onClick={handleUndo} title="Undo (Cmd+Z)">
+            <Undo2 className="w-4 h-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={handleRedo} title="Redo (Cmd+Shift+Z)">
+            <Redo2 className="w-4 h-4" />
+          </Button>
+          <Separator orientation="vertical" className="h-6" />
+          <ExportButton />
+        </div>
       </header>
 
       {/* Main area */}
