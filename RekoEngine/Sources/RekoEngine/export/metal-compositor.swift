@@ -87,6 +87,12 @@ public struct ExportEffects {
     public var cursorColor: String     // hex
     public var cursorOpacity: Double   // 0-1
 
+    // Click highlight
+    public var clickHighlightEnabled: Bool
+    public var clickHighlightColor: String    // hex
+    public var clickHighlightOpacity: Double  // 0-1
+    public var clickHighlightSize: Double     // max ripple radius in px
+
     public init(bgColorFrom: String = "#1a1a2e", bgColorTo: String = "#16213e",
                 bgAngleDeg: Double = 135, bgIsSolid: Bool = false,
                 padding: Double = 8, borderRadius: Double = 12,
@@ -94,7 +100,11 @@ public struct ExportEffects {
                 camera: CameraEffects? = nil,
                 cursorEnabled: Bool = false, cursorType: String = "highlight",
                 cursorSize: Double = 40, cursorColor: String = "#ffcc00",
-                cursorOpacity: Double = 0.6) {
+                cursorOpacity: Double = 0.6,
+                clickHighlightEnabled: Bool = false,
+                clickHighlightColor: String = "#ffffff",
+                clickHighlightOpacity: Double = 0.5,
+                clickHighlightSize: Double = 30) {
         self.bgColorFrom = bgColorFrom
         self.bgColorTo = bgColorTo
         self.bgAngleDeg = bgAngleDeg
@@ -109,6 +119,10 @@ public struct ExportEffects {
         self.cursorSize = cursorSize
         self.cursorColor = cursorColor
         self.cursorOpacity = cursorOpacity
+        self.clickHighlightEnabled = clickHighlightEnabled
+        self.clickHighlightColor = clickHighlightColor
+        self.clickHighlightOpacity = clickHighlightOpacity
+        self.clickHighlightSize = clickHighlightSize
     }
 
     /// Convenience initializer that decodes from a loosely-typed dictionary
@@ -154,6 +168,12 @@ public struct ExportEffects {
         self.cursorSize = cur["size"] as? Double ?? 40
         self.cursorColor = cur["color"] as? String ?? "#ffcc00"
         self.cursorOpacity = cur["opacity"] as? Double ?? 0.6
+
+        let click = cur["clickHighlight"] as? [String: Any] ?? [:]
+        self.clickHighlightEnabled = click["enabled"] as? Bool ?? false
+        self.clickHighlightColor = click["color"] as? String ?? "#ffffff"
+        self.clickHighlightOpacity = click["opacity"] as? Double ?? 0.5
+        self.clickHighlightSize = click["size"] as? Double ?? 30
     }
 }
 
@@ -303,6 +323,16 @@ struct CompositeUniforms {
     var cursorOpacity: Float = 0       // 4
     var _pad3: SIMD2<Float> = .zero    // 8
     var cursorColor: SIMD4<Float> = .zero // 16
+
+    // Click highlight
+    var hasClick: Float = 0            // 4  (0 or 1)
+    var clickX: Float = 0             // 4  (normalised 0..1 within screen)
+    var clickY: Float = 0             // 4
+    var clickProgress: Float = 0      // 4  (0 = just clicked → 1 = fully faded)
+    var clickRadius: Float = 0        // 4  (pixels)
+    var clickOpacity: Float = 0       // 4
+    var _padClick: SIMD2<Float> = .zero // 8
+    var clickColor: SIMD4<Float> = .zero // 16
 }
 
 // MARK: - Embedded Metal Shader Source
@@ -355,6 +385,16 @@ struct CompositeUniforms {
     float  cursorOpacity;
     float2 _pad3;
     float4 cursorColor;
+
+    // Click highlight
+    float  hasClick;
+    float  clickX;
+    float  clickY;
+    float  clickProgress;
+    float  clickRadius;
+    float  clickOpacity;
+    float2 _padClick;
+    float4 clickColor;
 };
 
 struct VertexOut {
@@ -531,6 +571,39 @@ fragment float4 composite_fragment(
         }
     }
 
+    // ---- Layer 6: Click highlight ----
+    // Matches preview: expanding circle with border + radial-gradient fill.
+    // clickRadius is pre-scaled to export canvas pixels in Swift.
+    if (u.hasClick > 0.5) {
+        float2 clickPx = scrOrigin + float2(u.clickX, u.clickY) * scrSize;
+
+        if (u.zoomScale > 1.001) {
+            float2 zoomCenter = scrOrigin + float2(u.zoomCenterX, u.zoomCenterY) * scrSize;
+            clickPx = zoomCenter + (clickPx - zoomCenter) * u.zoomScale;
+        }
+
+        float clickDist = length(px - clickPx);
+        float fade = 1.0 - u.clickProgress;
+
+        // Scale 0.3 → 1.0 over animation (matches preview)
+        float currentRadius = u.clickRadius * (0.3 + u.clickProgress * 0.7);
+
+        // Border width scales with radius (preview 2px CSS ≈ retina-scaled)
+        float borderWidth = max(u.clickRadius * 0.07, 2.0);
+
+        // Border ring
+        float outerEdge = 1.0 - smoothstep(currentRadius - 0.5, currentRadius + 0.5, clickDist);
+        float innerEdge = 1.0 - smoothstep(currentRadius - borderWidth - 0.5, currentRadius - borderWidth + 0.5, clickDist);
+        float ring = outerEdge - innerEdge;
+
+        // Radial gradient fill (center → transparent at 70% radius)
+        float fillMask = 1.0 - smoothstep(0.0, currentRadius * 0.7, clickDist);
+        float fillAlpha = fillMask * 0.3;
+
+        float alpha = max(ring, fillAlpha * outerEdge) * u.clickOpacity * fade;
+        color = mix(color, u.clickColor, saturate(alpha));
+    }
+
     return color;
 }
 """
@@ -663,7 +736,10 @@ public final class MetalCompositor {
         zoomY: Double = 0.5,
         zoomScale: Double = 1.0,
         cursorX: Double? = nil,
-        cursorY: Double? = nil
+        cursorY: Double? = nil,
+        clickX: Double? = nil,
+        clickY: Double? = nil,
+        clickProgress: Double = 0.0
     ) throws -> CVPixelBuffer {
         guard let pool = outputPool else { throw ExportError.notConfigured }
 
@@ -742,6 +818,25 @@ public final class MetalCompositor {
             uniforms.cursorIsSpotlight = effects.cursorType == "spotlight" ? 1.0 : 0.0
             uniforms.cursorOpacity = Float(effects.cursorOpacity)
             uniforms.cursorColor = parseHexColor(effects.cursorColor)
+        }
+
+        // --- Click highlight ---
+        // In the preview, `size` is CSS px inside the video element.
+        // The video fills the frame, so size is relative to the displayed video.
+        // We express the radius as a fraction of screen-rect width and resolve
+        // to canvas pixels in the shader via scrSize.
+        // Preview video display width ≈ 640px (typical editor preview).
+        // `size / 640` gives the normalised fraction of screen width.
+        if effects.clickHighlightEnabled, let cx = clickX, let cy = clickY {
+            uniforms.hasClick = 1.0
+            uniforms.clickX = Float(cx)
+            uniforms.clickY = Float(cy)
+            uniforms.clickProgress = Float(clickProgress)
+            // Scale: size is in preview-CSS-px; convert to export canvas px
+            let scaledRadius = effects.clickHighlightSize * scrRect.size.width / 640.0
+            uniforms.clickRadius = Float(scaledRadius)
+            uniforms.clickOpacity = Float(effects.clickHighlightOpacity)
+            uniforms.clickColor = parseHexColor(effects.clickHighlightColor)
         }
 
         // --- Textures ---

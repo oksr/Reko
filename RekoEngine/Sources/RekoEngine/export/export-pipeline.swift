@@ -655,6 +655,7 @@ public final class ExportPipeline {
                     range.zoomKeyframes, at: clipRelativeTimeMs, cursor: smoothedCursor
                 )
                 let cursorPos = cursorPosition(mouseEvents, at: sourceTimeMs)
+                let click = activeClick(mouseEvents, at: sourceTimeMs)
 
                 let composited = try compositor.renderFrame(
                     screenPixelBuffer: screenBuffer,
@@ -666,7 +667,10 @@ public final class ExportPipeline {
                     zoomY: zy,
                     zoomScale: zs,
                     cursorX: cursorPos?.x,
-                    cursorY: cursorPos?.y
+                    cursorY: cursorPos?.y,
+                    clickX: click?.x,
+                    clickY: click?.y,
+                    clickProgress: click?.progress ?? 0.0
                 )
 
                 // Monotonic presentation time from globalFrameIndex
@@ -762,6 +766,31 @@ public final class ExportPipeline {
 
         guard hitCount > 0 else { return nil }
         return (wx / totalWeight, wy / totalWeight)
+    }
+
+    private let clickDurationMs: UInt64 = 500
+
+    private func activeClick(_ events: [MouseEvt], at timeMs: UInt64) -> (x: Double, y: Double, progress: Double)? {
+        guard !events.isEmpty else { return nil }
+
+        // Binary search for last event at or before timeMs
+        var lo = 0, hi = events.count - 1
+        while lo < hi {
+            let mid = (lo + hi + 1) / 2
+            if events[mid].timeMs <= timeMs { lo = mid } else { hi = mid - 1 }
+        }
+        if events[lo].timeMs > timeMs { return nil }
+
+        // Scan backwards from lo within clickDurationMs window
+        for i in stride(from: lo, through: 0, by: -1) {
+            let e = events[i]
+            if timeMs - e.timeMs > clickDurationMs { break }
+            if e.type == "click" || e.type == "rightClick" {
+                let progress = Double(timeMs - e.timeMs) / Double(clickDurationMs)
+                return (e.x, e.y, progress)
+            }
+        }
+        return nil
     }
 
     private func cursorPosition(_ events: [MouseEvt], at timeMs: UInt64) -> (x: Double, y: Double)? {
