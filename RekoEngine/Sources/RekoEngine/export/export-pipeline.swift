@@ -7,6 +7,8 @@ import CoreVideo
 
 public struct ExportConfig: Codable {
     public let resolution: String
+    public let quality: String
+    public let bitrate: Int
     public let outputPath: String
 }
 
@@ -36,9 +38,9 @@ public struct ExportZoomKeyframe {
     public let y: Double
     public let scale: Double
     public let easing: String
-    public let durationMs: UInt64
+    public let durationMs: UInt64?  // legacy, optional
 
-    public init(timeMs: UInt64, x: Double, y: Double, scale: Double, easing: String, durationMs: UInt64) {
+    public init(timeMs: UInt64, x: Double, y: Double, scale: Double, easing: String, durationMs: UInt64? = nil) {
         self.timeMs = timeMs
         self.x = x
         self.y = y
@@ -144,11 +146,11 @@ public enum ExportMath {
                     guard let t = (kf["timeMs"] as? NSNumber)?.uint64Value,
                           let x = (kf["x"] as? NSNumber)?.doubleValue,
                           let y = (kf["y"] as? NSNumber)?.doubleValue,
-                          let s = (kf["scale"] as? NSNumber)?.doubleValue,
-                          let d = (kf["durationMs"] as? NSNumber)?.uint64Value else { return nil }
+                          let s = (kf["scale"] as? NSNumber)?.doubleValue else { return nil }
+                    let d = (kf["durationMs"] as? NSNumber)?.uint64Value  // optional legacy field
                     return ExportZoomKeyframe(
                         timeMs: t, x: x, y: y, scale: s,
-                        easing: kf["easing"] as? String ?? "ease-in-out", durationMs: d
+                        easing: kf["easing"] as? String ?? "spring", durationMs: d
                     )
                 }
             }
@@ -174,55 +176,120 @@ public enum ExportMath {
         return (clips, transitions)
     }
 
-    // MARK: - Zoom Interpolation (segment model, matches frontend)
+    // MARK: - Spring Physics
 
-    private static let RAMP_MS: Double = 200.0
-
-    private static func easeInOut(_ t: Double) -> Double {
-        t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+    /// Spring response/damping for each speed setting
+    public static func springParams(speed: String) -> (response: Double, damping: Double) {
+        switch speed {
+        case "slow": return (1.4, 1.0)
+        case "fast": return (0.65, 0.95)
+        default: return (1.0, 1.0) // medium
+        }
     }
 
-    /// Segment-based zoom interpolation matching `interpolateZoom()` from `src/lib/zoom-interpolation.ts`.
-    /// Each keyframe defines a zoom segment: ramp in → hold → ramp out.
-    /// Between segments, zoom is 1x (no zoom).
+    /// Critically-damped (or underdamped) spring easing.
+    /// Must match Rust `spring_ease` and TypeScript `springEase` exactly.
+    public static func springEase(_ t: Double, response: Double, damping: Double) -> Double {
+        if t <= 0 { return 0 }
+        if t >= 1 { return 1 }
+
+        let omega = 2.0 * Double.pi / response
+        let actualT = t * response * 2.0
+        let decay = exp(-damping * omega * actualT)
+
+        if damping >= 1.0 {
+            // Critically damped
+            return 1.0 - (1.0 + omega * actualT) * decay
+        } else {
+            // Underdamped
+            let dampedFreq = omega * sqrt(1.0 - damping * damping)
+            return 1.0 - decay * (cos(dampedFreq * actualT) +
+                   (damping * omega / dampedFreq) * sin(dampedFreq * actualT))
+        }
+    }
+
+    private static func easeOut(_ t: Double) -> Double {
+        if t <= 0 { return 0 }
+        if t >= 1 { return 1 }
+        return 1.0 - (1.0 - t) * (1.0 - t)
+    }
+
+    private static func applyEasing(_ t: Double, easing: String, response: Double, damping: Double) -> Double {
+        switch easing {
+        case "spring": return springEase(t, response: response, damping: damping)
+        case "ease-out": return easeOut(t)
+        default: return t // linear
+        }
+    }
+
+    private static func applyCursorFollow(
+        x: Double, y: Double,
+        cursor: (x: Double, y: Double)?,
+        strength: Double, scale: Double
+    ) -> (x: Double, y: Double) {
+        guard strength > 0, scale > 1.0, let cursor = cursor else {
+            return (x, y)
+        }
+        let blend = strength * min((scale - 1.0) / 1.0, 1.0)
+        return (
+            x: x * (1.0 - blend) + cursor.x * blend,
+            y: y * (1.0 - blend) + cursor.y * blend
+        )
+    }
+
+    // MARK: - Zoom Interpolation (keyframe-pair model, matches frontend)
+
+    /// Keyframe-pair zoom interpolation matching `interpolateZoom()` from `src/lib/zoom-interpolation.ts`.
+    /// Finds the surrounding keyframe pair and interpolates using the target keyframe's easing.
     public static func interpolateZoom(
         _ keyframes: [ExportZoomKeyframe],
         at timeMs: UInt64,
-        cursor: (x: Double, y: Double)? = nil
+        cursor: (x: Double, y: Double)? = nil,
+        cursorFollowStrength: Double = 0,
+        transitionSpeed: String = "medium"
     ) -> (x: Double, y: Double, scale: Double) {
         let none = (x: 0.5, y: 0.5, scale: 1.0)
         guard !keyframes.isEmpty else { return none }
 
-        for kf in keyframes {
-            let segEnd = kf.timeMs + kf.durationMs
-            guard timeMs >= kf.timeMs && timeMs < segEnd else { continue }
+        let (response, damping) = springParams(speed: transitionSpeed)
 
-            // Inside this segment
-            let elapsed = Double(timeMs - kf.timeMs)
-            let ramp = min(RAMP_MS, Double(kf.durationMs) / 2.0)
-
-            let t: Double
-            if elapsed < ramp {
-                // Ramp in
-                t = easeInOut(elapsed / ramp)
-            } else if elapsed > Double(kf.durationMs) - ramp {
-                // Ramp out
-                t = easeInOut(Double(segEnd - timeMs) / ramp)
-            } else {
-                // Hold
-                t = 1.0
-            }
-
-            let targetX = cursor?.x ?? kf.x
-            let targetY = cursor?.y ?? kf.y
-            return (
-                x: none.x + (targetX - none.x) * t,
-                y: none.y + (targetY - none.y) * t,
-                scale: none.scale + (kf.scale - none.scale) * t
-            )
+        // Before first keyframe
+        if timeMs <= keyframes[0].timeMs {
+            let kf = keyframes[0]
+            let pos = applyCursorFollow(x: kf.x, y: kf.y, cursor: cursor, strength: cursorFollowStrength, scale: kf.scale)
+            return (x: pos.x, y: pos.y, scale: kf.scale)
         }
 
-        return none
+        // After last keyframe
+        if timeMs >= keyframes[keyframes.count - 1].timeMs {
+            let kf = keyframes[keyframes.count - 1]
+            let pos = applyCursorFollow(x: kf.x, y: kf.y, cursor: cursor, strength: cursorFollowStrength, scale: kf.scale)
+            return (x: pos.x, y: pos.y, scale: kf.scale)
+        }
+
+        // Find surrounding pair
+        var nextIdx = 0
+        for (i, kf) in keyframes.enumerated() {
+            if kf.timeMs > timeMs {
+                nextIdx = i
+                break
+            }
+        }
+
+        let prev = keyframes[nextIdx - 1]
+        let next = keyframes[nextIdx]
+
+        let duration = Double(next.timeMs - prev.timeMs)
+        let rawT = duration > 0 ? Double(timeMs - prev.timeMs) / duration : 1.0
+
+        let easedT = applyEasing(rawT, easing: next.easing, response: response, damping: damping)
+
+        let x = prev.x + (next.x - prev.x) * easedT
+        let y = prev.y + (next.y - prev.y) * easedT
+        let scale = prev.scale + (next.scale - prev.scale) * easedT
+
+        let pos = applyCursorFollow(x: x, y: y, cursor: cursor, strength: cursorFollowStrength, scale: scale)
+        return (x: pos.x, y: pos.y, scale: scale)
     }
 
     // MARK: - Audio Timestamp Remapping
@@ -426,11 +493,11 @@ public final class ExportPipeline {
                 guard let t = kf["timeMs"] as? UInt64,
                       let x = kf["x"] as? Double,
                       let y = kf["y"] as? Double,
-                      let s = kf["scale"] as? Double,
-                      let d = kf["durationMs"] as? UInt64 else { return nil }
+                      let s = kf["scale"] as? Double else { return nil }
+                let d = kf["durationMs"] as? UInt64  // optional legacy field
                 return ExportZoomKeyframe(
                     timeMs: t, x: x, y: y, scale: s,
-                    easing: kf["easing"] as? String ?? "ease-in-out", durationMs: d
+                    easing: kf["easing"] as? String ?? "spring", durationMs: d
                 )
             }
         }()
@@ -483,7 +550,7 @@ public final class ExportPipeline {
             AVVideoWidthKey: outSize.width,
             AVVideoHeightKey: outSize.height,
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 20_000_000,
+                AVVideoAverageBitRateKey: exportConfig.bitrate,
                 AVVideoMaxKeyFrameIntervalKey: Int(fps),
                 AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
             ] as [String: Any],

@@ -168,6 +168,9 @@ public enum LayoutMath {
     public static func outputSize(resolution: String, recordingWidth: Int, recordingHeight: Int) -> (width: Int, height: Int) {
         guard recordingHeight > 0 else { return (width: recordingWidth, height: recordingHeight) }
         switch resolution {
+        case "4k":
+            let w = Int(round(2160.0 * Double(recordingWidth) / Double(recordingHeight)))
+            return (width: w & ~1, height: 2160)
         case "1080p":
             let w = Int(round(1080.0 * Double(recordingWidth) / Double(recordingHeight)))
             return (width: w & ~1, height: 1080)
