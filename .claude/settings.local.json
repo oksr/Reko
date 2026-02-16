@@ -38,7 +38,8 @@
       "Bash(git -C /Users/ofekseroussi/Dev/reko show 3400fb3:src-tauri/tauri.conf.json)",
       "Bash(sqlite3:*)",
       "Bash(sips:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(npm run lint:*)"
     ]
   }
 }
