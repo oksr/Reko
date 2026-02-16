@@ -72,7 +72,7 @@ function EditorContent() {
       invoke<ProjectState>("load_project", { projectId }),
       invoke<WallpaperInfo[]>("list_wallpapers").catch(() => [] as WallpaperInfo[]),
     ])
-      .then(([p, wallpapers]) => {
+      .then(async ([p, wallpapers]) => {
         // Resolve default wallpaper path
         const defaultWallpaper = wallpapers.find((w) => w.id === DEFAULT_WALLPAPER_ID)
 
@@ -125,12 +125,33 @@ function EditorContent() {
                 enabled: true,
                 color: "#ffffff",
                 opacity: 0.5,
-                size: 60,
+                size: 30,
               },
             },
             zoomKeyframes: [],
           },
         }
+
+        // Resolve wallpaper imageUrl from wallpaperId for wallpaper backgrounds
+        const bg = editorProject.effects.background
+        if (bg.type === "wallpaper" && bg.wallpaperId && !bg.imageUrl) {
+          try {
+            const resolvedPath = await invoke<string>("resolve_wallpaper_path", {
+              wallpaperId: bg.wallpaperId,
+            })
+            editorProject.effects = {
+              ...editorProject.effects,
+              background: { ...bg, imageUrl: resolvedPath },
+            }
+          } catch {
+            // Wallpaper not found — fall back to gradient
+            editorProject.effects = {
+              ...editorProject.effects,
+              background: { ...bg, type: "gradient", presetId: "midnight" },
+            }
+          }
+        }
+
         loadProject(editorProject)
       })
       .catch((e) => setError(String(e)))

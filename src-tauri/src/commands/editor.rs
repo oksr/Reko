@@ -1,5 +1,6 @@
 use tauri::webview::WebviewWindowBuilder;
-use tauri::Manager;
+use tauri::{LogicalPosition, Manager, TitleBarStyle};
+use tauri::path::BaseDirectory;
 
 use crate::autozoom;
 use crate::project;
@@ -37,6 +38,9 @@ pub fn open_editor(
         tauri::WebviewUrl::App(url.into()),
     )
     .title(&title)
+    .title_bar_style(TitleBarStyle::Overlay)
+    .hidden_title(true)
+    .traffic_light_position(LogicalPosition::new(16.0, 18.0))
     .inner_size(1400.0, 900.0)
     .center()
     .build()
@@ -97,7 +101,11 @@ pub fn save_project_state(project: project::ProjectState) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub fn generate_auto_zoom(project_id: String) -> Result<Vec<project::ZoomKeyframe>, String> {
+pub fn generate_auto_zoom(
+    project_id: String,
+    zoom_scale: f64,
+    transition_speed: String,
+) -> Result<Vec<project::ZoomKeyframe>, String> {
     let raw = project::raw_dir(&project_id);
     let mouse_path = raw.join("mouse_events.jsonl");
 
@@ -119,11 +127,111 @@ pub fn generate_auto_zoom(project_id: String) -> Result<Vec<project::ZoomKeyfram
 
     Ok(autozoom::generate_zoom_keyframes(
         &events,
-        2.0,    // zoom_scale
-        1000,   // segment_duration_ms
-        500,    // cluster_ms
+        zoom_scale,
+        &transition_speed,
         video_duration_ms,
     ))
+}
+
+#[tauri::command]
+pub fn download_background_image(
+    project_id: String,
+    url: String,
+    filename: String,
+) -> Result<String, String> {
+    let raw = project::raw_dir(&project_id);
+    std::fs::create_dir_all(&raw).map_err(|e| e.to_string())?;
+
+    let dest = raw.join(&filename);
+
+    let response = ureq::get(&url)
+        .call()
+        .map_err(|e| format!("Download failed: {}", e))?;
+
+    let mut reader = response.into_reader();
+    let mut file = std::fs::File::create(&dest).map_err(|e| e.to_string())?;
+    std::io::copy(&mut reader, &mut file).map_err(|e| e.to_string())?;
+
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WallpaperInfo {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+}
+
+fn wallpapers_resource_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    if cfg!(debug_assertions) {
+        let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/wallpapers");
+        if dir.exists() {
+            return Ok(dir);
+        }
+    }
+    app.path()
+        .resolve("resources/wallpapers", BaseDirectory::Resource)
+        .map_err(|e| format!("Failed to resolve wallpapers resource dir: {}", e))
+}
+
+fn scan_wallpapers(dir: &std::path::Path) -> Result<Vec<WallpaperInfo>, String> {
+    let mut wallpapers = Vec::new();
+    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if let Some(ext) = path.extension() {
+            let ext = ext.to_string_lossy().to_lowercase();
+            if ["jpg", "jpeg", "png", "webp"].contains(&ext.as_str()) {
+                let name = path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                wallpapers.push(WallpaperInfo {
+                    id: name.clone(),
+                    name,
+                    path: path.to_string_lossy().to_string(),
+                });
+            }
+        }
+    }
+    wallpapers.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(wallpapers)
+}
+
+#[tauri::command]
+pub fn list_wallpapers(app: tauri::AppHandle) -> Result<Vec<WallpaperInfo>, String> {
+    let wallpapers_dir = wallpapers_resource_dir(&app)?;
+    scan_wallpapers(&wallpapers_dir)
+}
+
+#[tauri::command]
+pub fn resolve_wallpaper_path(app: tauri::AppHandle, wallpaper_id: String) -> Result<String, String> {
+    let wallpapers_dir = wallpapers_resource_dir(&app)?;
+    for entry in std::fs::read_dir(&wallpapers_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if let Some(stem) = path.file_stem() {
+            if stem.to_string_lossy() == wallpaper_id {
+                return Ok(path.to_string_lossy().to_string());
+            }
+        }
+    }
+    Err(format!("Wallpaper '{}' not found", wallpaper_id))
+}
+
+#[tauri::command]
+pub fn copy_background_image(
+    project_id: String,
+    source_path: String,
+    filename: String,
+) -> Result<String, String> {
+    let raw = project::raw_dir(&project_id);
+    std::fs::create_dir_all(&raw).map_err(|e| e.to_string())?;
+    let dest = raw.join(&filename);
+    std::fs::copy(&source_path, &dest).map_err(|e| e.to_string())?;
+    Ok(dest.to_string_lossy().to_string())
 }
 
 #[cfg(test)]

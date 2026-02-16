@@ -31,7 +31,8 @@
         "scope": {
           "allow": [
             "$APPDATA/com.reko.app/**",
-            "$HOME/Library/Application Support/com.reko.app/**"
+            "$HOME/Library/Application Support/com.reko.app/**",
+            "$RESOURCE/**"
           ]
         }
       }
@@ -47,6 +48,7 @@
       "icons/icon.png",
       "icons/icon.icns"
     ],
+    "resources": ["resources/wallpapers/*"],
     "macOS": {
       "minimumSystemVersion": "14.0",
       "entitlements": "./Entitlements.plist"

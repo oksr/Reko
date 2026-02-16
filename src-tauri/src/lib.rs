@@ -26,6 +26,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(RecordingState {
             active_session_id: Mutex::new(None),
             active_project_id: Mutex::new(None),
@@ -53,6 +54,10 @@ pub fn run() {
             commands::export::cancel_export,
             commands::export::finish_export,
             commands::editor::generate_auto_zoom,
+            commands::editor::download_background_image,
+            commands::editor::list_wallpapers,
+            commands::editor::resolve_wallpaper_path,
+            commands::editor::copy_background_image,
             get_home_dir,
             commands::permissions::check_permission,
             commands::permissions::open_permission_settings,
