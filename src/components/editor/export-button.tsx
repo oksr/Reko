@@ -1,17 +1,76 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { invoke } from "@tauri-apps/api/core"
+import { save } from "@tauri-apps/plugin-dialog"
 import { Button } from "@/components/ui/button"
-import { Download, X, Check, Loader2 } from "lucide-react"
+import { Download, X, Check, Loader2, FolderOpen } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/stores/editor-store"
 import { sanitizeProject } from "@/hooks/use-auto-save"
-import type { ExportConfig, ExportProgress } from "@/types/editor"
+import {
+    BITRATE_MAP,
+    type ExportResolution,
+    type ExportQuality,
+    type ExportConfig,
+    type ExportProgress,
+} from "@/types/editor"
 
-type Resolution = "original" | "1080p" | "720p"
+function PillGroup<T extends string>({
+    options,
+    value,
+    onChange,
+}: {
+    options: { label: string; value: T }[]
+    value: T
+    onChange: (v: T) => void
+}) {
+    return (
+        <div className="flex gap-1">
+            {options.map((opt) => (
+                <button
+                    key={opt.value}
+                    onClick={() => onChange(opt.value)}
+                    className={cn(
+                        "px-3 py-1.5 text-xs font-medium rounded-md transition-colors",
+                        value === opt.value
+                            ? "bg-white/10 text-white"
+                            : "text-muted-foreground hover:text-white hover:bg-white/5"
+                    )}
+                >
+                    {opt.label}
+                </button>
+            ))}
+        </div>
+    )
+}
+
+function resolveBitrate(
+    resolution: ExportResolution,
+    quality: ExportQuality
+): number {
+    const column = resolution === "original" ? "4k" : resolution
+    return BITRATE_MAP[quality][column] ?? BITRATE_MAP[quality]["1080p"]
+}
+
+const RESOLUTION_OPTIONS: { label: string; value: ExportResolution }[] = [
+    { label: "Original", value: "original" },
+    { label: "4K", value: "4k" },
+    { label: "1080p", value: "1080p" },
+    { label: "720p", value: "720p" },
+]
+
+const QUALITY_OPTIONS: { label: string; value: ExportQuality }[] = [
+    { label: "Low", value: "low" },
+    { label: "Medium", value: "medium" },
+    { label: "High", value: "high" },
+    { label: "Best", value: "best" },
+]
 
 export function ExportButton() {
     const project = useEditorStore((s) => s.project)
     const [showPanel, setShowPanel] = useState(false)
-    const [resolution, setResolution] = useState<Resolution>("1080p")
+    const [resolution, setResolution] = useState<ExportResolution>("1080p")
+    const [quality, setQuality] = useState<ExportQuality>("high")
+    const [outputPath, setOutputPath] = useState("")
     const [exporting, setExporting] = useState(false)
     const [progress, setProgress] = useState<ExportProgress | null>(null)
     const [result, setResult] = useState<string | null>(null)
@@ -28,6 +87,15 @@ export function ExportButton() {
     // Clean up polling on unmount
     useEffect(() => stopPolling, [stopPolling])
 
+    // Initialize output path on mount
+    useEffect(() => {
+        invoke<string>("get_home_dir").then((home) => {
+            const filename =
+                project?.name.replace(/[/\\:"]/g, "_") ?? "export"
+            setOutputPath(`${home}/Desktop/${filename}.mp4`)
+        })
+    }, [project?.name])
+
     if (!project) return null
 
     const handleExport = async () => {
@@ -42,12 +110,12 @@ export function ExportButton() {
                 project: sanitizeProject(project),
             })
 
-            // Build output path
-            const home = await invoke<string>("get_home_dir")
-            const filename = project.name.replace(/[/\\:"]/g, "_")
-            const outputPath = `${home}/Desktop/${filename}.mp4`
-
-            const config: ExportConfig = { resolution, outputPath }
+            const config: ExportConfig = {
+                resolution,
+                quality,
+                bitrate: resolveBitrate(resolution, quality),
+                outputPath,
+            }
             await invoke<number>("start_export", {
                 projectId: project.id,
                 exportConfig: config,
@@ -56,7 +124,8 @@ export function ExportButton() {
             // Start polling progress
             pollRef.current = setInterval(async () => {
                 try {
-                    const prog = await invoke<ExportProgress>("get_export_progress")
+                    const prog =
+                        await invoke<ExportProgress>("get_export_progress")
                     setProgress(prog)
 
                     if (prog.phase === "done") {
@@ -64,7 +133,10 @@ export function ExportButton() {
                         setExporting(false)
                         setResult(config.outputPath)
                         await invoke("finish_export")
-                        setTimeout(() => setResult(null), 5000)
+                        setTimeout(() => {
+                            setResult(null)
+                            setShowPanel(false)
+                        }, 5000)
                     } else if (prog.phase === "error") {
                         stopPolling()
                         setExporting(false)
@@ -85,75 +157,154 @@ export function ExportButton() {
         stopPolling()
         try {
             await invoke("cancel_export")
-        } catch { /* ignore */ }
+        } catch {
+            /* ignore */
+        }
         setExporting(false)
         setProgress(null)
     }
 
-    // Progress bar view
-    if (exporting && progress) {
-        const pct = Math.round(progress.percentage)
-        const eta = progress.estimatedRemainingMs
-            ? `${Math.ceil(progress.estimatedRemainingMs / 1000)}s remaining`
-            : "Estimating..."
-        return (
-            <div className="flex items-center gap-3">
-                <div className="flex-1 min-w-[160px]">
-                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                        <span>{progress.phase === "finalizing" ? "Finalizing..." : `${pct}%`}</span>
+    const handleChooseDestination = async () => {
+        const chosen = await save({
+            defaultPath: outputPath,
+            filters: [{ name: "MP4 Video", extensions: ["mp4"] }],
+        })
+        if (chosen) setOutputPath(chosen)
+    }
+
+    // Truncated display path — show last two segments
+    const displayPath = outputPath
+        ? outputPath
+              .split("/")
+              .filter(Boolean)
+              .slice(-2)
+              .join("/")
+        : "..."
+
+    const renderPanelContent = () => {
+        // Completion state
+        if (result) {
+            return (
+                <div className="flex flex-col items-center justify-center py-6 gap-2">
+                    <div className="w-10 h-10 rounded-full bg-green-500/15 flex items-center justify-center">
+                        <Check className="w-5 h-5 text-green-400" />
+                    </div>
+                    <span className="text-sm text-green-400 font-medium">
+                        Saved!
+                    </span>
+                </div>
+            )
+        }
+
+        // Progress state
+        if (exporting) {
+            const pct = progress ? Math.round(progress.percentage) : 0
+            const eta = progress?.estimatedRemainingMs
+                ? `${Math.ceil(progress.estimatedRemainingMs / 1000)}s remaining`
+                : "Estimating..."
+            const phaseLabel =
+                progress?.phase === "finalizing" ? "Finalizing..." : `${pct}%`
+
+            return (
+                <div className="flex flex-col gap-3">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{phaseLabel}</span>
                         <span>{eta}</span>
                     </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div className="h-2 bg-white/5 rounded-full overflow-hidden">
                         <div
                             className="h-full bg-primary rounded-full transition-all duration-200"
                             style={{ width: `${pct}%` }}
                         />
                     </div>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full text-muted-foreground hover:text-white"
+                        onClick={handleCancel}
+                    >
+                        <X className="w-4 h-4 mr-1.5" />
+                        Cancel
+                    </Button>
                 </div>
-                <Button size="sm" variant="ghost" onClick={handleCancel}>
-                    <X className="w-4 h-4" />
+            )
+        }
+
+        // Default config state
+        return (
+            <div className="flex flex-col gap-4">
+                {/* Resolution */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                        Resolution
+                    </span>
+                    <PillGroup
+                        options={RESOLUTION_OPTIONS}
+                        value={resolution}
+                        onChange={setResolution}
+                    />
+                </div>
+
+                {/* Quality */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                        Quality
+                    </span>
+                    <PillGroup
+                        options={QUALITY_OPTIONS}
+                        value={quality}
+                        onChange={setQuality}
+                    />
+                </div>
+
+                {/* Destination */}
+                <div className="flex flex-col gap-1.5">
+                    <span className="text-xs text-muted-foreground">
+                        Save to
+                    </span>
+                    <div className="flex items-center gap-2">
+                        <span className="flex-1 text-xs text-white/70 truncate min-w-0">
+                            {displayPath}
+                        </span>
+                        <button
+                            onClick={handleChooseDestination}
+                            className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-white hover:bg-white/5 transition-colors"
+                        >
+                            <FolderOpen className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Error */}
+                {error && (
+                    <span className="text-xs text-destructive">{error}</span>
+                )}
+
+                {/* Export button */}
+                <Button
+                    className="w-full"
+                    size="sm"
+                    onClick={handleExport}
+                    disabled={exporting}
+                >
+                    <Download className="w-4 h-4 mr-1.5" />
+                    Export
                 </Button>
             </div>
         )
     }
 
     return (
-        <div className="flex items-center gap-2">
-            {error && <span className="text-xs text-destructive">{error}</span>}
-            {result && (
-                <span className="text-xs text-green-400 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Saved to Desktop
-                </span>
-            )}
+        <div className="relative">
+            <Button size="sm" onClick={() => setShowPanel((v) => !v)}>
+                <Download className="w-4 h-4 mr-1" />
+                Export
+            </Button>
 
-            {showPanel ? (
-                <div className="flex items-center gap-2">
-                    <select
-                        value={resolution}
-                        onChange={(e) => setResolution(e.target.value as Resolution)}
-                        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    >
-                        <option value="original">Original</option>
-                        <option value="1080p">1080p</option>
-                        <option value="720p">720p</option>
-                    </select>
-                    <Button size="sm" onClick={handleExport} disabled={exporting}>
-                        {exporting ? (
-                            <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                        ) : (
-                            <Download className="w-4 h-4 mr-1" />
-                        )}
-                        Export
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowPanel(false)}>
-                        <X className="w-4 h-4" />
-                    </Button>
+            {showPanel && (
+                <div className="absolute top-full right-0 mt-2 w-[320px] bg-[#1a1a1a] border border-white/10 rounded-xl p-4 shadow-2xl z-50">
+                    {renderPanelContent()}
                 </div>
-            ) : (
-                <Button size="sm" onClick={() => setShowPanel(true)}>
-                    <Download className="w-4 h-4 mr-1" />
-                    Export
-                </Button>
             )}
         </div>
     )
