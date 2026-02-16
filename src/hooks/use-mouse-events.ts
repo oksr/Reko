@@ -62,5 +62,33 @@ export function useMouseEvents() {
 
   const cursorPos = getCursorAt(currentTime)
 
-  return { cursorPos, events, getCursorAt }
+  // Find click events near the current time (within the ripple animation window)
+  const getClicksInRange = useCallback(
+    (startMs: number, endMs: number): Array<{ timeMs: number; x: number; y: number }> => {
+      if (events.length === 0) return []
+
+      // Binary search for first event >= startMs
+      let lo = 0
+      let hi = events.length - 1
+      while (lo < hi) {
+        const mid = Math.floor((lo + hi) / 2)
+        if (events[mid].timeMs < startMs) {
+          lo = mid + 1
+        } else {
+          hi = mid
+        }
+      }
+
+      const clicks: Array<{ timeMs: number; x: number; y: number }> = []
+      for (let i = lo; i < events.length && events[i].timeMs <= endMs; i++) {
+        if (events[i].type === "click" || events[i].type === "rightClick") {
+          clicks.push({ timeMs: events[i].timeMs, x: events[i].x, y: events[i].y })
+        }
+      }
+      return clicks
+    },
+    [events]
+  )
+
+  return { cursorPos, events, getCursorAt, getClicksInRange }
 }
