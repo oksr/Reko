@@ -13,6 +13,8 @@ pub struct ProjectState {
     pub effects: Option<Effects>,
     #[serde(default)]
     pub sequence: Option<Sequence>,
+    #[serde(default, rename = "autoZoomSettings", skip_serializing_if = "Option::is_none")]
+    pub auto_zoom_settings: Option<AutoZoomSettings>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -38,6 +40,16 @@ pub struct BackgroundConfig {
     pub gradient_angle: f64,
     pub padding: f64,
     pub preset_id: Option<String>,
+    #[serde(default)]
+    pub image_url: Option<String>,
+    #[serde(default)]
+    pub image_blur: Option<f64>,
+    #[serde(default)]
+    pub unsplash_id: Option<String>,
+    #[serde(default)]
+    pub unsplash_author: Option<String>,
+    #[serde(default)]
+    pub wallpaper_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -77,8 +89,17 @@ pub struct ZoomKeyframe {
     pub x: f64,                   // 0-1 normalized
     pub y: f64,                   // 0-1 normalized
     pub scale: f64,               // 1.0 = no zoom
-    pub easing: String,           // "ease-in-out" | "ease-in" | "ease-out" | "linear"
-    pub duration_ms: u64,
+    pub easing: String,           // "spring" | "ease-out" | "linear"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>, // legacy field, only present in old projects
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoZoomSettings {
+    pub zoom_scale: f64,               // 1.5 - 3.0
+    pub transition_speed: String,      // "slow" | "medium" | "fast"
+    pub cursor_follow_strength: f64,   // 0.0 - 1.0
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -148,7 +169,9 @@ pub struct OverlaySize {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportConfig {
-    pub resolution: String,        // "original" | "1080p" | "720p"
+    pub resolution: String,        // "original" | "4k" | "1080p" | "720p"
+    pub quality: String,           // "low" | "medium" | "high" | "best"
+    pub bitrate: u64,              // bits per second
     pub output_path: String,
 }
 
@@ -263,8 +286,13 @@ mod tests {
                     gradient_from: "#1a1a2e".to_string(),
                     gradient_to: "#16213e".to_string(),
                     gradient_angle: 135.0,
-                    padding: 8.0,
+                    padding: 4.0,
                     preset_id: Some("midnight".to_string()),
+                    image_url: None,
+                    image_blur: None,
+                    unsplash_id: None,
+                    unsplash_author: None,
+                    wallpaper_id: None,
                 },
                 camera_bubble: CameraBubbleConfig {
                     visible: true,
@@ -275,14 +303,15 @@ mod tests {
                     border_color: "#ffffff".to_string(),
                 },
                 frame: FrameConfig {
-                    border_radius: 12.0,
+                    border_radius: 8.0,
                     shadow: true,
-                    shadow_intensity: 0.5,
+                    shadow_intensity: 0.7,
                 },
                 cursor: None,
                 zoom_keyframes: None,
             }),
             sequence: None,
+            auto_zoom_settings: None,
         };
         let json = serde_json::to_string(&project).unwrap();
         // Verify camelCase serialization
@@ -292,7 +321,7 @@ mod tests {
         assert!(json.contains("shadowIntensity"));
         // Round-trip
         let parsed: ProjectState = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.effects.unwrap().frame.border_radius, 12.0);
+        assert_eq!(parsed.effects.unwrap().frame.border_radius, 8.0);
     }
 
     #[test]
@@ -339,22 +368,33 @@ mod tests {
             x: 0.5,
             y: 0.3,
             scale: 2.0,
-            easing: "ease-in-out".to_string(),
-            duration_ms: 500,
+            easing: "spring".to_string(),
+            duration_ms: None,
         };
         let json = serde_json::to_string(&kf).unwrap();
         assert!(json.contains("\"timeMs\":5000"));
-        assert!(json.contains("\"durationMs\":500"));
+        assert!(!json.contains("durationMs")); // None should be skipped
         let parsed: ZoomKeyframe = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.scale, 2.0);
+        assert!(parsed.duration_ms.is_none());
     }
 
     #[test]
     fn test_effects_with_cursor_and_zoom() {
-        let json = r##"{"background":{"type":"solid","color":"#000","gradientFrom":"#000","gradientTo":"#000","gradientAngle":0,"padding":8,"presetId":null},"cameraBubble":{"visible":false,"position":"bottom-right","size":15,"shape":"circle","borderWidth":3,"borderColor":"#fff"},"frame":{"borderRadius":12,"shadow":true,"shadowIntensity":0.5},"cursor":{"type":"highlight","enabled":true,"size":40,"color":"#ffcc00","opacity":0.6},"zoomKeyframes":[{"timeMs":5000,"x":0.5,"y":0.3,"scale":2.0,"easing":"ease-in-out","durationMs":500}]}"##;
+        let json = r##"{"background":{"type":"solid","color":"#000","gradientFrom":"#000","gradientTo":"#000","gradientAngle":0,"padding":8,"presetId":null},"cameraBubble":{"visible":false,"position":"bottom-right","size":15,"shape":"circle","borderWidth":3,"borderColor":"#fff"},"frame":{"borderRadius":12,"shadow":true,"shadowIntensity":0.5},"cursor":{"type":"highlight","enabled":true,"size":40,"color":"#ffcc00","opacity":0.6},"zoomKeyframes":[{"timeMs":5000,"x":0.5,"y":0.3,"scale":2.0,"easing":"spring"}]}"##;
         let parsed: Effects = serde_json::from_str(json).unwrap();
         assert!(parsed.cursor.is_some());
-        assert_eq!(parsed.zoom_keyframes.unwrap().len(), 1);
+        let kfs = parsed.zoom_keyframes.unwrap();
+        assert_eq!(kfs.len(), 1);
+        assert!(kfs[0].duration_ms.is_none());
+    }
+
+    #[test]
+    fn test_zoom_keyframe_legacy_with_duration_ms() {
+        // Old projects have durationMs — should still parse
+        let json = r#"{"timeMs":5000,"x":0.5,"y":0.3,"scale":2.0,"easing":"ease-in-out","durationMs":500}"#;
+        let parsed: ZoomKeyframe = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.duration_ms, Some(500));
     }
 
     #[test]
@@ -368,14 +408,19 @@ mod tests {
     #[test]
     fn test_export_config_serialization() {
         let config = ExportConfig {
-            resolution: "1080p".to_string(),
+            resolution: "4k".to_string(),
+            quality: "high".to_string(),
+            bitrate: 50_000_000,
             output_path: "/Users/test/Desktop/output.mp4".to_string(),
         };
         let json = serde_json::to_string(&config).unwrap();
-        assert!(json.contains("resolution"));
-        assert!(json.contains("outputPath"));
+        assert!(json.contains("\"resolution\":\"4k\""));
+        assert!(json.contains("\"quality\":\"high\""));
+        assert!(json.contains("\"bitrate\":50000000"));
+        assert!(json.contains("\"outputPath\""));
         let parsed: ExportConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.resolution, "1080p");
+        assert_eq!(parsed.resolution, "4k");
+        assert_eq!(parsed.bitrate, 50_000_000);
     }
 
     #[test]

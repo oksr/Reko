@@ -61,10 +61,13 @@ mod tests {
     fn test_export_config_to_json() {
         let config = ExportConfig {
             resolution: "1080p".to_string(),
+            quality: "high".to_string(),
+            bitrate: 20_000_000,
             output_path: "/Users/test/Desktop/output.mp4".to_string(),
         };
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("\"resolution\":\"1080p\""));
         assert!(json.contains("\"outputPath\""));
+        assert!(json.contains("\"bitrate\":20000000"));
     }
 }
