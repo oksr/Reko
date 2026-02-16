@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import { assetUrl } from "@/lib/asset-url"
 import { interpolateZoomAtSequenceTime } from "@/lib/zoom-interpolation"
 import { getSmoothedCursorAt } from "@/lib/cursor-smoothing"
@@ -44,16 +44,26 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
     }
   }, [clampClips])
 
-  const { cursorPos, getCursorAt } = useMouseEvents()
+  const { cursorPos, getCursorAt, getClicksInRange } = useMouseEvents()
   const getSmoothedCursor = useCallback(
     (timeMs: number) => getSmoothedCursorAt(getCursorAt, timeMs),
     [getCursorAt]
   )
 
+  // Click ripple animation duration in ms
+  const CLICK_RIPPLE_DURATION = 500
+
+  // Find active click events (clicks that should be animating right now)
+  const activeClicks = useMemo(() => {
+    if (!project?.effects.cursor.clickHighlight?.enabled) return []
+    return getClicksInRange(currentTime - CLICK_RIPPLE_DURATION, currentTime)
+  }, [currentTime, getClicksInRange, project?.effects.cursor.clickHighlight?.enabled])
+
   if (!project) return null
 
   const { effects, tracks } = project
   const { background, cameraBubble, frame, cursor } = effects
+  const clickHighlight = cursor.clickHighlight
   const autoZoomSettings = project.autoZoomSettings
   const zoomState = interpolateZoomAtSequenceTime(
     currentTime,
@@ -182,6 +192,30 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
                 }}
               />
             )}
+
+            {/* Click ripple effects */}
+            {clickHighlight?.enabled && activeClicks.map((click) => {
+              const progress = Math.min(1, (currentTime - click.timeMs) / CLICK_RIPPLE_DURATION)
+              const scale = 0.3 + progress * 0.7
+              const opacity = clickHighlight.opacity * (1 - progress)
+              return (
+                <div
+                  key={`${click.timeMs}-${click.x}-${click.y}`}
+                  className="absolute pointer-events-none"
+                  style={{
+                    left: `${click.x * 100}%`,
+                    top: `${click.y * 100}%`,
+                    transform: `translate(-50%, -50%) scale(${scale})`,
+                    width: clickHighlight.size * 2,
+                    height: clickHighlight.size * 2,
+                    borderRadius: "50%",
+                    border: `2px solid ${clickHighlight.color}`,
+                    opacity,
+                    background: `radial-gradient(circle, ${clickHighlight.color}${Math.round(opacity * 80).toString(16).padStart(2, "0")} 0%, transparent 70%)`,
+                  }}
+                />
+              )
+            })}
           </div>
         </div>
       </div>

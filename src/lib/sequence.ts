@@ -81,7 +81,7 @@ export function splitClip(clip: Clip, sourceTime: number): [Clip, Clip] {
   const splitRelative = sourceTime - clip.sourceStart
 
   const leftKeyframes = clip.zoomKeyframes.filter(
-    (kf) => kf.timeMs + (kf.durationMs ?? 0) <= splitRelative
+    (kf) => kf.timeMs <= splitRelative
   )
   const rightKeyframes = clip.zoomKeyframes
     .filter((kf) => kf.timeMs >= splitRelative)

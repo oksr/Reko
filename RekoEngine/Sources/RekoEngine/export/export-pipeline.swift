@@ -38,15 +38,13 @@ public struct ExportZoomKeyframe {
     public let y: Double
     public let scale: Double
     public let easing: String
-    public let durationMs: UInt64?  // legacy, optional
 
-    public init(timeMs: UInt64, x: Double, y: Double, scale: Double, easing: String, durationMs: UInt64? = nil) {
+    public init(timeMs: UInt64, x: Double, y: Double, scale: Double, easing: String) {
         self.timeMs = timeMs
         self.x = x
         self.y = y
         self.scale = scale
         self.easing = easing
-        self.durationMs = durationMs
     }
 }
 
@@ -147,10 +145,9 @@ public enum ExportMath {
                           let x = (kf["x"] as? NSNumber)?.doubleValue,
                           let y = (kf["y"] as? NSNumber)?.doubleValue,
                           let s = (kf["scale"] as? NSNumber)?.doubleValue else { return nil }
-                    let d = (kf["durationMs"] as? NSNumber)?.uint64Value  // optional legacy field
                     return ExportZoomKeyframe(
                         timeMs: t, x: x, y: y, scale: s,
-                        easing: kf["easing"] as? String ?? "spring", durationMs: d
+                        easing: kf["easing"] as? String ?? "spring"
                     )
                 }
             }
@@ -494,10 +491,9 @@ public final class ExportPipeline {
                       let x = kf["x"] as? Double,
                       let y = kf["y"] as? Double,
                       let s = kf["scale"] as? Double else { return nil }
-                let d = kf["durationMs"] as? UInt64  // optional legacy field
                 return ExportZoomKeyframe(
                     timeMs: t, x: x, y: y, scale: s,
-                    easing: kf["easing"] as? String ?? "spring", durationMs: d
+                    easing: kf["easing"] as? String ?? "spring"
                 )
             }
         }()

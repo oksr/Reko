@@ -80,6 +80,17 @@ pub struct CursorConfig {
     pub size: f64,                // px radius
     pub color: String,            // hex
     pub opacity: f64,             // 0-1
+    #[serde(default)]
+    pub click_highlight: Option<ClickHighlightConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ClickHighlightConfig {
+    pub enabled: bool,
+    pub color: String,
+    pub opacity: f64,
+    pub size: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -90,8 +101,6 @@ pub struct ZoomKeyframe {
     pub y: f64,                   // 0-1 normalized
     pub scale: f64,               // 1.0 = no zoom
     pub easing: String,           // "spring" | "ease-out" | "linear"
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub duration_ms: Option<u64>, // legacy field, only present in old projects
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -353,6 +362,7 @@ mod tests {
             size: 40.0,
             color: "#ffcc00".to_string(),
             opacity: 0.6,
+            click_highlight: None,
         };
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("\"type\":\"highlight\""));
@@ -369,14 +379,11 @@ mod tests {
             y: 0.3,
             scale: 2.0,
             easing: "spring".to_string(),
-            duration_ms: None,
         };
         let json = serde_json::to_string(&kf).unwrap();
         assert!(json.contains("\"timeMs\":5000"));
-        assert!(!json.contains("durationMs")); // None should be skipped
         let parsed: ZoomKeyframe = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.scale, 2.0);
-        assert!(parsed.duration_ms.is_none());
     }
 
     #[test]
@@ -386,15 +393,6 @@ mod tests {
         assert!(parsed.cursor.is_some());
         let kfs = parsed.zoom_keyframes.unwrap();
         assert_eq!(kfs.len(), 1);
-        assert!(kfs[0].duration_ms.is_none());
-    }
-
-    #[test]
-    fn test_zoom_keyframe_legacy_with_duration_ms() {
-        // Old projects have durationMs — should still parse
-        let json = r#"{"timeMs":5000,"x":0.5,"y":0.3,"scale":2.0,"easing":"ease-in-out","durationMs":500}"#;
-        let parsed: ZoomKeyframe = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed.duration_ms, Some(500));
     }
 
     #[test]

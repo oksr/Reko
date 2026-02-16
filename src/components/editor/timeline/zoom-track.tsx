@@ -9,16 +9,100 @@ interface ZoomTrackProps {
 }
 
 /** A zoom keyframe mapped to sequence time, with its clip origin */
-export interface SequenceZoomSegment {
+export interface SequenceZoomKf {
   clipIndex: number
   kfIndex: number
   seqTimeMs: number
   clipRelativeTimeMs: number
-  durationMs: number | undefined
   scale: number
   x: number
   y: number
   easing: "spring" | "ease-out" | "linear"
+}
+
+/** A visual zoom region computed from keyframe pairs */
+export interface ZoomRegion {
+  startMs: number       // sequence time
+  endMs: number         // sequence time
+  peakScale: number     // highest scale in region
+  /** First zoomed keyframe — used for editing via popover */
+  primaryClipIndex: number
+  primaryKfIndex: number
+  primaryClipRelativeTimeMs: number
+  /** All keyframes in this region */
+  keyframes: SequenceZoomKf[]
+}
+
+/**
+ * Group keyframes into visual zoom regions for timeline display.
+ * A region spans from the 1x anchor before a zoomed keyframe to the 1x anchor after.
+ */
+function computeZoomRegions(kfs: SequenceZoomKf[]): ZoomRegion[] {
+  if (kfs.length === 0) return []
+
+  const sorted = [...kfs].sort((a, b) => a.seqTimeMs - b.seqTimeMs)
+  const regions: ZoomRegion[] = []
+
+  let buf: SequenceZoomKf[] = []
+  let hasZoomed = false
+
+  const flushRegion = () => {
+    if (buf.length === 0 || !hasZoomed) {
+      buf = []
+      hasZoomed = false
+      return
+    }
+    const peak = Math.max(...buf.map((k) => k.scale))
+    const primary = buf.find((k) => k.scale > 1.01)!
+    regions.push({
+      startMs: buf[0].seqTimeMs,
+      endMs: buf[buf.length - 1].seqTimeMs,
+      peakScale: peak,
+      primaryClipIndex: primary.clipIndex,
+      primaryKfIndex: primary.kfIndex,
+      primaryClipRelativeTimeMs: primary.clipRelativeTimeMs,
+      keyframes: buf,
+    })
+    buf = []
+    hasZoomed = false
+  }
+
+  for (const seg of sorted) {
+    const isZoomed = seg.scale > 1.01
+
+    if (isZoomed) {
+      hasZoomed = true
+      buf.push(seg)
+    } else {
+      // 1x keyframe
+      if (hasZoomed) {
+        // End anchor — include it and flush
+        buf.push(seg)
+        flushRegion()
+      } else {
+        // Could be start anchor of next region — keep as start of next buffer
+        buf = [seg]
+      }
+    }
+  }
+
+  // Trailing zoomed keyframes without end anchor
+  if (hasZoomed && buf.length > 0) {
+    const peak = Math.max(...buf.map((k) => k.scale))
+    const primary = buf.find((k) => k.scale > 1.01)!
+    const last = buf[buf.length - 1]
+    regions.push({
+      startMs: buf[0].seqTimeMs,
+      endMs: last.seqTimeMs + 500,
+      peakScale: peak,
+      primaryClipIndex: primary.clipIndex,
+      primaryKfIndex: primary.kfIndex,
+      primaryClipRelativeTimeMs: primary.clipRelativeTimeMs,
+      keyframes: buf,
+    })
+  }
+
+  return regions
 }
 
 export function ZoomTrack({ ctx }: ZoomTrackProps) {
@@ -28,10 +112,10 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
   const addZoomKeyframeToClip = useEditorStore((s) => s.addZoomKeyframeToClip)
   const dragStartRef = useRef<{ x: number; timeMs: number } | null>(null)
 
-  // Flatten all clip keyframes into sequence-time segments
-  const segments: SequenceZoomSegment[] = useMemo(() => {
+  // Flatten all clip keyframes into sequence-time list
+  const allKfs: SequenceZoomKf[] = useMemo(() => {
     if (!sequence) return []
-    const result: SequenceZoomSegment[] = []
+    const result: SequenceZoomKf[] = []
     for (let ci = 0; ci < sequence.clips.length; ci++) {
       const clip = sequence.clips[ci]
       const clipSeqStart = sourceTimeToSequenceTime(
@@ -44,7 +128,6 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
           kfIndex: ki,
           seqTimeMs: clipSeqStart + kf.timeMs,
           clipRelativeTimeMs: kf.timeMs,
-          durationMs: kf.durationMs,
           scale: kf.scale,
           x: kf.x,
           y: kf.y,
@@ -55,13 +138,12 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
     return result.sort((a, b) => a.seqTimeMs - b.seqTimeMs)
   }, [sequence])
 
-  // Check if a time range overlaps any existing segment
-  const isOverlapping = (timeMs: number, durationMs: number): boolean => {
-    const end = timeMs + durationMs
-    return segments.some((seg) => {
-      const segEnd = seg.seqTimeMs + (seg.durationMs ?? 0)
-      return timeMs < segEnd && end > seg.seqTimeMs
-    })
+  // Compute visual regions
+  const regions = useMemo(() => computeZoomRegions(allKfs), [allKfs])
+
+  // Check if a time range overlaps any existing region
+  const isOverlapping = (startMs: number, endMs: number): boolean => {
+    return regions.some((r) => startMs < r.endMs && endMs > r.startMs)
   }
 
   const handleMouseDown = useCallback(
@@ -86,44 +168,52 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
       const dx = Math.abs(e.clientX - dragStartRef.current.x)
       dragStartRef.current = null
 
-      // Determine segment start and duration
-      let segStart: number
-      let segDuration: number
+      // Determine region span
+      let spanStart: number
+      let spanEnd: number
       if (dx < 5) {
-        // Click: default 500ms segment
-        segDuration = 500
-        segStart = Math.max(0, endTimeMs - segDuration / 2)
+        // Click: 1-second region centered on click
+        spanStart = Math.max(0, endTimeMs - 500)
+        spanEnd = endTimeMs + 500
       } else {
         // Drag: span the dragged range
-        segStart = Math.min(startTimeMs, endTimeMs)
-        segDuration = Math.max(200, Math.abs(endTimeMs - startTimeMs))
+        spanStart = Math.min(startTimeMs, endTimeMs)
+        spanEnd = Math.max(startTimeMs, endTimeMs)
+        if (spanEnd - spanStart < 400) spanEnd = spanStart + 400
       }
 
-      if (isOverlapping(segStart, segDuration)) return
+      if (isOverlapping(spanStart, spanEnd)) return
 
       // Find which clip this falls into
-      const mapping = sequenceTimeToSourceTime(segStart, sequence.clips, sequence.transitions)
+      const mapping = sequenceTimeToSourceTime(spanStart, sequence.clips, sequence.transitions)
       if (!mapping) return
 
       const clip = sequence.clips[mapping.clipIndex]
       const clipSeqStart = sourceTimeToSequenceTime(
         clip.sourceStart, mapping.clipIndex, sequence.clips, sequence.transitions
       )
-      const clipRelativeTime = segStart - clipSeqStart
+      const clipRelStart = Math.max(0, Math.round(spanStart - clipSeqStart))
+      const clipRelMid = Math.round((spanStart + spanEnd) / 2 - clipSeqStart)
+      const clipRelEnd = Math.round(spanEnd - clipSeqStart)
 
+      // Create a zoom triplet: [1x anchor] → [zoomed] → [1x anchor]
       addZoomKeyframeToClip(mapping.clipIndex, {
-        timeMs: Math.round(clipRelativeTime),
-        durationMs: segDuration,
-        x: 0.5,
-        y: 0.5,
-        scale: 1.5,
-        easing: "ease-out",
+        timeMs: clipRelStart,
+        x: 0.5, y: 0.5, scale: 1.0, easing: "linear",
+      })
+      addZoomKeyframeToClip(mapping.clipIndex, {
+        timeMs: clipRelMid,
+        x: 0.5, y: 0.5, scale: 1.5, easing: "spring",
+      })
+      addZoomKeyframeToClip(mapping.clipIndex, {
+        timeMs: clipRelEnd,
+        x: 0.5, y: 0.5, scale: 1.0, easing: "ease-out",
       })
     },
-    [ctx, sequence, segments, addZoomKeyframeToClip]
+    [ctx, sequence, regions, addZoomKeyframeToClip]
   )
 
-  const isEmpty = segments.length === 0
+  const isEmpty = regions.length === 0
 
   return (
     <div
@@ -139,21 +229,11 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
           <span className="text-xs text-indigo-400/60">Click or drag to add zoom</span>
         </div>
       ) : (
-        segments.map((seg, i) => (
+        regions.map((region, i) => (
           <ZoomSegment
-            key={`${seg.clipIndex}-${seg.kfIndex}`}
-            segment={{
-              timeMs: seg.seqTimeMs,
-              durationMs: seg.durationMs,
-              scale: seg.scale,
-              x: seg.x,
-              y: seg.y,
-              easing: seg.easing,
-            }}
+            key={`${region.primaryClipIndex}-${region.startMs}`}
+            region={region}
             index={i}
-            clipIndex={seg.clipIndex}
-            kfIndex={seg.kfIndex}
-            clipRelativeTimeMs={seg.clipRelativeTimeMs}
             ctx={ctx}
             isSelected={selectedZoomIndex === i}
             onSelect={setSelectedZoomIndex}

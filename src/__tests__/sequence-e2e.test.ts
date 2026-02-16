@@ -69,7 +69,7 @@ describe("sequence editing e2e", () => {
 
     // 7. Add zoom keyframe to first clip
     store.addZoomKeyframeToClip(0, {
-      timeMs: 500, x: 0.5, y: 0.5, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+      timeMs: 500, x: 0.5, y: 0.5, scale: 2.0, easing: "spring",
     })
     expect(seq().clips[0].zoomKeyframes).toHaveLength(1)
 

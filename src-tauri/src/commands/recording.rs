@@ -128,6 +128,7 @@ pub async fn stop_recording(
         },
         effects: None,
         sequence: None,
+        auto_zoom_settings: None,
     };
 
     project::save_project(&project)?;

@@ -20,7 +20,6 @@ export function sanitizeProject(project: EditorProject): EditorProject {
       zoomKeyframes: project.effects.zoomKeyframes.map((kf) => ({
         ...kf,
         timeMs: Math.round(kf.timeMs),
-        ...(kf.durationMs != null && { durationMs: Math.round(kf.durationMs) }),
       })),
     },
     sequence: {
@@ -32,7 +31,6 @@ export function sanitizeProject(project: EditorProject): EditorProject {
         zoomKeyframes: clip.zoomKeyframes.map((kf) => ({
           ...kf,
           timeMs: Math.round(kf.timeMs),
-          ...(kf.durationMs != null && { durationMs: Math.round(kf.durationMs) }),
         })),
       })),
       transitions: project.sequence.transitions.map((t) =>

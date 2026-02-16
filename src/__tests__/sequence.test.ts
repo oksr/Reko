@@ -74,10 +74,10 @@ describe("splitClip", () => {
 
   it("distributes zoom keyframes to correct clip", () => {
     const kf1: ZoomKeyframe = {
-      timeMs: 500, durationMs: 300, x: 0.5, y: 0.5, scale: 2, easing: "ease-in-out",
+      timeMs: 500, x: 0.5, y: 0.5, scale: 2, easing: "spring",
     }
     const kf2: ZoomKeyframe = {
-      timeMs: 3500, durationMs: 300, x: 0.3, y: 0.7, scale: 1.5, easing: "linear",
+      timeMs: 3500, x: 0.3, y: 0.7, scale: 1.5, easing: "linear",
     }
     const clip: Clip = {
       id: "a",

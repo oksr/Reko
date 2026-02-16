@@ -134,10 +134,10 @@ describe("editor store", () => {
 
   it("addZoomKeyframe inserts sorted", () => {
     useEditorStore.getState().addZoomKeyframe({
-      timeMs: 2000, x: 0.5, y: 0.5, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+      timeMs: 2000, x: 0.5, y: 0.5, scale: 2.0, easing: "spring",
     })
     useEditorStore.getState().addZoomKeyframe({
-      timeMs: 1000, x: 0.3, y: 0.7, scale: 1.5, easing: "ease-in-out", durationMs: 300,
+      timeMs: 1000, x: 0.3, y: 0.7, scale: 1.5, easing: "spring",
     })
     const kfs = useEditorStore.getState().project!.effects.zoomKeyframes
     expect(kfs.length).toBe(2)
@@ -147,7 +147,7 @@ describe("editor store", () => {
 
   it("removeZoomKeyframe removes by timeMs", () => {
     useEditorStore.getState().addZoomKeyframe({
-      timeMs: 1000, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+      timeMs: 1000, x: 0.3, y: 0.7, scale: 2.0, easing: "spring",
     })
     useEditorStore.getState().removeZoomKeyframe(1000)
     expect(useEditorStore.getState().project!.effects.zoomKeyframes.length).toBe(0)
@@ -162,7 +162,7 @@ describe("editor store", () => {
 
   it("updateZoomKeyframe updates properties at index", () => {
     useEditorStore.getState().addZoomKeyframe({
-      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "ease-in-out", durationMs: 500,
+      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "spring",
     })
     useEditorStore.getState().updateZoomKeyframe(0, { scale: 1.5, easing: "linear" })
     const kf = useEditorStore.getState().project!.effects.zoomKeyframes[0]
@@ -173,10 +173,10 @@ describe("editor store", () => {
 
   it("moveZoomKeyframe updates timeMs and re-sorts", () => {
     useEditorStore.getState().addZoomKeyframe({
-      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "ease-in-out", durationMs: 500,
+      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "spring",
     })
     useEditorStore.getState().addZoomKeyframe({
-      timeMs: 3000, x: 0.3, y: 0.7, scale: 1.5, easing: "ease-in-out", durationMs: 500,
+      timeMs: 3000, x: 0.3, y: 0.7, scale: 1.5, easing: "spring",
     })
     // Move first segment to after the second
     useEditorStore.getState().moveZoomKeyframe(0, 4000)
@@ -319,7 +319,7 @@ describe("clip-scoped zoom actions", () => {
   it("addZoomKeyframeToClip adds keyframe to specific clip", () => {
     const store = useEditorStore.getState()
     store.addZoomKeyframeToClip(0, {
-      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "spring",
     })
     const clip = useEditorStore.getState().project!.sequence.clips[0]
     expect(clip.zoomKeyframes).toHaveLength(1)
@@ -329,7 +329,7 @@ describe("clip-scoped zoom actions", () => {
   it("removeZoomKeyframeFromClip removes by timeMs", () => {
     const store = useEditorStore.getState()
     store.addZoomKeyframeToClip(0, {
-      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "spring",
     })
     store.removeZoomKeyframeFromClip(0, 500)
     const clip = useEditorStore.getState().project!.sequence.clips[0]
@@ -339,10 +339,10 @@ describe("clip-scoped zoom actions", () => {
   it("clearClipZoomKeyframes clears all keyframes from a clip", () => {
     const store = useEditorStore.getState()
     store.addZoomKeyframeToClip(0, {
-      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "ease-in-out", durationMs: 300,
+      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "spring",
     })
     store.addZoomKeyframeToClip(0, {
-      timeMs: 1500, x: 0.5, y: 0.5, scale: 1.5, easing: "ease-in-out", durationMs: 300,
+      timeMs: 1500, x: 0.5, y: 0.5, scale: 1.5, easing: "spring",
     })
     store.clearClipZoomKeyframes(0)
     const clip = useEditorStore.getState().project!.sequence.clips[0]

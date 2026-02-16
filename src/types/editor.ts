@@ -95,7 +95,6 @@ export interface ZoomKeyframe {
   y: number           // center of zoom region, normalized 0-1
   scale: number       // 1.0 = no zoom, 2.0 = 2x zoom, etc.
   easing: "spring" | "ease-out" | "linear"  // transition TO this keyframe
-  durationMs?: number  // legacy field (migration only)
 }
 
 export interface AutoZoomSettings {
@@ -155,6 +154,14 @@ export interface CursorConfig {
   size: number        // px radius (20-80)
   color: string       // hex, used for highlight ring
   opacity: number     // 0-1
+  clickHighlight: ClickHighlightConfig
+}
+
+export interface ClickHighlightConfig {
+  enabled: boolean
+  color: string       // hex
+  opacity: number     // 0-1
+  size: number        // max ripple radius in px (30-120)
 }
 
 export type ExportResolution = "original" | "4k" | "1080p" | "720p"

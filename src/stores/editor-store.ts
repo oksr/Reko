@@ -1,17 +1,23 @@
 import { create } from "zustand"
 import { temporal } from "zundo"
-import type { EditorProject, Effects, BackgroundConfig, CameraBubbleConfig, FrameConfig, CursorConfig, ZoomKeyframe, Transition, Sequence, OverlayTrack, Overlay } from "@/types/editor"
+import type { EditorProject, Effects, BackgroundConfig, CameraBubbleConfig, FrameConfig, CursorConfig, ClickHighlightConfig, ZoomKeyframe, Transition, Sequence, OverlayTrack, Overlay, AutoZoomSettings } from "@/types/editor"
+import { DEFAULT_AUTO_ZOOM_SETTINGS } from "@/types/editor"
 import { createClip, splitClip, sequenceTimeToSourceTime } from "@/lib/sequence"
 
 const DEFAULT_EFFECTS: Effects = {
   background: {
-    type: "gradient",
+    type: "wallpaper",
     color: "#1a1a2e",
     gradientFrom: "#1a1a2e",
     gradientTo: "#16213e",
     gradientAngle: 135,
-    padding: 8,
-    presetId: "midnight",
+    padding: 4,
+    imageUrl: null, // resolved at load time from wallpaperId
+    imageBlur: 0,
+    unsplashId: null,
+    unsplashAuthor: null,
+    presetId: null,
+    wallpaperId: "12-Dark-thumbnail",
   },
   cameraBubble: {
     visible: true,
@@ -22,9 +28,9 @@ const DEFAULT_EFFECTS: Effects = {
     borderColor: "#ffffff",
   },
   frame: {
-    borderRadius: 12,
+    borderRadius: 8,
     shadow: true,
-    shadowIntensity: 0.5,
+    shadowIntensity: 0.7,
   },
   cursor: {
     enabled: false,
@@ -32,6 +38,12 @@ const DEFAULT_EFFECTS: Effects = {
     size: 40,
     color: "#ffcc00",
     opacity: 0.6,
+    clickHighlight: {
+      enabled: true,
+      color: "#ffffff",
+      opacity: 0.5,
+      size: 30,
+    },
   },
   zoomKeyframes: [],
 }
@@ -42,6 +54,7 @@ const DEFAULT_SEQUENCE: Sequence = {
   overlayTracks: [],
   overlays: [],
 }
+
 
 function migrateToSequence(project: EditorProject): EditorProject {
   if (project.sequence?.clips?.length > 0) return project
@@ -81,6 +94,7 @@ interface EditorState {
   setCameraBubble: (config: Partial<CameraBubbleConfig>) => void
   setFrame: (config: Partial<FrameConfig>) => void
   setCursor: (config: Partial<CursorConfig>) => void
+  setClickHighlight: (config: Partial<ClickHighlightConfig>) => void
   addZoomKeyframe: (kf: ZoomKeyframe) => void
   removeZoomKeyframe: (timeMs: number) => void
   setZoomKeyframes: (kfs: ZoomKeyframe[]) => void
@@ -111,6 +125,9 @@ interface EditorState {
   updateClipZoomKeyframe: (clipIndex: number, kfIndex: number, updates: Partial<ZoomKeyframe>) => void
   clearClipZoomKeyframes: (clipIndex: number) => void
   clampClipsToVideoDuration: (videoDurationMs: number) => void
+
+  // Auto-zoom settings
+  setAutoZoomSettings: (settings: Partial<AutoZoomSettings>) => void
 
   // Overlay actions
   addOverlayTrack: (type: OverlayTrack["type"]) => void
@@ -145,13 +162,29 @@ export const useEditorStore = create<EditorState>()(
           effects: {
             ...DEFAULT_EFFECTS,
             ...(project.effects ?? {}),
-            cursor: { ...DEFAULT_EFFECTS.cursor, ...(project.effects?.cursor ?? {}) },
+            background: { ...DEFAULT_EFFECTS.background, ...(project.effects?.background ?? {}) },
+            cursor: {
+              ...DEFAULT_EFFECTS.cursor,
+              ...(project.effects?.cursor ?? {}),
+              clickHighlight: { ...DEFAULT_EFFECTS.cursor.clickHighlight, ...(project.effects?.cursor?.clickHighlight ?? {}) },
+            },
             zoomKeyframes: project.effects?.zoomKeyframes ?? [],
           },
           sequence: project.sequence ?? DEFAULT_SEQUENCE,
         }
         const migrated = migrateToSequence(withEffects)
-        set({ project: migrated, currentTime: 0, isPlaying: false })
+        // Migrate legacy zoom keyframes in all clips
+        const withMigratedZoom: EditorProject = {
+          ...migrated,
+          sequence: {
+            ...migrated.sequence,
+            clips: migrated.sequence.clips.map((clip) => ({
+              ...clip,
+              zoomKeyframes: clip.zoomKeyframes,
+            })),
+          },
+        }
+        set({ project: withMigratedZoom, currentTime: 0, isPlaying: false })
       },
 
       setInPoint: (ms) =>
@@ -232,6 +265,23 @@ export const useEditorStore = create<EditorState>()(
               effects: {
                 ...s.project.effects,
                 cursor: { ...s.project.effects.cursor, ...config },
+              },
+            },
+          }
+        }),
+
+      setClickHighlight: (config) =>
+        set((s) => {
+          if (!s.project) return s
+          return {
+            project: {
+              ...s.project,
+              effects: {
+                ...s.project.effects,
+                cursor: {
+                  ...s.project.effects.cursor,
+                  clickHighlight: { ...s.project.effects.cursor.clickHighlight, ...config },
+                },
               },
             },
           }
@@ -608,6 +658,21 @@ export const useEditorStore = create<EditorState>()(
             project: {
               ...s.project,
               sequence: { ...sequence, clips: validClips },
+            },
+          }
+        }),
+
+      // Auto-zoom settings
+      setAutoZoomSettings: (settings) =>
+        set((s) => {
+          if (!s.project) return s
+          return {
+            project: {
+              ...s.project,
+              autoZoomSettings: {
+                ...(s.project.autoZoomSettings ?? DEFAULT_AUTO_ZOOM_SETTINGS),
+                ...settings,
+              },
             },
           }
         }),
