@@ -2,6 +2,7 @@ import Foundation
 import Metal
 import CoreVideo
 import CoreGraphics
+import CoreImage
 import simd
 
 // MARK: - ExportError
@@ -70,6 +71,8 @@ public struct ExportEffects {
     public var bgColorTo: String         // hex
     public var bgAngleDeg: Double
     public var bgIsSolid: Bool
+    public var bgImagePath: String?      // absolute path to background image (wallpaper/custom/unsplash)
+    public var bgImageBlur: Double       // blur amount (0 = none)
     public var padding: Double           // percent (0-100)
 
     // Frame
@@ -95,6 +98,7 @@ public struct ExportEffects {
 
     public init(bgColorFrom: String = "#1a1a2e", bgColorTo: String = "#16213e",
                 bgAngleDeg: Double = 135, bgIsSolid: Bool = false,
+                bgImagePath: String? = nil, bgImageBlur: Double = 0,
                 padding: Double = 8, borderRadius: Double = 12,
                 hasShadow: Bool = true, shadowIntensity: Double = 0.5,
                 camera: CameraEffects? = nil,
@@ -109,6 +113,8 @@ public struct ExportEffects {
         self.bgColorTo = bgColorTo
         self.bgAngleDeg = bgAngleDeg
         self.bgIsSolid = bgIsSolid
+        self.bgImagePath = bgImagePath
+        self.bgImageBlur = bgImageBlur
         self.padding = padding
         self.borderRadius = borderRadius
         self.hasShadow = hasShadow
@@ -141,6 +147,15 @@ public struct ExportEffects {
             self.bgColorTo = bg["gradientTo"] as? String ?? "#16213e"
         }
         self.bgAngleDeg = bg["gradientAngle"] as? Double ?? 135
+
+        // Image-based backgrounds (wallpaper, image, custom)
+        if bgType == "wallpaper" || bgType == "image" || bgType == "custom" {
+            self.bgImagePath = bg["imageUrl"] as? String
+        } else {
+            self.bgImagePath = nil
+        }
+        self.bgImageBlur = bg["imageBlur"] as? Double ?? 0
+
         self.padding = bg["padding"] as? Double ?? 8
 
         let frame = dict["frame"] as? [String: Any] ?? [:]
@@ -280,6 +295,8 @@ struct CompositeUniforms {
     var bgColorTo: SIMD4<Float>         // 16
     var bgAngleRad: Float               // 4
     var bgIsSolid: Float                // 4  (0 or 1)
+    var hasBgImage: Float               // 4  (0 or 1)
+    var _padBg: Float = 0              // 4  (alignment padding)
 
     // Screen rect (normalised 0..1)
     var screenOriginX: Float            // 4
@@ -346,6 +363,8 @@ struct CompositeUniforms {
     float4 bgColorTo;
     float  bgAngleRad;
     float  bgIsSolid;
+    float  hasBgImage;
+    float  _padBg;
 
     float  screenOriginX;
     float  screenOriginY;
@@ -431,6 +450,7 @@ fragment float4 composite_fragment(
     VertexOut in [[stage_in]],
     texture2d<float> screenTex [[texture(0)]],
     texture2d<float> cameraTex [[texture(1)]],
+    texture2d<float> bgImageTex [[texture(2)]],
     constant CompositeUniforms &u [[buffer(0)]]
 ) {
     constexpr sampler texSampler(mag_filter::linear, min_filter::linear, address::clamp_to_edge);
@@ -440,7 +460,24 @@ fragment float4 composite_fragment(
 
     // ---- Layer 1: Background ----
     float4 color;
-    if (u.bgIsSolid > 0.5) {
+    if (u.hasBgImage > 0.5) {
+        // Image background (wallpaper/custom/unsplash) — object-cover fill
+        float canvasAspect = u.canvasWidth / u.canvasHeight;
+        float texW = float(bgImageTex.get_width());
+        float texH = float(bgImageTex.get_height());
+        float texAspect = texW / max(texH, 1.0);
+        float2 bgUV = uv;
+        if (texAspect > canvasAspect) {
+            // Image wider than canvas — crop sides
+            float scale = canvasAspect / texAspect;
+            bgUV.x = bgUV.x * scale + (1.0 - scale) * 0.5;
+        } else {
+            // Image taller than canvas — crop top/bottom
+            float scale = texAspect / canvasAspect;
+            bgUV.y = bgUV.y * scale + (1.0 - scale) * 0.5;
+        }
+        color = bgImageTex.sample(texSampler, bgUV);
+    } else if (u.bgIsSolid > 0.5) {
         color = u.bgColorFrom;
     } else {
         float2 dir = float2(sin(u.bgAngleRad), -cos(u.bgAngleRad));
@@ -643,6 +680,9 @@ public final class MetalCompositor {
     private var outputWidth: Int = 0
     private var outputHeight: Int = 0
 
+    // Cached background image texture (loaded once)
+    private var bgImageTexture: MTLTexture?
+
     public init() throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
             throw ExportError.metalDeviceNotFound
@@ -759,6 +799,7 @@ public final class MetalCompositor {
             bgColorTo:   parseHexColor(effects.bgColorTo),
             bgAngleRad:  Float(effects.bgAngleDeg * .pi / 180.0),
             bgIsSolid:   effects.bgIsSolid ? 1.0 : 0.0,
+            hasBgImage:  bgImageTexture != nil ? 1.0 : 0.0,
 
             screenOriginX: Float(scrRect.origin.x    / canvasW),
             screenOriginY: Float(scrRect.origin.y    / canvasH),
@@ -874,10 +915,13 @@ public final class MetalCompositor {
             throw ExportError.renderPassFailed
         }
 
+        let bgTex = try bgImageTexture ?? makePlaceholderTexture()
+
         encoder.setRenderPipelineState(pipelineState)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<CompositeUniforms>.stride, index: 0)
         encoder.setFragmentTexture(screenTex, index: 0)
         encoder.setFragmentTexture(cameraTex, index: 1)
+        encoder.setFragmentTexture(bgTex, index: 2)
         encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         encoder.endEncoding()
 
@@ -934,5 +978,76 @@ public final class MetalCompositor {
             bytesPerRow: 4
         )
         return tex
+    }
+
+    /// Load a background image from disk as a Metal texture (cached for the lifetime of the compositor).
+    /// - Parameters:
+    ///   - path: Absolute path to the image file.
+    ///   - blur: Blur amount in CSS-preview pixels. Scaled to image resolution internally.
+    ///   - exportWidth: The export canvas width in pixels (used to scale blur radius).
+    public func loadBackgroundImage(path: String, blur: Double = 0, exportWidth: Int = 1920) throws {
+        let url = URL(fileURLWithPath: path)
+        guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+              var cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+            bgImageTexture = nil
+            return
+        }
+
+        // Apply Gaussian blur if requested.
+        // The blur value is in CSS pixels relative to the ~640px-wide preview.
+        // Scale it to the image's actual width so the visual result matches.
+        if blur > 0 {
+            let scaleFactor = Double(cgImage.width) / 640.0
+            let scaledRadius = blur * scaleFactor
+            let ciImage = CIImage(cgImage: cgImage)
+            let blurFilter = CIFilter(name: "CIGaussianBlur")!
+            blurFilter.setValue(ciImage, forKey: kCIInputImageKey)
+            blurFilter.setValue(scaledRadius, forKey: kCIInputRadiusKey)
+            // Clamp to prevent transparent edges from blur extending beyond bounds
+            let clamped = blurFilter.outputImage!.clamped(to: ciImage.extent)
+            let ciContext = CIContext()
+            if let blurred = ciContext.createCGImage(clamped, from: ciImage.extent) {
+                cgImage = blurred
+            }
+        }
+
+        let width = cgImage.width
+        let height = cgImage.height
+
+        let desc = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false
+        )
+        desc.usage = [.shaderRead]
+        guard let tex = device.makeTexture(descriptor: desc) else {
+            bgImageTexture = nil
+            return
+        }
+
+        // Draw CGImage into BGRA pixel data
+        let bytesPerRow = width * 4
+        var pixelData = [UInt8](repeating: 0, count: height * bytesPerRow)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: &pixelData,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else {
+            bgImageTexture = nil
+            return
+        }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        tex.replace(
+            region: MTLRegionMake2D(0, 0, width, height),
+            mipmapLevel: 0,
+            withBytes: pixelData,
+            bytesPerRow: bytesPerRow
+        )
+
+        bgImageTexture = tex
     }
 }

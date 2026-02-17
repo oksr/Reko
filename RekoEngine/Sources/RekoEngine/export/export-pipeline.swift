@@ -18,13 +18,13 @@ public struct ExportClip {
     public let sourceStartMs: UInt64
     public let sourceEndMs: UInt64
     public let speed: Double
-    public let zoomKeyframes: [ExportZoomKeyframe]
+    public let zoomEvents: [ExportZoomEvent]
 
-    public init(sourceStartMs: UInt64, sourceEndMs: UInt64, speed: Double, zoomKeyframes: [ExportZoomKeyframe]) {
+    public init(sourceStartMs: UInt64, sourceEndMs: UInt64, speed: Double, zoomEvents: [ExportZoomEvent]) {
         self.sourceStartMs = sourceStartMs
         self.sourceEndMs = sourceEndMs
         self.speed = speed
-        self.zoomKeyframes = zoomKeyframes
+        self.zoomEvents = zoomEvents
     }
 
     public var durationMs: UInt64 {
@@ -32,19 +32,21 @@ public struct ExportClip {
     }
 }
 
-public struct ExportZoomKeyframe {
+public struct ExportZoomEvent {
+    public let id: String
     public let timeMs: UInt64
+    public let durationMs: UInt64
     public let x: Double
     public let y: Double
     public let scale: Double
-    public let easing: String
 
-    public init(timeMs: UInt64, x: Double, y: Double, scale: Double, easing: String) {
+    public init(id: String, timeMs: UInt64, durationMs: UInt64, x: Double, y: Double, scale: Double) {
+        self.id = id
         self.timeMs = timeMs
+        self.durationMs = durationMs
         self.x = x
         self.y = y
         self.scale = scale
-        self.easing = easing
     }
 }
 
@@ -85,7 +87,7 @@ public enum ExportMath {
         public let outputStartMs: UInt64
         public let outputEndMs: UInt64
         public let speed: Double
-        public let zoomKeyframes: [ExportZoomKeyframe]
+        public let zoomEvents: [ExportZoomEvent]
     }
 
     /// Compute the output time range for each clip, accounting for transition overlaps.
@@ -109,7 +111,7 @@ public enum ExportMath {
                 outputStartMs: outputStart,
                 outputEndMs: outputStart + clipDuration,
                 speed: clip.speed,
-                zoomKeyframes: clip.zoomKeyframes
+                zoomEvents: clip.zoomEvents
             ))
 
             elapsed += clipDuration
@@ -138,23 +140,22 @@ public enum ExportMath {
             }
             let speed = (dict["speed"] as? NSNumber)?.doubleValue ?? 1.0
 
-            var zoomKeyframes: [ExportZoomKeyframe] = []
-            if let kfs = dict["zoomKeyframes"] as? [[String: Any]] {
-                zoomKeyframes = kfs.compactMap { kf in
-                    guard let t = (kf["timeMs"] as? NSNumber)?.uint64Value,
-                          let x = (kf["x"] as? NSNumber)?.doubleValue,
-                          let y = (kf["y"] as? NSNumber)?.doubleValue,
-                          let s = (kf["scale"] as? NSNumber)?.doubleValue else { return nil }
-                    return ExportZoomKeyframe(
-                        timeMs: t, x: x, y: y, scale: s,
-                        easing: kf["easing"] as? String ?? "spring"
-                    )
+            var zoomEvents: [ExportZoomEvent] = []
+            if let evts = dict["zoomEvents"] as? [[String: Any]] {
+                zoomEvents = evts.compactMap { evt in
+                    guard let id = evt["id"] as? String,
+                          let t = (evt["timeMs"] as? NSNumber)?.uint64Value,
+                          let dur = (evt["durationMs"] as? NSNumber)?.uint64Value,
+                          let x = (evt["x"] as? NSNumber)?.doubleValue,
+                          let y = (evt["y"] as? NSNumber)?.doubleValue,
+                          let s = (evt["scale"] as? NSNumber)?.doubleValue else { return nil }
+                    return ExportZoomEvent(id: id, timeMs: t, durationMs: dur, x: x, y: y, scale: s)
                 }
             }
 
             return ExportClip(
                 sourceStartMs: sourceStart, sourceEndMs: sourceEnd,
-                speed: speed, zoomKeyframes: zoomKeyframes
+                speed: speed, zoomEvents: zoomEvents
             )
         }
 
@@ -175,18 +176,12 @@ public enum ExportMath {
 
     // MARK: - Spring Physics
 
-    /// Spring response/damping for each speed setting
-    public static func springParams(speed: String) -> (response: Double, damping: Double) {
-        switch speed {
-        case "slow": return (1.4, 1.0)
-        case "fast": return (0.65, 0.95)
-        default: return (1.0, 1.0) // medium
-        }
-    }
+    private static let springResponse = 1.0
+    private static let springDamping = 1.0
+    private static let transitionMs: UInt64 = 450
 
-    /// Critically-damped (or underdamped) spring easing.
-    /// Must match Rust `spring_ease` and TypeScript `springEase` exactly.
-    public static func springEase(_ t: Double, response: Double, damping: Double) -> Double {
+    /// Critically-damped spring easing. Must match TypeScript `springEase` exactly.
+    public static func springEase(_ t: Double, response: Double = 1.0, damping: Double = 1.0) -> Double {
         if t <= 0 { return 0 }
         if t >= 1 { return 1 }
 
@@ -195,98 +190,64 @@ public enum ExportMath {
         let decay = exp(-damping * omega * actualT)
 
         if damping >= 1.0 {
-            // Critically damped
             return 1.0 - (1.0 + omega * actualT) * decay
         } else {
-            // Underdamped
             let dampedFreq = omega * sqrt(1.0 - damping * damping)
             return 1.0 - decay * (cos(dampedFreq * actualT) +
                    (damping * omega / dampedFreq) * sin(dampedFreq * actualT))
         }
     }
 
-    private static func easeOut(_ t: Double) -> Double {
-        if t <= 0 { return 0 }
-        if t >= 1 { return 1 }
-        return 1.0 - (1.0 - t) * (1.0 - t)
-    }
+    // MARK: - Zoom Event Interpolation (matches frontend interpolateZoomEvents)
 
-    private static func applyEasing(_ t: Double, easing: String, response: Double, damping: Double) -> Double {
-        switch easing {
-        case "spring": return springEase(t, response: response, damping: damping)
-        case "ease-out": return easeOut(t)
-        default: return t // linear
-        }
-    }
-
-    private static func applyCursorFollow(
-        x: Double, y: Double,
-        cursor: (x: Double, y: Double)?,
-        strength: Double, scale: Double
-    ) -> (x: Double, y: Double) {
-        guard strength > 0, scale > 1.0, let cursor = cursor else {
-            return (x, y)
-        }
-        let blend = strength * min((scale - 1.0) / 1.0, 1.0)
-        return (
-            x: x * (1.0 - blend) + cursor.x * blend,
-            y: y * (1.0 - blend) + cursor.y * blend
-        )
-    }
-
-    // MARK: - Zoom Interpolation (keyframe-pair model, matches frontend)
-
-    /// Keyframe-pair zoom interpolation matching `interpolateZoom()` from `src/lib/zoom-interpolation.ts`.
-    /// Finds the surrounding keyframe pair and interpolates using the target keyframe's easing.
-    public static func interpolateZoom(
-        _ keyframes: [ExportZoomKeyframe],
-        at timeMs: UInt64,
-        cursor: (x: Double, y: Double)? = nil,
-        cursorFollowStrength: Double = 0,
-        transitionSpeed: String = "medium"
+    public static func interpolateZoomEvents(
+        _ events: [ExportZoomEvent],
+        at timeMs: UInt64
     ) -> (x: Double, y: Double, scale: Double) {
         let none = (x: 0.5, y: 0.5, scale: 1.0)
-        guard !keyframes.isEmpty else { return none }
+        guard !events.isEmpty else { return none }
 
-        let (response, damping) = springParams(speed: transitionSpeed)
+        var bestScale = 1.0
+        var bestX = 0.5
+        var bestY = 0.5
 
-        // Before first keyframe
-        if timeMs <= keyframes[0].timeMs {
-            let kf = keyframes[0]
-            let pos = applyCursorFollow(x: kf.x, y: kf.y, cursor: cursor, strength: cursorFollowStrength, scale: kf.scale)
-            return (x: pos.x, y: pos.y, scale: kf.scale)
-        }
+        for evt in events {
+            let leadInStart = evt.timeMs >= transitionMs ? evt.timeMs - transitionMs : 0
+            let holdStart = evt.timeMs
+            let holdEnd = evt.timeMs + evt.durationMs
+            let leadOutEnd = holdEnd + transitionMs
 
-        // After last keyframe
-        if timeMs >= keyframes[keyframes.count - 1].timeMs {
-            let kf = keyframes[keyframes.count - 1]
-            let pos = applyCursorFollow(x: kf.x, y: kf.y, cursor: cursor, strength: cursorFollowStrength, scale: kf.scale)
-            return (x: pos.x, y: pos.y, scale: kf.scale)
-        }
+            if timeMs < leadInStart || timeMs > leadOutEnd { continue }
 
-        // Find surrounding pair
-        var nextIdx = 0
-        for (i, kf) in keyframes.enumerated() {
-            if kf.timeMs > timeMs {
-                nextIdx = i
-                break
+            let scale: Double
+            let blend: Double
+
+            if timeMs < holdStart {
+                // Lead-in
+                let t = Double(timeMs - leadInStart) / Double(transitionMs)
+                let eased = springEase(t, response: springResponse, damping: springDamping)
+                scale = 1.0 + (evt.scale - 1.0) * eased
+                blend = eased
+            } else if timeMs <= holdEnd {
+                // Hold
+                scale = evt.scale
+                blend = 1.0
+            } else {
+                // Lead-out
+                let t = Double(timeMs - holdEnd) / Double(transitionMs)
+                let eased = springEase(t, response: springResponse, damping: springDamping)
+                scale = evt.scale + (1.0 - evt.scale) * eased
+                blend = 1.0 - eased
+            }
+
+            if scale > bestScale {
+                bestScale = scale
+                bestX = 0.5 + (evt.x - 0.5) * blend
+                bestY = 0.5 + (evt.y - 0.5) * blend
             }
         }
 
-        let prev = keyframes[nextIdx - 1]
-        let next = keyframes[nextIdx]
-
-        let duration = Double(next.timeMs - prev.timeMs)
-        let rawT = duration > 0 ? Double(timeMs - prev.timeMs) / duration : 1.0
-
-        let easedT = applyEasing(rawT, easing: next.easing, response: response, damping: damping)
-
-        let x = prev.x + (next.x - prev.x) * easedT
-        let y = prev.y + (next.y - prev.y) * easedT
-        let scale = prev.scale + (next.scale - prev.scale) * easedT
-
-        let pos = applyCursorFollow(x: x, y: y, cursor: cursor, strength: cursorFollowStrength, scale: scale)
-        return (x: pos.x, y: pos.y, scale: scale)
+        return (x: bestX, y: bestY, scale: bestScale)
     }
 
     // MARK: - Audio Timestamp Remapping
@@ -315,9 +276,7 @@ public enum ExportMath {
     }
 }
 
-// MARK: - Zoom / Cursor helper types (private, used internally by ExportPipeline)
-
-private typealias ZoomKF = ExportZoomKeyframe
+// MARK: - Cursor helper types (private, used internally by ExportPipeline)
 
 private struct MouseEvt: Codable {
     let timeMs: UInt64
@@ -483,33 +442,18 @@ public final class ExportPipeline {
         // ---- Parse sequence clips or create single-clip fallback ----
         let (seqClips, seqTransitions) = ExportMath.parseSequenceClips(from: project)
 
-        // Parse global zoom keyframes from effects (used as fallback for legacy single-clip)
-        let globalZoomKeyframes: [ExportZoomKeyframe] = {
-            guard let kfs = effectsDict["zoomKeyframes"] as? [[String: Any]] else { return [] }
-            return kfs.compactMap { kf in
-                guard let t = kf["timeMs"] as? UInt64,
-                      let x = kf["x"] as? Double,
-                      let y = kf["y"] as? Double,
-                      let s = kf["scale"] as? Double else { return nil }
-                return ExportZoomKeyframe(
-                    timeMs: t, x: x, y: y, scale: s,
-                    easing: kf["easing"] as? String ?? "spring"
-                )
-            }
-        }()
-
         let clips: [ExportClip]
         let transitions: [ExportTransition?]
         if !seqClips.isEmpty {
             clips = seqClips
             transitions = seqTransitions
         } else {
-            // Single synthetic clip from timeline in/out with global zoom keyframes
+            // Single synthetic clip from timeline in/out
             clips = [ExportClip(
                 sourceStartMs: inPointMs,
                 sourceEndMs: outPointMs,
                 speed: 1.0,
-                zoomKeyframes: globalZoomKeyframes
+                zoomEvents: []
             )]
             transitions = []
         }
@@ -532,6 +476,15 @@ public final class ExportPipeline {
             recordingHeight: naturalHeight
         )
         try compositor.configure(width: outSize.width, height: outSize.height)
+
+        // Load background image if the user selected a wallpaper/image/custom background
+        if let bgImagePath = effects.bgImagePath {
+            try compositor.loadBackgroundImage(
+                path: bgImagePath,
+                blur: effects.bgImageBlur,
+                exportWidth: outSize.width
+            )
+        }
 
         // ---- Set up AVAssetWriter ----
         let outputURL = URL(fileURLWithPath: exportConfig.outputPath)
@@ -650,9 +603,8 @@ public final class ExportPipeline {
                 // sourceTimeMs — for mouse events (recorded at absolute source time)
                 let sourceTimeMs = range.sourceStartMs + clipRelativeTimeMs
 
-                let smoothedCursor = smoothedCursorPosition(mouseEvents, at: sourceTimeMs)
-                let (zx, zy, zs) = ExportMath.interpolateZoom(
-                    range.zoomKeyframes, at: clipRelativeTimeMs, cursor: smoothedCursor
+                let (zx, zy, zs) = ExportMath.interpolateZoomEvents(
+                    range.zoomEvents, at: clipRelativeTimeMs
                 )
                 let cursorPos = cursorPosition(mouseEvents, at: sourceTimeMs)
                 let click = activeClick(mouseEvents, at: sourceTimeMs)
@@ -740,33 +692,6 @@ public final class ExportPipeline {
     }
 
     // MARK: - Cursor Helpers (private)
-
-    private func smoothedCursorPosition(_ events: [MouseEvt], at timeMs: UInt64, windowMs: UInt64 = 150) -> (x: Double, y: Double)? {
-        let samples = 7
-        var totalWeight = 0.0
-        var wx = 0.0
-        var wy = 0.0
-        var hitCount = 0
-
-        for i in 0..<samples {
-            let t: UInt64
-            if timeMs >= windowMs {
-                t = timeMs - windowMs + (windowMs * UInt64(i)) / UInt64(samples - 1)
-            } else {
-                t = (timeMs * UInt64(i)) / UInt64(samples - 1)
-            }
-            guard let pos = cursorPosition(events, at: t) else { continue }
-
-            let weight = exp(Double(i - (samples - 1)) / 2.0)
-            wx += pos.x * weight
-            wy += pos.y * weight
-            totalWeight += weight
-            hitCount += 1
-        }
-
-        guard hitCount > 0 else { return nil }
-        return (wx / totalWeight, wy / totalWeight)
-    }
 
     private let clickDurationMs: UInt64 = 500
 
