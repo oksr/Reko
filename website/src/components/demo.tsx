@@ -8,10 +8,10 @@ export function Demo() {
     ...(prefersReducedMotion
       ? {}
       : {
-          initial: { opacity: 0, y: 24 } as const,
+          initial: { opacity: 0, y: 16 } as const,
           whileInView: { opacity: 1, y: 0 } as const,
           viewport: { once: true } as const,
-          transition: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1] as const },
+          transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] as const },
         }),
   }
 
@@ -29,7 +29,7 @@ export function Demo() {
             ? {}
             : {
                 ...animProps,
-                transition: { duration: 0.6, delay: 0.05, ease: [0.25, 0.1, 0.25, 1] as const },
+                transition: { duration: 0.4, delay: 0.05, ease: [0.23, 1, 0.32, 1] as const },
               })}
           className="text-3xl md:text-4xl font-bold tracking-tight"
         >
@@ -41,10 +41,10 @@ export function Demo() {
         {...(prefersReducedMotion
           ? {}
           : {
-              initial: { opacity: 0, y: 32, scale: 0.98 },
+              initial: { opacity: 0, y: 24, scale: 0.98 },
               whileInView: { opacity: 1, y: 0, scale: 1 },
               viewport: { once: true },
-              transition: { duration: 0.7, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] as const },
+              transition: { duration: 0.5, delay: 0.1, ease: [0.23, 1, 0.32, 1] as const },
             })}
         className="relative"
       >

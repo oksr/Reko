@@ -1,20 +1,21 @@
 import { motion, useReducedMotion } from "motion/react"
-import { Apple, Play } from "lucide-react"
+import { Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Section } from "@/components/layout/section"
+import AppleIcon from "@/components/icons/apple"
 
 export function Hero() {
   const prefersReducedMotion = useReducedMotion()
 
-  const ease = [0.25, 0.1, 0.25, 1] as const
+  const ease = [0.23, 1, 0.32, 1] as const // ease-out-quint
 
-  const animProps = (delay: number) =>
+  const animProps = (delay: number, y = 16) =>
     prefersReducedMotion
       ? {}
       : {
-          initial: { opacity: 0, y: 24 },
+          initial: { opacity: 0, y },
           animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.7, delay, ease },
+          transition: { duration: 0.45, delay, ease },
         }
 
   return (
@@ -27,7 +28,7 @@ export function Hero() {
 
       <div className="relative text-center">
         {/* Badge */}
-        <motion.div {...animProps(0)} className="flex justify-center mb-8">
+        <motion.div {...animProps(0, 12)} className="flex justify-center mb-8">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-border bg-card/50 text-sm text-muted-foreground">
             <span className="relative flex h-2 w-2">
               <span className="animate-pulse-dot absolute inline-flex h-full w-full rounded-full bg-[#ef4444] opacity-75" />
@@ -39,7 +40,7 @@ export function Hero() {
 
         {/* Headline */}
         <motion.h1
-          {...animProps(0.1)}
+          {...animProps(0.05, 20)}
           className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-balance leading-[1.08] max-w-4xl mx-auto"
         >
           Record. Edit. Export.{" "}
@@ -50,7 +51,7 @@ export function Hero() {
 
         {/* Subtitle */}
         <motion.p
-          {...animProps(0.2)}
+          {...animProps(0.1, 14)}
           className="mt-6 md:mt-8 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed text-balance"
         >
           The screen recording app that gives you a professional editor.
@@ -59,11 +60,11 @@ export function Hero() {
 
         {/* CTAs */}
         <motion.div
-          {...animProps(0.3)}
+          {...animProps(0.15, 16)}
           className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
         >
           <Button size="lg">
-            <Apple size={17} />
+            <AppleIcon size={17} />
             Download for Mac
           </Button>
           <Button variant="secondary" size="lg">
@@ -74,7 +75,7 @@ export function Hero() {
 
         {/* Hero image placeholder — browser frame */}
         <motion.div
-          {...animProps(0.5)}
+          {...animProps(0.25, 24)}
           className="mt-16 md:mt-24 relative"
         >
           {/* Glow behind image */}

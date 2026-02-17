@@ -1,8 +1,9 @@
 import { motion, useReducedMotion } from "motion/react"
-import { Check, Apple } from "lucide-react"
+import { Check } from "lucide-react"
 import { Section } from "@/components/layout/section"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import AppleIcon from "@/components/icons/apple"
 
 const PLANS = [
   {
@@ -49,10 +50,10 @@ export function Pricing() {
           {...(prefersReducedMotion
             ? {}
             : {
-                initial: { opacity: 0, y: 16 },
+                initial: { opacity: 0, y: 12 },
                 whileInView: { opacity: 1, y: 0 },
                 viewport: { once: true },
-                transition: { duration: 0.5 },
+                transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
               })}
           className="text-sm font-medium text-destructive tracking-wide uppercase mb-3"
         >
@@ -62,10 +63,10 @@ export function Pricing() {
           {...(prefersReducedMotion
             ? {}
             : {
-                initial: { opacity: 0, y: 16 },
+                initial: { opacity: 0, y: 14 },
                 whileInView: { opacity: 1, y: 0 },
                 viewport: { once: true },
-                transition: { duration: 0.5, delay: 0.05 },
+                transition: { duration: 0.4, delay: 0.05, ease: [0.23, 1, 0.32, 1] },
               })}
           className="text-3xl md:text-4xl font-bold tracking-tight"
         >
@@ -75,10 +76,10 @@ export function Pricing() {
           {...(prefersReducedMotion
             ? {}
             : {
-                initial: { opacity: 0, y: 16 },
+                initial: { opacity: 0, y: 12 },
                 whileInView: { opacity: 1, y: 0 },
                 viewport: { once: true },
-                transition: { duration: 0.5, delay: 0.1 },
+                transition: { duration: 0.4, delay: 0.1, ease: [0.23, 1, 0.32, 1] },
               })}
           className="mt-4 text-muted-foreground text-lg"
         >
@@ -93,13 +94,13 @@ export function Pricing() {
             {...(prefersReducedMotion
               ? {}
               : {
-                  initial: { opacity: 0, y: 24 },
+                  initial: { opacity: 0, y: 16 },
                   whileInView: { opacity: 1, y: 0 },
                   viewport: { once: true },
                   transition: {
-                    duration: 0.5,
-                    delay: i * 0.1,
-                    ease: [0.25, 0.1, 0.25, 1] as const,
+                    duration: 0.4,
+                    delay: i * 0.08,
+                    ease: [0.23, 1, 0.32, 1] as const,
                   },
                 })}
             className={cn(
@@ -149,7 +150,7 @@ export function Pricing() {
               size="lg"
               className="w-full"
             >
-              {plan.featured && <Apple size={15} />}
+              {plan.featured && <AppleIcon size={15} />}
               {plan.cta}
             </Button>
           </motion.div>

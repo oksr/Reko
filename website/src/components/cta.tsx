@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "motion/react"
-import { Apple } from "lucide-react"
 import { Section } from "@/components/layout/section"
 import { Button } from "@/components/ui/button"
+import AppleIcon from "@/components/icons/apple"
 
 export function CTA() {
   const prefersReducedMotion = useReducedMotion()
@@ -18,10 +18,10 @@ export function CTA() {
         {...(prefersReducedMotion
           ? {}
           : {
-              initial: { opacity: 0, y: 24 },
+              initial: { opacity: 0, y: 16 },
               whileInView: { opacity: 1, y: 0 },
               viewport: { once: true },
-              transition: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1] as const },
+              transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] as const },
             })}
         className="relative text-center py-8"
       >
@@ -33,8 +33,8 @@ export function CTA() {
           No account required.
         </p>
         <Button size="lg">
-          <Apple size={17} />
-          Download for Mac
+         <AppleIcon size={17} />
+          Download for macOS
         </Button>
         <p className="mt-4 text-xs text-muted-foreground">
           macOS 14.0 or later &middot; Apple Silicon & Intel

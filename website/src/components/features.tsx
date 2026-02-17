@@ -81,10 +81,10 @@ export function Features() {
           {...(prefersReducedMotion
             ? {}
             : {
-                initial: { opacity: 0, y: 16 },
+                initial: { opacity: 0, y: 12 },
                 whileInView: { opacity: 1, y: 0 },
                 viewport: { once: true },
-                transition: { duration: 0.5 },
+                transition: { duration: 0.4, ease: [0.23, 1, 0.32, 1] },
               })}
           className="text-sm font-medium text-destructive tracking-wide uppercase mb-3"
         >
@@ -94,10 +94,10 @@ export function Features() {
           {...(prefersReducedMotion
             ? {}
             : {
-                initial: { opacity: 0, y: 16 },
+                initial: { opacity: 0, y: 14 },
                 whileInView: { opacity: 1, y: 0 },
                 viewport: { once: true },
-                transition: { duration: 0.5, delay: 0.05 },
+                transition: { duration: 0.4, delay: 0.05, ease: [0.23, 1, 0.32, 1] },
               })}
           className="text-3xl md:text-4xl font-bold tracking-tight"
         >
@@ -107,10 +107,10 @@ export function Features() {
           {...(prefersReducedMotion
             ? {}
             : {
-                initial: { opacity: 0, y: 16 },
+                initial: { opacity: 0, y: 12 },
                 whileInView: { opacity: 1, y: 0 },
                 viewport: { once: true },
-                transition: { duration: 0.5, delay: 0.1 },
+                transition: { duration: 0.4, delay: 0.1, ease: [0.23, 1, 0.32, 1] },
               })}
           className="mt-4 text-muted-foreground text-lg max-w-xl mx-auto"
         >
@@ -125,13 +125,13 @@ export function Features() {
             {...(prefersReducedMotion
               ? {}
               : {
-                  initial: { opacity: 0, y: 20 },
+                  initial: { opacity: 0, y: 16 },
                   whileInView: { opacity: 1, y: 0 },
                   viewport: { once: true },
                   transition: {
-                    duration: 0.45,
-                    delay: i * 0.06,
-                    ease: [0.25, 0.1, 0.25, 1] as const,
+                    duration: 0.4,
+                    delay: i * 0.05,
+                    ease: [0.23, 1, 0.32, 1] as const,
                   },
                 })}
             className={cn(
