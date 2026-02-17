@@ -10,19 +10,21 @@ Reko is a macOS screen recording and video editing app built with Tauri v2. It r
 
 Three-layer stack, all in one repo:
 
-1. **Swift framework** (`RekoEngine/`) — native macOS capture and export engine using ScreenCaptureKit, AVFoundation, and Metal. Compiled as a static library and linked into the Rust binary via `build.rs`. Exposes a C API (`capi.swift` with `@_cdecl` functions prefixed `ck_`).
+1. **Swift framework** (`RekoEngine/`) — native macOS capture and export engine using ScreenCaptureKit, AVFoundation, Metal, VideoToolbox, CoreMedia, CoreVideo, CoreGraphics, and CoreAudio. Compiled as a static library and linked into the Rust binary via `build.rs`. Exposes a C API (`capi.swift` with `@_cdecl` functions prefixed `ck_`). Key subsystems: `capture/` (screen, mic, camera, mouse logger), `recording/` (video/audio writers, pipeline), `export/` (Metal compositor, audio mixer, video decoder, pipeline).
 
-2. **Rust/Tauri backend** (`src-tauri/`) — thin orchestration layer. `swift_ffi.rs` wraps the C API calls. Tauri commands in `src-tauri/src/commands/` are the IPC surface. Project data is stored as JSON in `~/Library/Application Support/com.reko.app/projects/{id}/project.json` with raw media in a `raw/` subdirectory.
+2. **Rust/Tauri backend** (`src-tauri/`) — thin orchestration layer. `swift_ffi.rs` wraps the C API calls. Tauri commands in `src-tauri/src/commands/` (editor, export, permissions, recording, sources) are the IPC surface. `autozoom.rs` generates zoom keyframes from mouse click events. Tauri plugins: opener, global-shortcut, notification, dialog. Project data is stored as JSON in `~/Library/Application Support/com.reko.app/projects/{id}/project.json` with raw media in a `raw/` subdirectory.
 
-3. **React frontend** (`src/`) — single Vite entrypoint (`main.tsx`) that routes by Tauri window label: `recorder` → `RecorderApp`, `editor-*` → `EditorApp`, `window-picker` → `WindowPickerApp`, `onboarding` → `OnboardingApp`. State management via Zustand (`stores/editor-store.ts`) with Zundo for undo/redo. UI built with shadcn/ui + Tailwind CSS v4.
+3. **React frontend** (`src/`) — single Vite entrypoint (`main.tsx`) that routes by Tauri window label with `window.location.pathname` fallback: `recorder` → `RecorderApp`, `editor*` → `EditorApp`, `window-picker` → `WindowPickerApp`, `onboarding` → `OnboardingApp`. State management via Zustand (`stores/editor-store.ts`) with Zundo for undo/redo. UI built with shadcn/ui + radix-ui + Tailwind CSS v4, icons via lucide-react, animations via motion (framer-motion).
 
 ### Key IPC flow
 Frontend calls `invoke("command_name", { args })` → Tauri command in Rust → `RekoEngine` (Swift FFI) → returns JSON string → Rust deserializes and returns to frontend.
 
 ### Data model
-- `ProjectState` / `EditorProject` — core types defined in both Rust (`src-tauri/src/project.rs`) and TypeScript (`src/types/index.ts`, `src/types/editor.ts`). Rust uses `#[serde(rename_all = "camelCase")]` to match the frontend.
-- `Sequence` contains `Clip[]`, `Transition[]`, `OverlayTrack[]`, `Overlay[]` — the NLE timeline model.
-- Zoom keyframes are scoped per-clip in the sequence model.
+- `ProjectState` — defined in both Rust (`src-tauri/src/project.rs`) and TypeScript (`src/types/index.ts`). Nested structs in Rust use `#[serde(rename_all = "camelCase")]` to match the frontend; top-level `ProjectState` fields use field-level serde attributes.
+- `EditorProject` — TypeScript only (`src/types/editor.ts`), extends `ProjectState` with required `Effects` and `Sequence`.
+- `Sequence` contains `Clip[]`, `Transition[]`, `OverlayTrack[]`, `Overlay[]` — the NLE timeline model. Defined in both Rust and TypeScript.
+- `Effects` contains `BackgroundConfig`, `CameraBubbleConfig`, `FrameConfig`, `CursorConfig` — visual styling. Defined in both Rust and TypeScript.
+- Zoom keyframes (`ZoomEvent[]`) are scoped per-clip in the sequence model.
 
 ## Build Commands
 
@@ -70,4 +72,4 @@ cd RekoEngine && swift test
 - **Vite dev asset serving**: a custom `serveLocalAssets` plugin in `vite.config.ts` serves local files via `/__asset__/` prefix during development (workaround for Tauri's `asset://` being cross-origin blocked in dev).
 - **ScreenCaptureKit**: SCStream delivers frames with multiple statuses. Only `.complete` frames have pixel data. Always filter by status before writing to AVAssetWriter — non-complete frames corrupt its internal state.
 - **Editor store**: uses `temporal` middleware from Zundo. Only `project` state is tracked for undo. Playback state (`currentTime`, `isPlaying`) is excluded. Use `pauseUndo()`/`resumeUndo()` during continuous drags.
-- **Test setup**: vitest with jsdom, setup file at `src/__tests__/setup.ts`
+- **Test setup**: vitest with jsdom, config in `vite.config.ts` (not a separate vitest config), setup file at `src/__tests__/setup.ts`. Setup mocks `@tauri-apps/api/core` `invoke` globally — individual tests override via `vi.mocked()`.
