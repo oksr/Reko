@@ -99,7 +99,7 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
 
   return (
     <div
-      className="relative w-full aspect-video overflow-hidden ring-1 ring-white/5"
+      className="relative w-full aspect-video overflow-hidden ring-1 ring-white/5 select-none"
       style={{
         ...bgStyle,
         borderRadius: 8,
