@@ -25,11 +25,56 @@ fn get_home_dir() -> Result<String, String> {
 pub fn run() {
     #[cfg(debug_assertions)]
     {
+        let version = env!("CARGO_PKG_VERSION");
+        let os_version = std::process::Command::new("sw_vers")
+            .arg("-productVersion")
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .unwrap_or_default();
+        let os_version = os_version.trim();
+
+        let art: &[(&str, u8)] = &[
+            (" /$$$$$$$  /$$$$$$$$  /$$   /$$   /$$$$$$", 159),
+            ("| $$__  $$| $$_____/ | $$  /$$/ /$$__  $$", 123),
+            ("| $$  \\ $$| $$       | $$ /$$/ | $$  \\ $$", 87),
+            ("| $$$$$$$/| $$$$$    | $$$$$/  | $$  | $$", 51),
+            ("| $$__  $$| $$__/    | $$  $$  | $$  | $$", 45),
+            ("| $$  \\ $$| $$       | $$\\  $$ | $$  | $$", 39),
+            ("| $$  | $$| $$$$$$$$ | $$ \\  $$|  $$$$$$/", 33),
+            ("|__/  |__/|________/ |__/  \\__/ \\______/", 27),
+        ];
+
+        let max_w = art.iter().map(|(s, _)| s.len()).max().unwrap();
+        let inner = max_w + 4;
+        let hbar: String = "─".repeat(inner);
+
+        let d = "\x1b[38;5;240m";
+        let c = "\x1b[38;5;51m";
+        let r = "\x1b[0m";
+
         println!();
-        println!("  ██▀▀██  ██▀▀▀  ██ ▄▀  ▄▀▀▀▄");
-        println!("  ██▄▄██  ██▄▄   ██▀▄   ██  ██");
-        println!("  ██▀▀█   ██▀▀   ██ ▀▄  ██  ██");
-        println!("  ██  ██  ██▄▄▄  ██  ▀▄ ▀▄▄▄▀");
+        println!("  {d}╭{hbar}╮{r}");
+        println!("  {d}│{r}{:inner$}{d}│{r}", "");
+        for &(line, color) in art {
+            println!("  {d}│{r}  \x1b[1;38;5;{color}m{line:<max_w$}\x1b[0m  {d}│{r}");
+        }
+        println!("  {d}│{r}{:inner$}{d}│{r}", "");
+        println!("  {d}├{hbar}┤{r}");
+        println!("  {d}│{r}{:inner$}{d}│{r}", "");
+
+        let pad = inner - 11;
+        let info: &[(&str, &str)] = &[
+            ("version", version),
+            ("env", "development"),
+            ("macos", os_version),
+        ];
+        for &(label, value) in info {
+            println!("  {d}│{r}  {c}{label:<9}{r}{value:<pad$}{d}│{r}");
+        }
+
+        println!("  {d}│{r}{:inner$}{d}│{r}", "");
+        println!("  {d}╰{hbar}╯{r}");
         println!();
     }
 
@@ -74,6 +119,16 @@ pub fn run() {
                 }
             }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                if window.label().starts_with("editor-") {
+                    if let Some(recorder) = window.app_handle().get_webview_window("recorder") {
+                        let _ = recorder.show();
+                        let _ = recorder.set_focus();
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             get_engine_version,
