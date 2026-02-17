@@ -104,8 +104,7 @@ pub fn save_project_state(project: project::ProjectState) -> Result<(), String> 
 pub fn generate_auto_zoom(
     project_id: String,
     zoom_scale: f64,
-    transition_speed: String,
-) -> Result<Vec<project::ZoomKeyframe>, String> {
+) -> Result<Vec<project::ZoomEvent>, String> {
     let raw = project::raw_dir(&project_id);
     let mouse_path = raw.join("mouse_events.jsonl");
 
@@ -113,24 +112,13 @@ pub fn generate_auto_zoom(
         return Ok(vec![]);
     }
 
-    // Load project to get video duration
-    let project_path = project::project_dir(&project_id).join("project.json");
-    let project_data = std::fs::read_to_string(&project_path).map_err(|e| e.to_string())?;
-    let p: project::ProjectState = serde_json::from_str(&project_data).map_err(|e| e.to_string())?;
-    let video_duration_ms = p.timeline.duration_ms;
-
     let content = std::fs::read_to_string(&mouse_path).map_err(|e| e.to_string())?;
     let events: Vec<autozoom::MouseEvent> = content
         .lines()
         .filter_map(|line| serde_json::from_str(line).ok())
         .collect();
 
-    Ok(autozoom::generate_zoom_keyframes(
-        &events,
-        zoom_scale,
-        &transition_speed,
-        video_duration_ms,
-    ))
+    Ok(autozoom::generate_zoom_events(&events, zoom_scale))
 }
 
 #[tauri::command]

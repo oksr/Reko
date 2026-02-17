@@ -3,18 +3,17 @@ import { sourceTimeToSequenceTime } from "@/lib/sequence"
 import { invoke } from "@tauri-apps/api/core"
 import { useState } from "react"
 import { Wand2, Plus, X, ChevronDown } from "lucide-react"
-import type { ZoomKeyframe } from "@/types/editor"
+import type { ZoomEvent } from "@/types/editor"
 import { DEFAULT_AUTO_ZOOM_SETTINGS } from "@/types/editor"
 
 export function ZoomPanel() {
   const project = useEditorStore((s) => s.project)
   const currentTime = useEditorStore((s) => s.currentTime)
   const selectedClipIndex = useEditorStore((s) => s.selectedClipIndex)
-  const addZoomKeyframeToClip = useEditorStore((s) => s.addZoomKeyframeToClip)
-  const removeZoomKeyframeFromClip = useEditorStore((s) => s.removeZoomKeyframeFromClip)
-  const clearClipZoomKeyframes = useEditorStore((s) => s.clearClipZoomKeyframes)
-  const selectedZoomIndex = useEditorStore((s) => s.selectedZoomIndex)
-  const setSelectedZoomIndex = useEditorStore((s) => s.setSelectedZoomIndex)
+  const addZoomEvent = useEditorStore((s) => s.addZoomEvent)
+  const removeZoomEvent = useEditorStore((s) => s.removeZoomEvent)
+  const clearZoomEvents = useEditorStore((s) => s.clearZoomEvents)
+  const setClipZoomEvents = useEditorStore((s) => s.setClipZoomEvents)
   const setAutoZoomSettings = useEditorStore((s) => s.setAutoZoomSettings)
   const [generating, setGenerating] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
@@ -24,32 +23,29 @@ export function ZoomPanel() {
   const settings = project.autoZoomSettings ?? DEFAULT_AUTO_ZOOM_SETTINGS
   const sequence = project.sequence
   const selectedClip = selectedClipIndex !== null ? sequence.clips[selectedClipIndex] : null
-  const keyframes = selectedClip?.zoomKeyframes ?? []
+  const events = selectedClip?.zoomEvents ?? []
 
   const handleAutoZoom = async () => {
     if (selectedClipIndex === null) return
     setGenerating(true)
     try {
-      const kfs = await invoke<ZoomKeyframe[]>("generate_auto_zoom", {
+      const generated = await invoke<ZoomEvent[]>("generate_auto_zoom", {
         projectId: project.id,
         zoomScale: settings.zoomScale,
-        transitionSpeed: settings.transitionSpeed,
       })
       const clip = sequence.clips[selectedClipIndex]
-      const clipRelativeKfs = kfs
-        .filter((kf) => kf.timeMs >= clip.sourceStart && kf.timeMs < clip.sourceEnd)
-        .map((kf) => ({ ...kf, timeMs: kf.timeMs - clip.sourceStart }))
-      clearClipZoomKeyframes(selectedClipIndex)
-      for (const kf of clipRelativeKfs) {
-        addZoomKeyframeToClip(selectedClipIndex, kf)
-      }
+      // Filter to events within this clip's source range and convert to clip-relative time
+      const clipEvents = generated
+        .filter((e) => e.timeMs >= clip.sourceStart && e.timeMs < clip.sourceEnd)
+        .map((e) => ({ ...e, timeMs: e.timeMs - clip.sourceStart }))
+      setClipZoomEvents(selectedClipIndex, clipEvents)
     } catch (e) {
       console.error("Auto-zoom failed:", e)
     }
     setGenerating(false)
   }
 
-  const handleAddKeyframe = () => {
+  const handleAddEvent = () => {
     if (selectedClipIndex === null || !selectedClip) return
     const clipSeqStart = sourceTimeToSequenceTime(
       selectedClip.sourceStart,
@@ -58,20 +54,17 @@ export function ZoomPanel() {
       sequence.transitions
     )
     const clipRelativeTime = Math.max(0, currentTime - clipSeqStart)
-    const halfDuration = 500
-    const clipRelStart = Math.max(0, Math.round(clipRelativeTime - halfDuration))
-    const clipRelEnd = Math.round(clipRelativeTime + halfDuration)
 
-    // Create a zoom triplet: [1x anchor] → [zoomed] → [1x anchor]
-    addZoomKeyframeToClip(selectedClipIndex, {
-      timeMs: clipRelStart, x: 0.5, y: 0.5, scale: 1.0, easing: "linear",
-    })
-    addZoomKeyframeToClip(selectedClipIndex, {
-      timeMs: Math.round(clipRelativeTime), x: 0.5, y: 0.5, scale: 1.5, easing: "spring",
-    })
-    addZoomKeyframeToClip(selectedClipIndex, {
-      timeMs: clipRelEnd, x: 0.5, y: 0.5, scale: 1.0, easing: "ease-out",
-    })
+    const newEvent: ZoomEvent = {
+      id: crypto.randomUUID(),
+      timeMs: Math.max(0, Math.round(clipRelativeTime - 300)),
+      durationMs: 1500,
+      x: 0.5,
+      y: 0.5,
+      scale: 2.0,
+    }
+
+    addZoomEvent(selectedClipIndex, newEvent)
   }
 
   const formatTime = (ms: number) => {
@@ -86,7 +79,7 @@ export function ZoomPanel() {
 
       {selectedClipIndex === null && (
         <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-          Select a clip to edit zoom keyframes.
+          Select a clip to edit zoom events.
         </p>
       )}
 
@@ -103,7 +96,7 @@ export function ZoomPanel() {
             </button>
             <button
               className="flex items-center justify-center w-9 text-[11px] rounded-lg bg-white/[0.05] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground transition-colors"
-              onClick={handleAddKeyframe}
+              onClick={handleAddEvent}
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -143,76 +136,35 @@ export function ZoomPanel() {
                     className="w-full h-1 rounded-full appearance-none bg-white/10 accent-violet-400"
                   />
                 </div>
-
-                {/* Transition Speed */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-muted-foreground/70">Transition Speed</label>
-                  <div className="flex gap-1">
-                    {(["slow", "medium", "fast"] as const).map((speed) => (
-                      <button
-                        key={speed}
-                        className={`flex-1 text-[10px] py-1.5 rounded-md transition-colors ${
-                          settings.transitionSpeed === speed
-                            ? "bg-violet-400/20 text-violet-200"
-                            : "bg-white/[0.05] text-muted-foreground hover:bg-white/[0.08]"
-                        }`}
-                        onClick={() => setAutoZoomSettings({ transitionSpeed: speed })}
-                      >
-                        {speed.charAt(0).toUpperCase() + speed.slice(1)}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Cursor Follow */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-muted-foreground/70">Cursor Follow</label>
-                    <span className="text-[10px] text-muted-foreground tabular-nums">{Math.round(settings.cursorFollowStrength * 100)}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={settings.cursorFollowStrength}
-                    onChange={(e) => setAutoZoomSettings({ cursorFollowStrength: parseFloat(e.target.value) })}
-                    className="w-full h-1 rounded-full appearance-none bg-white/10 accent-violet-400"
-                  />
-                </div>
               </div>
             )}
           </div>
 
-          {keyframes.length > 0 && (
+          {events.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] text-muted-foreground">Keyframes ({keyframes.length})</label>
+                <label className="text-[11px] text-muted-foreground">Events ({events.length})</label>
                 <button
                   className="text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors"
-                  onClick={() => clearClipZoomKeyframes(selectedClipIndex)}
+                  onClick={() => clearZoomEvents(selectedClipIndex)}
                 >
                   Clear all
                 </button>
               </div>
               <div className="max-h-36 overflow-y-auto space-y-0.5 rounded-lg">
-                {keyframes.map((kf, i) => (
+                {events.map((evt) => (
                   <div
-                    key={kf.timeMs}
-                    className={`flex items-center justify-between text-[11px] rounded-md px-2.5 py-1.5 cursor-pointer transition-colors ${
-                      selectedZoomIndex === i
-                        ? "bg-violet-400/15 text-violet-200"
-                        : "bg-white/[0.03] hover:bg-white/[0.06] text-muted-foreground"
-                    }`}
-                    onClick={() => setSelectedZoomIndex(i)}
+                    key={evt.id}
+                    className="flex items-center justify-between text-[11px] rounded-md px-2.5 py-1.5 bg-white/[0.03] hover:bg-white/[0.06] text-muted-foreground transition-colors"
                   >
-                    <span className="font-mono tabular-nums">{formatTime(kf.timeMs)}</span>
-                    <span className="tabular-nums">{kf.scale}x</span>
+                    <span className="font-mono tabular-nums">{formatTime(evt.timeMs)}</span>
+                    <span className="tabular-nums">{evt.scale.toFixed(1)}x</span>
+                    <span className="text-[10px] text-muted-foreground/50 tabular-nums">{(evt.durationMs / 1000).toFixed(1)}s</span>
                     <button
                       className="p-0.5 rounded hover:bg-white/[0.1] text-muted-foreground/50 hover:text-foreground transition-colors"
                       onClick={(e) => {
                         e.stopPropagation()
-                        removeZoomKeyframeFromClip(selectedClipIndex, kf.timeMs)
+                        removeZoomEvent(selectedClipIndex, evt.id)
                       }}
                     >
                       <X className="w-3 h-3" />

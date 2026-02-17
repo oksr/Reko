@@ -39,7 +39,12 @@
       "Bash(sqlite3:*)",
       "Bash(sips:*)",
       "Bash(git status:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "mcp__octocode__githubSearchPullRequests",
+      "Bash(gh issue list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh api:*)",
+      "Bash(cargo tree:*)"
     ]
   }
 }

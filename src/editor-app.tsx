@@ -128,7 +128,6 @@ function EditorContent() {
                 size: 30,
               },
             },
-            zoomKeyframes: [],
           },
         }
 

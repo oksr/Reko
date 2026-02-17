@@ -48,7 +48,6 @@ const MOCK_PROJECT: EditorProject = {
       color: "#ffcc00",
       opacity: 0.6,
     },
-    zoomKeyframes: [],
   },
 }
 
@@ -132,65 +131,6 @@ describe("editor store", () => {
     expect(useEditorStore.getState().project!.effects.cursor.type).toBe("spotlight")
   })
 
-  it("addZoomKeyframe inserts sorted", () => {
-    useEditorStore.getState().addZoomKeyframe({
-      timeMs: 2000, x: 0.5, y: 0.5, scale: 2.0, easing: "spring",
-    })
-    useEditorStore.getState().addZoomKeyframe({
-      timeMs: 1000, x: 0.3, y: 0.7, scale: 1.5, easing: "spring",
-    })
-    const kfs = useEditorStore.getState().project!.effects.zoomKeyframes
-    expect(kfs.length).toBe(2)
-    expect(kfs[0].timeMs).toBe(1000)
-    expect(kfs[1].timeMs).toBe(2000)
-  })
-
-  it("removeZoomKeyframe removes by timeMs", () => {
-    useEditorStore.getState().addZoomKeyframe({
-      timeMs: 1000, x: 0.3, y: 0.7, scale: 2.0, easing: "spring",
-    })
-    useEditorStore.getState().removeZoomKeyframe(1000)
-    expect(useEditorStore.getState().project!.effects.zoomKeyframes.length).toBe(0)
-  })
-
-  it("tracks selectedZoomIndex", () => {
-    useEditorStore.getState().setSelectedZoomIndex(2)
-    expect(useEditorStore.getState().selectedZoomIndex).toBe(2)
-    useEditorStore.getState().setSelectedZoomIndex(null)
-    expect(useEditorStore.getState().selectedZoomIndex).toBeNull()
-  })
-
-  it("updateZoomKeyframe updates properties at index", () => {
-    useEditorStore.getState().addZoomKeyframe({
-      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "spring",
-    })
-    useEditorStore.getState().updateZoomKeyframe(0, { scale: 1.5, easing: "linear" })
-    const kf = useEditorStore.getState().project!.effects.zoomKeyframes[0]
-    expect(kf.scale).toBe(1.5)
-    expect(kf.easing).toBe("linear")
-    expect(kf.x).toBe(0.5) // unchanged
-  })
-
-  it("moveZoomKeyframe updates timeMs and re-sorts", () => {
-    useEditorStore.getState().addZoomKeyframe({
-      timeMs: 1000, x: 0.5, y: 0.5, scale: 2.0, easing: "spring",
-    })
-    useEditorStore.getState().addZoomKeyframe({
-      timeMs: 3000, x: 0.3, y: 0.7, scale: 1.5, easing: "spring",
-    })
-    // Move first segment to after the second
-    useEditorStore.getState().moveZoomKeyframe(0, 4000)
-    const kfs = useEditorStore.getState().project!.effects.zoomKeyframes
-    expect(kfs[0].timeMs).toBe(3000)
-    expect(kfs[1].timeMs).toBe(4000)
-  })
-
-  it("selectedZoomIndex is NOT tracked by undo", () => {
-    useEditorStore.getState().setSelectedZoomIndex(1)
-    const { pastStates } = useEditorStore.temporal.getState()
-    expect(pastStates.length).toBe(0)
-  })
-
   it("auto-migrates project to sequence with one clip", () => {
     const { project } = useEditorStore.getState()
     expect(project!.sequence.clips).toHaveLength(1)
@@ -252,7 +192,6 @@ describe("editor store", () => {
     const effects = useEditorStore.getState().project!.effects
     expect(effects.cursor.enabled).toBe(false)
     expect(effects.cursor.type).toBe("highlight")
-    expect(effects.zoomKeyframes).toEqual([])
   })
 })
 
@@ -310,42 +249,61 @@ describe("overlay actions", () => {
   })
 })
 
-describe("clip-scoped zoom actions", () => {
+describe("clip-scoped zoom event actions", () => {
   beforeEach(() => {
     useEditorStore.getState().loadProject({ ...MOCK_PROJECT })
     useEditorStore.temporal.getState().clear()
   })
 
-  it("addZoomKeyframeToClip adds keyframe to specific clip", () => {
+  it("addZoomEvent adds event to specific clip", () => {
     const store = useEditorStore.getState()
-    store.addZoomKeyframeToClip(0, {
-      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "spring",
+    store.addZoomEvent(0, {
+      id: "z1", timeMs: 500, durationMs: 1500, x: 0.3, y: 0.7, scale: 2.0,
     })
     const clip = useEditorStore.getState().project!.sequence.clips[0]
-    expect(clip.zoomKeyframes).toHaveLength(1)
-    expect(clip.zoomKeyframes[0].timeMs).toBe(500)
+    expect(clip.zoomEvents).toHaveLength(1)
+    expect(clip.zoomEvents[0].timeMs).toBe(500)
+    expect(clip.zoomEvents[0].durationMs).toBe(1500)
   })
 
-  it("removeZoomKeyframeFromClip removes by timeMs", () => {
+  it("removeZoomEvent removes by id", () => {
     const store = useEditorStore.getState()
-    store.addZoomKeyframeToClip(0, {
-      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "spring",
+    store.addZoomEvent(0, {
+      id: "z1", timeMs: 500, durationMs: 1500, x: 0.3, y: 0.7, scale: 2.0,
     })
-    store.removeZoomKeyframeFromClip(0, 500)
+    store.removeZoomEvent(0, "z1")
     const clip = useEditorStore.getState().project!.sequence.clips[0]
-    expect(clip.zoomKeyframes).toHaveLength(0)
+    expect(clip.zoomEvents).toHaveLength(0)
   })
 
-  it("clearClipZoomKeyframes clears all keyframes from a clip", () => {
+  it("updateZoomEvent updates properties", () => {
     const store = useEditorStore.getState()
-    store.addZoomKeyframeToClip(0, {
-      timeMs: 500, x: 0.3, y: 0.7, scale: 2.0, easing: "spring",
+    store.addZoomEvent(0, {
+      id: "z1", timeMs: 500, durationMs: 1500, x: 0.3, y: 0.7, scale: 2.0,
     })
-    store.addZoomKeyframeToClip(0, {
-      timeMs: 1500, x: 0.5, y: 0.5, scale: 1.5, easing: "spring",
+    store.updateZoomEvent(0, "z1", { scale: 1.5, durationMs: 2000 })
+    const evt = useEditorStore.getState().project!.sequence.clips[0].zoomEvents[0]
+    expect(evt.scale).toBe(1.5)
+    expect(evt.durationMs).toBe(2000)
+    expect(evt.x).toBe(0.3) // unchanged
+  })
+
+  it("clearZoomEvents clears all events from a clip", () => {
+    const store = useEditorStore.getState()
+    store.addZoomEvent(0, {
+      id: "z1", timeMs: 500, durationMs: 1500, x: 0.3, y: 0.7, scale: 2.0,
     })
-    store.clearClipZoomKeyframes(0)
+    store.addZoomEvent(0, {
+      id: "z2", timeMs: 3000, durationMs: 1000, x: 0.5, y: 0.5, scale: 1.5,
+    })
+    store.clearZoomEvents(0)
     const clip = useEditorStore.getState().project!.sequence.clips[0]
-    expect(clip.zoomKeyframes).toHaveLength(0)
+    expect(clip.zoomEvents).toHaveLength(0)
+  })
+
+  it("selectedZoomEventId is NOT tracked by undo", () => {
+    useEditorStore.getState().setSelectedZoomEventId("z1")
+    const { pastStates } = useEditorStore.temporal.getState()
+    expect(pastStates.length).toBe(0)
   })
 })

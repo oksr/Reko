@@ -3,9 +3,9 @@ import type { Clip, Transition } from "@/types/editor"
 export function createClip(
   sourceStart: number,
   sourceEnd: number,
-  zoomKeyframes: Clip["zoomKeyframes"] = []
+  zoomEvents: Clip["zoomEvents"] = []
 ): Clip {
-  return { id: crypto.randomUUID(), sourceStart, sourceEnd, speed: 1, zoomKeyframes }
+  return { id: crypto.randomUUID(), sourceStart, sourceEnd, speed: 1, zoomEvents }
 }
 
 /** Total duration of the sequence accounting for transition overlaps */
@@ -80,26 +80,29 @@ export function splitClip(clip: Clip, sourceTime: number): [Clip, Clip] {
   }
   const splitRelative = sourceTime - clip.sourceStart
 
-  const leftKeyframes = clip.zoomKeyframes.filter(
-    (kf) => kf.timeMs <= splitRelative
+  // Split zoom events: events that start before split go to left clip,
+  // events that start after go to right clip (with adjusted time).
+  // Events that span the split point stay in left clip.
+  const leftEvents = clip.zoomEvents.filter(
+    (e) => e.timeMs < splitRelative
   )
-  const rightKeyframes = clip.zoomKeyframes
-    .filter((kf) => kf.timeMs >= splitRelative)
-    .map((kf) => ({ ...kf, timeMs: kf.timeMs - splitRelative }))
+  const rightEvents = clip.zoomEvents
+    .filter((e) => e.timeMs >= splitRelative)
+    .map((e) => ({ ...e, timeMs: e.timeMs - splitRelative }))
 
   const left: Clip = {
     id: crypto.randomUUID(),
     sourceStart: clip.sourceStart,
     sourceEnd: sourceTime,
     speed: clip.speed,
-    zoomKeyframes: leftKeyframes,
+    zoomEvents: leftEvents,
   }
   const right: Clip = {
     id: crypto.randomUUID(),
     sourceStart: sourceTime,
     sourceEnd: clip.sourceEnd,
     speed: clip.speed,
-    zoomKeyframes: rightKeyframes,
+    zoomEvents: rightEvents,
   }
 
   return [left, right]

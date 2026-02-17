@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react"
 import { assetUrl } from "@/lib/asset-url"
 import { interpolateZoomAtSequenceTime } from "@/lib/zoom-interpolation"
-import { getSmoothedCursorAt } from "@/lib/cursor-smoothing"
 import { useEditorStore, pauseUndo, resumeUndo } from "@/stores/editor-store"
 import { useMouseEvents } from "@/hooks/use-mouse-events"
 import type { useVideoSync } from "@/hooks/use-video-sync"
@@ -44,11 +43,7 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
     }
   }, [clampClips])
 
-  const { cursorPos, getCursorAt, getClicksInRange } = useMouseEvents()
-  const getSmoothedCursor = useCallback(
-    (timeMs: number) => getSmoothedCursorAt(getCursorAt, timeMs),
-    [getCursorAt]
-  )
+  const { cursorPos, getClicksInRange } = useMouseEvents()
 
   // Click ripple animation duration in ms
   const CLICK_RIPPLE_DURATION = 500
@@ -64,14 +59,10 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
   const { effects, tracks } = project
   const { background, cameraBubble, frame, cursor } = effects
   const clickHighlight = cursor.clickHighlight
-  const autoZoomSettings = project.autoZoomSettings
   const zoomState = interpolateZoomAtSequenceTime(
     currentTime,
     project.sequence.clips,
-    project.sequence.transitions,
-    getSmoothedCursor,
-    autoZoomSettings?.cursorFollowStrength ?? 0,
-    autoZoomSettings?.transitionSpeed ?? "medium"
+    project.sequence.transitions
   )
 
   const hasImageBg = (background.type === "image" || background.type === "wallpaper" || background.type === "custom") && background.imageUrl
@@ -153,10 +144,9 @@ export function PreviewCanvas({ videoSync }: PreviewCanvasProps) {
           <div
             className="relative w-full h-full"
             style={{
-              transform: zoomState.scale !== 1
-                ? `scale(${zoomState.scale}) translate(${(0.5 - zoomState.x) * 100 / zoomState.scale}%, ${(0.5 - zoomState.y) * 100 / zoomState.scale}%)`
-                : undefined,
+              transform: `scale(${zoomState.scale}) translate(${(0.5 - zoomState.x) * 100 / zoomState.scale}%, ${(0.5 - zoomState.y) * 100 / zoomState.scale}%)`,
               transformOrigin: "center center",
+              transition: "transform 150ms ease-out",
             }}
           >
             <video

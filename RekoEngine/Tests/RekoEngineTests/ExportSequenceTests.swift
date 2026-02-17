@@ -8,9 +8,9 @@ final class ExportSequenceTests: XCTestCase {
     func testSequenceDuration_threeClipsWithCuts() {
         // 3 clips: 3000 + 3000 + 2000 = 8000
         let clips = [
-            ExportClip(sourceStartMs: 0, sourceEndMs: 3000, speed: 1.0, zoomKeyframes: []),
-            ExportClip(sourceStartMs: 5000, sourceEndMs: 8000, speed: 1.0, zoomKeyframes: []),
-            ExportClip(sourceStartMs: 10000, sourceEndMs: 12000, speed: 1.0, zoomKeyframes: []),
+            ExportClip(sourceStartMs: 0, sourceEndMs: 3000, speed: 1.0, zoomEvents: []),
+            ExportClip(sourceStartMs: 5000, sourceEndMs: 8000, speed: 1.0, zoomEvents: []),
+            ExportClip(sourceStartMs: 10000, sourceEndMs: 12000, speed: 1.0, zoomEvents: []),
         ]
         let transitions: [ExportTransition?] = [nil, nil]
         XCTAssertEqual(ExportMath.sequenceDurationMs(clips: clips, transitions: transitions), 8000)
@@ -18,9 +18,9 @@ final class ExportSequenceTests: XCTestCase {
 
     func testSequenceDuration_crossfadeSubtractsOverlap() {
         let clips = [
-            ExportClip(sourceStartMs: 0, sourceEndMs: 3000, speed: 1.0, zoomKeyframes: []),
-            ExportClip(sourceStartMs: 5000, sourceEndMs: 8000, speed: 1.0, zoomKeyframes: []),
-            ExportClip(sourceStartMs: 10000, sourceEndMs: 12000, speed: 1.0, zoomKeyframes: []),
+            ExportClip(sourceStartMs: 0, sourceEndMs: 3000, speed: 1.0, zoomEvents: []),
+            ExportClip(sourceStartMs: 5000, sourceEndMs: 8000, speed: 1.0, zoomEvents: []),
+            ExportClip(sourceStartMs: 10000, sourceEndMs: 12000, speed: 1.0, zoomEvents: []),
         ]
         let transitions: [ExportTransition?] = [
             ExportTransition(type: "crossfade", durationMs: 200),
@@ -32,7 +32,7 @@ final class ExportSequenceTests: XCTestCase {
 
     func testSequenceDuration_singleClip() {
         let clips = [
-            ExportClip(sourceStartMs: 1000, sourceEndMs: 4000, speed: 1.0, zoomKeyframes: []),
+            ExportClip(sourceStartMs: 1000, sourceEndMs: 4000, speed: 1.0, zoomEvents: []),
         ]
         XCTAssertEqual(ExportMath.sequenceDurationMs(clips: clips, transitions: []), 3000)
     }
@@ -45,9 +45,9 @@ final class ExportSequenceTests: XCTestCase {
 
     func testClipOutputRanges_threeClipsWithCuts() {
         let clips = [
-            ExportClip(sourceStartMs: 0, sourceEndMs: 3000, speed: 1.0, zoomKeyframes: []),
-            ExportClip(sourceStartMs: 5000, sourceEndMs: 8000, speed: 1.0, zoomKeyframes: []),
-            ExportClip(sourceStartMs: 10000, sourceEndMs: 12000, speed: 1.0, zoomKeyframes: []),
+            ExportClip(sourceStartMs: 0, sourceEndMs: 3000, speed: 1.0, zoomEvents: []),
+            ExportClip(sourceStartMs: 5000, sourceEndMs: 8000, speed: 1.0, zoomEvents: []),
+            ExportClip(sourceStartMs: 10000, sourceEndMs: 12000, speed: 1.0, zoomEvents: []),
         ]
         let transitions: [ExportTransition?] = [nil, nil]
         let ranges = ExportMath.computeClipOutputRanges(clips: clips, transitions: transitions)
@@ -63,8 +63,8 @@ final class ExportSequenceTests: XCTestCase {
 
     func testClipOutputRanges_crossfadeOverlap() {
         let clips = [
-            ExportClip(sourceStartMs: 0, sourceEndMs: 3000, speed: 1.0, zoomKeyframes: []),
-            ExportClip(sourceStartMs: 5000, sourceEndMs: 8000, speed: 1.0, zoomKeyframes: []),
+            ExportClip(sourceStartMs: 0, sourceEndMs: 3000, speed: 1.0, zoomEvents: []),
+            ExportClip(sourceStartMs: 5000, sourceEndMs: 8000, speed: 1.0, zoomEvents: []),
         ]
         let transitions: [ExportTransition?] = [
             ExportTransition(type: "crossfade", durationMs: 200),
@@ -79,10 +79,10 @@ final class ExportSequenceTests: XCTestCase {
         XCTAssertEqual(ranges[1].outputEndMs, 5600)
     }
 
-    func testClipOutputRanges_singleClip() {
-        let zk = ExportZoomKeyframe(timeMs: 100, x: 0.3, y: 0.7, scale: 2.0, easing: "spring")
+    func testClipOutputRanges_singleClipWithZoomEvent() {
+        let ze = ExportZoomEvent(id: "z1", timeMs: 100, durationMs: 1500, x: 0.3, y: 0.7, scale: 2.0)
         let clips = [
-            ExportClip(sourceStartMs: 1000, sourceEndMs: 4000, speed: 1.0, zoomKeyframes: [zk]),
+            ExportClip(sourceStartMs: 1000, sourceEndMs: 4000, speed: 1.0, zoomEvents: [ze]),
         ]
         let ranges = ExportMath.computeClipOutputRanges(clips: clips, transitions: [])
 
@@ -91,7 +91,7 @@ final class ExportSequenceTests: XCTestCase {
         XCTAssertEqual(ranges[0].outputEndMs, 3000)
         XCTAssertEqual(ranges[0].sourceStartMs, 1000)
         XCTAssertEqual(ranges[0].sourceEndMs, 4000)
-        XCTAssertEqual(ranges[0].zoomKeyframes.count, 1)
+        XCTAssertEqual(ranges[0].zoomEvents.count, 1)
     }
 
     // MARK: - Step 3: Sequence JSON Parsing
@@ -105,8 +105,8 @@ final class ExportSequenceTests: XCTestCase {
                         "sourceStart": 0,
                         "sourceEnd": 3000,
                         "speed": 1,
-                        "zoomKeyframes": [
-                            ["timeMs": 500, "x": 0.3, "y": 0.7, "scale": 2.0, "easing": "spring"]
+                        "zoomEvents": [
+                            ["id": "z1", "timeMs": 500, "durationMs": 1500, "x": 0.3, "y": 0.7, "scale": 2.0]
                         ]
                     ],
                     [
@@ -114,7 +114,7 @@ final class ExportSequenceTests: XCTestCase {
                         "sourceStart": 5000,
                         "sourceEnd": 8000,
                         "speed": 1,
-                        "zoomKeyframes": [] as [[String: Any]]
+                        "zoomEvents": [] as [[String: Any]]
                     ]
                 ] as [[String: Any]],
                 "transitions": [
@@ -127,12 +127,13 @@ final class ExportSequenceTests: XCTestCase {
         XCTAssertEqual(clips.count, 2)
         XCTAssertEqual(clips[0].sourceStartMs, 0)
         XCTAssertEqual(clips[0].sourceEndMs, 3000)
-        XCTAssertEqual(clips[0].zoomKeyframes.count, 1)
-        XCTAssertEqual(clips[0].zoomKeyframes[0].timeMs, 500)
-        XCTAssertEqual(clips[0].zoomKeyframes[0].scale, 2.0)
+        XCTAssertEqual(clips[0].zoomEvents.count, 1)
+        XCTAssertEqual(clips[0].zoomEvents[0].timeMs, 500)
+        XCTAssertEqual(clips[0].zoomEvents[0].durationMs, 1500)
+        XCTAssertEqual(clips[0].zoomEvents[0].scale, 2.0)
         XCTAssertEqual(clips[1].sourceStartMs, 5000)
         XCTAssertEqual(clips[1].sourceEndMs, 8000)
-        XCTAssertEqual(clips[1].zoomKeyframes.count, 0)
+        XCTAssertEqual(clips[1].zoomEvents.count, 0)
 
         XCTAssertEqual(transitions.count, 1)
         XCTAssertNil(transitions[0])
@@ -142,8 +143,8 @@ final class ExportSequenceTests: XCTestCase {
         let project: [String: Any] = [
             "sequence": [
                 "clips": [
-                    ["id": "a", "sourceStart": 0, "sourceEnd": 3000, "speed": 1, "zoomKeyframes": [] as [[String: Any]]],
-                    ["id": "b", "sourceStart": 5000, "sourceEnd": 8000, "speed": 1, "zoomKeyframes": [] as [[String: Any]]],
+                    ["id": "a", "sourceStart": 0, "sourceEnd": 3000, "speed": 1, "zoomEvents": [] as [[String: Any]]],
+                    ["id": "b", "sourceStart": 5000, "sourceEnd": 8000, "speed": 1, "zoomEvents": [] as [[String: Any]]],
                 ] as [[String: Any]],
                 "transitions": [
                     ["type": "crossfade", "durationMs": 200]
@@ -168,62 +169,53 @@ final class ExportSequenceTests: XCTestCase {
         XCTAssertEqual(transitions.count, 0)
     }
 
-    // MARK: - Step 4: Zoom Interpolation (keyframe-pair model)
+    // MARK: - Step 4: Zoom Event Interpolation
 
-    private func kf(_ timeMs: UInt64, x: Double = 0.3, y: Double = 0.7, scale: Double = 2.0, easing: String = "spring") -> ExportZoomKeyframe {
-        ExportZoomKeyframe(timeMs: timeMs, x: x, y: y, scale: scale, easing: easing)
+    private func ze(_ timeMs: UInt64, durationMs: UInt64 = 1500, x: Double = 0.3, y: Double = 0.7, scale: Double = 2.0) -> ExportZoomEvent {
+        ExportZoomEvent(id: "z-\(timeMs)", timeMs: timeMs, durationMs: durationMs, x: x, y: y, scale: scale)
     }
 
-    func testInterpolateZoom_emptyKeyframes() {
-        let result = ExportMath.interpolateZoom([], at: 1000)
+    func testInterpolateZoomEvents_empty() {
+        let result = ExportMath.interpolateZoomEvents([], at: 1000)
         XCTAssertEqual(result.x, 0.5)
         XCTAssertEqual(result.y, 0.5)
         XCTAssertEqual(result.scale, 1.0)
     }
 
-    func testInterpolateZoom_beforeFirstKeyframe() {
-        let result = ExportMath.interpolateZoom([kf(1000)], at: 500)
-        // Returns first keyframe's values
+    func testInterpolateZoomEvents_beforeLeadIn() {
+        // Event at 1000, lead-in starts at 750
+        let result = ExportMath.interpolateZoomEvents([ze(1000)], at: 500)
+        XCTAssertEqual(result.scale, 1.0, accuracy: 0.001)
+    }
+
+    func testInterpolateZoomEvents_duringHold() {
+        let result = ExportMath.interpolateZoomEvents([ze(1000, durationMs: 1500, x: 0.3, y: 0.7, scale: 2.0)], at: 1500)
+        XCTAssertEqual(result.scale, 2.0, accuracy: 0.001)
         XCTAssertEqual(result.x, 0.3, accuracy: 0.001)
         XCTAssertEqual(result.y, 0.7, accuracy: 0.001)
-        XCTAssertEqual(result.scale, 2.0, accuracy: 0.001)
     }
 
-    func testInterpolateZoom_afterLastKeyframe() {
-        let result = ExportMath.interpolateZoom([kf(1000)], at: 2500)
-        XCTAssertEqual(result.x, 0.3, accuracy: 0.001)
-        XCTAssertEqual(result.y, 0.7, accuracy: 0.001)
-        XCTAssertEqual(result.scale, 2.0, accuracy: 0.001)
+    func testInterpolateZoomEvents_afterLeadOut() {
+        // Event ends at 1000+1500=2500, lead-out ends at 2750
+        let result = ExportMath.interpolateZoomEvents([ze(1000)], at: 3000)
+        XCTAssertEqual(result.scale, 1.0, accuracy: 0.001)
     }
 
-    func testInterpolateZoom_linearMidpoint() {
-        let kfs = [
-            kf(0, x: 0.5, y: 0.5, scale: 1.0, easing: "linear"),
-            kf(1000, x: 0.3, y: 0.7, scale: 2.0, easing: "linear"),
+    func testInterpolateZoomEvents_duringLeadIn() {
+        // Lead-in: 750..1000
+        let result = ExportMath.interpolateZoomEvents([ze(1000, durationMs: 1500, x: 0.3, y: 0.7, scale: 2.0)], at: 875)
+        XCTAssertGreaterThan(result.scale, 1.0)
+        XCTAssertLessThan(result.scale, 2.0)
+    }
+
+    func testInterpolateZoomEvents_overlappingHighestScaleWins() {
+        let events = [
+            ze(1000, durationMs: 2000, x: 0.3, y: 0.3, scale: 1.5),
+            ze(1500, durationMs: 1000, x: 0.7, y: 0.7, scale: 2.5),
         ]
-        let result = ExportMath.interpolateZoom(kfs, at: 500)
-        XCTAssertEqual(result.x, 0.4, accuracy: 0.001)
-        XCTAssertEqual(result.y, 0.6, accuracy: 0.001)
-        XCTAssertEqual(result.scale, 1.5, accuracy: 0.001)
-    }
-
-    func testInterpolateZoom_springOvershootsLinear() {
-        let kfs = [
-            kf(0, x: 0.5, y: 0.5, scale: 1.0, easing: "linear"),
-            kf(1000, x: 0.3, y: 0.7, scale: 2.0, easing: "spring"),
-        ]
-        let result = ExportMath.interpolateZoom(kfs, at: 500)
-        XCTAssertGreaterThan(result.scale, 1.5, "Spring should overshoot linear midpoint")
-    }
-
-    func testInterpolateZoom_easeOut() {
-        let kfs = [
-            kf(0, x: 0.3, y: 0.7, scale: 2.0, easing: "spring"),
-            kf(1000, x: 0.3, y: 0.7, scale: 1.0, easing: "ease-out"),
-        ]
-        let result = ExportMath.interpolateZoom(kfs, at: 500)
-        // ease-out at t=0.5: 1-(1-0.5)^2 = 0.75, scale = 2.0 + (1.0 - 2.0) * 0.75 = 1.25
-        XCTAssertEqual(result.scale, 1.25, accuracy: 0.01)
+        let result = ExportMath.interpolateZoomEvents(events, at: 1800)
+        XCTAssertEqual(result.scale, 2.5, accuracy: 0.01)
+        XCTAssertEqual(result.x, 0.7, accuracy: 0.01)
     }
 
     // MARK: - Spring Easing Canonical Vectors

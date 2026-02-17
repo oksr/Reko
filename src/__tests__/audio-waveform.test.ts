@@ -7,7 +7,7 @@ const makeClip = (sourceStart: number, sourceEnd: number): Clip => ({
   sourceStart,
   sourceEnd,
   speed: 1,
-  zoomKeyframes: [],
+  zoomEvents: [],
 })
 
 describe("rearrangeWaveform", () => {

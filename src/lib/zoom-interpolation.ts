@@ -1,19 +1,17 @@
-import type { ZoomKeyframe, Clip, Transition } from "@/types/editor"
+import type { ZoomEvent, Clip, Transition } from "@/types/editor"
 import { sequenceTimeToSourceTime } from "@/lib/sequence"
 
 // ── Spring physics ──
 
-const SPRING_PARAMS: Record<string, { response: number; damping: number }> = {
-  slow: { response: 1.4, damping: 1.0 },
-  medium: { response: 1.0, damping: 1.0 },
-  fast: { response: 0.65, damping: 0.95 },
-}
+const SPRING_RESPONSE = 1.0
+const SPRING_DAMPING = 1.0
+const TRANSITION_MS = 450 // lead-in / lead-out duration
 
 /**
- * Critically-damped (or underdamped) spring easing.
- * Must match Rust `spring_ease` and Swift `springEase` exactly.
+ * Critically-damped spring easing.
+ * Must match Swift `springEase` exactly.
  */
-export function springEase(t: number, response: number, damping: number): number {
+export function springEase(t: number, response: number = SPRING_RESPONSE, damping: number = SPRING_DAMPING): number {
   if (t <= 0) return 0
   if (t >= 1) return 1
 
@@ -22,10 +20,8 @@ export function springEase(t: number, response: number, damping: number): number
   const decay = Math.exp(-damping * omega * actualT)
 
   if (damping >= 1.0) {
-    // Critically damped
     return 1.0 - (1.0 + omega * actualT) * decay
   } else {
-    // Underdamped
     const dampedFreq = omega * Math.sqrt(1 - damping * damping)
     return (
       1.0 -
@@ -36,121 +32,79 @@ export function springEase(t: number, response: number, damping: number): number
   }
 }
 
-function easeOut(t: number): number {
-  if (t <= 0) return 0
-  if (t >= 1) return 1
-  return 1 - (1 - t) * (1 - t)
-}
-
-function applyEasing(
-  t: number,
-  easing: string,
-  response: number,
-  damping: number
-): number {
-  switch (easing) {
-    case "spring":
-      return springEase(t, response, damping)
-    case "ease-out":
-      return easeOut(t)
-    default:
-      return t // linear
-  }
-}
-
-function applyCursorFollow(
-  x: number,
-  y: number,
-  cursor: { x: number; y: number } | null | undefined,
-  strength: number,
-  scale: number
-): { x: number; y: number } {
-  if (strength <= 0 || scale <= 1.0 || !cursor) {
-    return { x, y }
-  }
-  const blend = strength * Math.min((scale - 1.0) / 1.0, 1.0)
-  return {
-    x: x * (1 - blend) + cursor.x * blend,
-    y: y * (1 - blend) + cursor.y * blend,
-  }
-}
-
 /**
- * Keyframe-pair zoom interpolation.
- * Finds the surrounding keyframe pair and interpolates using the target keyframe's easing.
- * Must match Rust `interpolate_zoom_with_cursor` exactly for preview/export parity.
+ * Interpolate zoom from ZoomEvent[] at a given clip-relative time.
+ *
+ * Each event produces:
+ *   [timeMs - TRANSITION_MS] spring-in from 1.0 → event.scale
+ *   [timeMs .. timeMs + durationMs] hold at event.scale
+ *   [timeMs + durationMs .. + TRANSITION_MS] spring-out to 1.0
+ *
+ * If two events are close enough that lead-out/lead-in overlap,
+ * we pan between them while staying zoomed.
  */
-export function interpolateZoom(
-  keyframes: ZoomKeyframe[],
-  timeMs: number,
-  cursorPos?: { x: number; y: number } | null,
-  cursorFollowStrength: number = 0,
-  transitionSpeed: string = "medium"
+export function interpolateZoomEvents(
+  events: ZoomEvent[],
+  timeMs: number
 ): { x: number; y: number; scale: number } {
   const none = { x: 0.5, y: 0.5, scale: 1 }
-  if (keyframes.length === 0) return none
+  if (events.length === 0) return none
 
-  const params = SPRING_PARAMS[transitionSpeed] ?? SPRING_PARAMS.medium
-  const { response, damping } = params
+  // Find active event(s) at this time
+  // For each event, its full range is [timeMs - TRANSITION_MS, timeMs + durationMs + TRANSITION_MS]
+  let bestScale = 1.0
+  let bestX = 0.5
+  let bestY = 0.5
 
-  // Before first keyframe
-  if (timeMs <= keyframes[0].timeMs) {
-    const kf = keyframes[0]
-    const pos = applyCursorFollow(kf.x, kf.y, cursorPos, cursorFollowStrength, kf.scale)
-    return { ...pos, scale: kf.scale }
-  }
+  for (const evt of events) {
+    const leadInStart = evt.timeMs - TRANSITION_MS
+    const holdStart = evt.timeMs
+    const holdEnd = evt.timeMs + evt.durationMs
+    const leadOutEnd = holdEnd + TRANSITION_MS
 
-  // After last keyframe
-  if (timeMs >= keyframes[keyframes.length - 1].timeMs) {
-    const kf = keyframes[keyframes.length - 1]
-    const pos = applyCursorFollow(kf.x, kf.y, cursorPos, cursorFollowStrength, kf.scale)
-    return { ...pos, scale: kf.scale }
-  }
+    if (timeMs < leadInStart || timeMs > leadOutEnd) continue
 
-  // Find surrounding pair
-  let nextIdx = 0
-  for (let i = 0; i < keyframes.length; i++) {
-    if (keyframes[i].timeMs > timeMs) {
-      nextIdx = i
-      break
+    let scale: number
+    let blend: number // how much of this event's position to use
+
+    if (timeMs < holdStart) {
+      // Lead-in phase
+      const t = (timeMs - leadInStart) / TRANSITION_MS
+      const eased = springEase(t)
+      scale = 1.0 + (evt.scale - 1.0) * eased
+      blend = eased
+    } else if (timeMs <= holdEnd) {
+      // Hold phase
+      scale = evt.scale
+      blend = 1.0
+    } else {
+      // Lead-out phase
+      const t = (timeMs - holdEnd) / TRANSITION_MS
+      const eased = springEase(t)
+      scale = evt.scale + (1.0 - evt.scale) * eased
+      blend = 1.0 - eased
+    }
+
+    // If this event has higher scale influence, it wins
+    if (scale > bestScale) {
+      bestScale = scale
+      bestX = 0.5 + (evt.x - 0.5) * blend
+      bestY = 0.5 + (evt.y - 0.5) * blend
     }
   }
 
-  const prev = keyframes[nextIdx - 1]
-  const next = keyframes[nextIdx]
-
-  const duration = next.timeMs - prev.timeMs
-  const rawT = duration > 0 ? (timeMs - prev.timeMs) / duration : 1
-
-  const easedT = applyEasing(rawT, next.easing, response, damping)
-
-  const x = prev.x + (next.x - prev.x) * easedT
-  const y = prev.y + (next.y - prev.y) * easedT
-  const scale = prev.scale + (next.scale - prev.scale) * easedT
-
-  const pos = applyCursorFollow(x, y, cursorPos, cursorFollowStrength, scale)
-  return { ...pos, scale }
+  return { x: bestX, y: bestY, scale: bestScale }
 }
 
 export function interpolateZoomAtSequenceTime(
   seqTime: number,
   clips: Clip[],
-  transitions: (Transition | null)[],
-  getCursorAt?: (timeMs: number) => { x: number; y: number } | null,
-  cursorFollowStrength: number = 0,
-  transitionSpeed: string = "medium"
+  transitions: (Transition | null)[]
 ): { x: number; y: number; scale: number } {
   const mapping = sequenceTimeToSourceTime(seqTime, clips, transitions)
   if (!mapping) return { x: 0.5, y: 0.5, scale: 1 }
 
   const clip = clips[mapping.clipIndex]
   const clipRelativeTime = mapping.sourceTime - clip.sourceStart
-  const cursorPos = getCursorAt?.(mapping.sourceTime) ?? null
-  return interpolateZoom(
-    clip.zoomKeyframes,
-    clipRelativeTime,
-    cursorPos,
-    cursorFollowStrength,
-    transitionSpeed
-  )
+  return interpolateZoomEvents(clip.zoomEvents, clipRelativeTime)
 }

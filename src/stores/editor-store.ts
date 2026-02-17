@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { temporal } from "zundo"
-import type { EditorProject, Effects, BackgroundConfig, CameraBubbleConfig, FrameConfig, CursorConfig, ClickHighlightConfig, ZoomKeyframe, Transition, Sequence, OverlayTrack, Overlay, AutoZoomSettings } from "@/types/editor"
+import type { EditorProject, Effects, BackgroundConfig, CameraBubbleConfig, FrameConfig, CursorConfig, ClickHighlightConfig, ZoomEvent, Transition, Sequence, OverlayTrack, Overlay, AutoZoomSettings } from "@/types/editor"
 import { DEFAULT_AUTO_ZOOM_SETTINGS } from "@/types/editor"
 import { createClip, splitClip, sequenceTimeToSourceTime } from "@/lib/sequence"
 
@@ -45,7 +45,6 @@ const DEFAULT_EFFECTS: Effects = {
       size: 30,
     },
   },
-  zoomKeyframes: [],
 }
 
 const DEFAULT_SEQUENCE: Sequence = {
@@ -60,8 +59,7 @@ function migrateToSequence(project: EditorProject): EditorProject {
   if (project.sequence?.clips?.length > 0) return project
   const clip = createClip(
     project.timeline.in_point ?? 0,
-    project.timeline.out_point ?? project.timeline.duration_ms,
-    project.effects?.zoomKeyframes ?? []
+    project.timeline.out_point ?? project.timeline.duration_ms
   )
   return {
     ...project,
@@ -95,15 +93,10 @@ interface EditorState {
   setFrame: (config: Partial<FrameConfig>) => void
   setCursor: (config: Partial<CursorConfig>) => void
   setClickHighlight: (config: Partial<ClickHighlightConfig>) => void
-  addZoomKeyframe: (kf: ZoomKeyframe) => void
-  removeZoomKeyframe: (timeMs: number) => void
-  setZoomKeyframes: (kfs: ZoomKeyframe[]) => void
-  selectedZoomIndex: number | null
+  selectedZoomEventId: string | null
   zoomPopoverOpen: boolean
-  setSelectedZoomIndex: (index: number | null) => void
+  setSelectedZoomEventId: (id: string | null) => void
   setZoomPopoverOpen: (open: boolean) => void
-  updateZoomKeyframe: (index: number, updates: Partial<ZoomKeyframe>) => void
-  moveZoomKeyframe: (index: number, newTimeMs: number) => void
   setCurrentTime: (ms: number) => void
   setIsPlaying: (playing: boolean) => void
 
@@ -119,11 +112,12 @@ interface EditorState {
   addTransition: (index: number, transition: Transition) => void
   removeTransition: (index: number) => void
 
-  // Clip-scoped zoom actions
-  addZoomKeyframeToClip: (clipIndex: number, kf: ZoomKeyframe) => void
-  removeZoomKeyframeFromClip: (clipIndex: number, timeMs: number) => void
-  updateClipZoomKeyframe: (clipIndex: number, kfIndex: number, updates: Partial<ZoomKeyframe>) => void
-  clearClipZoomKeyframes: (clipIndex: number) => void
+  // Clip-scoped zoom event actions
+  addZoomEvent: (clipIndex: number, event: ZoomEvent) => void
+  removeZoomEvent: (clipIndex: number, eventId: string) => void
+  updateZoomEvent: (clipIndex: number, eventId: string, updates: Partial<ZoomEvent>) => void
+  setClipZoomEvents: (clipIndex: number, events: ZoomEvent[]) => void
+  clearZoomEvents: (clipIndex: number) => void
   clampClipsToVideoDuration: (videoDurationMs: number) => void
 
   // Auto-zoom settings
@@ -150,7 +144,7 @@ export const useEditorStore = create<EditorState>()(
       project: null,
       currentTime: 0,
       isPlaying: false,
-      selectedZoomIndex: null,
+      selectedZoomEventId: null,
       zoomPopoverOpen: false,
       selectedClipIndex: null,
       activeTool: "select" as const,
@@ -168,23 +162,11 @@ export const useEditorStore = create<EditorState>()(
               ...(project.effects?.cursor ?? {}),
               clickHighlight: { ...DEFAULT_EFFECTS.cursor.clickHighlight, ...(project.effects?.cursor?.clickHighlight ?? {}) },
             },
-            zoomKeyframes: project.effects?.zoomKeyframes ?? [],
           },
           sequence: project.sequence ?? DEFAULT_SEQUENCE,
         }
         const migrated = migrateToSequence(withEffects)
-        // Migrate legacy zoom keyframes in all clips
-        const withMigratedZoom: EditorProject = {
-          ...migrated,
-          sequence: {
-            ...migrated.sequence,
-            clips: migrated.sequence.clips.map((clip) => ({
-              ...clip,
-              zoomKeyframes: clip.zoomKeyframes,
-            })),
-          },
-        }
-        set({ project: withMigratedZoom, currentTime: 0, isPlaying: false })
+        set({ project: migrated, currentTime: 0, isPlaying: false })
       },
 
       setInPoint: (ms) =>
@@ -287,78 +269,8 @@ export const useEditorStore = create<EditorState>()(
           }
         }),
 
-      addZoomKeyframe: (kf) =>
-        set((s) => {
-          if (!s.project) return s
-          const existing = s.project.effects.zoomKeyframes
-          const filtered = existing.filter((k) => k.timeMs !== kf.timeMs)
-          const updated = [...filtered, kf].sort((a, b) => a.timeMs - b.timeMs)
-          return {
-            project: {
-              ...s.project,
-              effects: { ...s.project.effects, zoomKeyframes: updated },
-            },
-          }
-        }),
-
-      removeZoomKeyframe: (timeMs) =>
-        set((s) => {
-          if (!s.project) return s
-          return {
-            project: {
-              ...s.project,
-              effects: {
-                ...s.project.effects,
-                zoomKeyframes: s.project.effects.zoomKeyframes.filter(
-                  (k) => k.timeMs !== timeMs
-                ),
-              },
-            },
-          }
-        }),
-
-      setZoomKeyframes: (kfs) =>
-        set((s) => {
-          if (!s.project) return s
-          return {
-            project: {
-              ...s.project,
-              effects: { ...s.project.effects, zoomKeyframes: kfs },
-            },
-          }
-        }),
-
-      setSelectedZoomIndex: (index) => set({ selectedZoomIndex: index }),
+      setSelectedZoomEventId: (id) => set({ selectedZoomEventId: id }),
       setZoomPopoverOpen: (open) => set({ zoomPopoverOpen: open }),
-
-      updateZoomKeyframe: (index, updates) =>
-        set((s) => {
-          if (!s.project) return s
-          const kfs = [...s.project.effects.zoomKeyframes]
-          if (index < 0 || index >= kfs.length) return s
-          kfs[index] = { ...kfs[index], ...updates }
-          return {
-            project: {
-              ...s.project,
-              effects: { ...s.project.effects, zoomKeyframes: kfs },
-            },
-          }
-        }),
-
-      moveZoomKeyframe: (index, newTimeMs) =>
-        set((s) => {
-          if (!s.project) return s
-          const kfs = [...s.project.effects.zoomKeyframes]
-          if (index < 0 || index >= kfs.length) return s
-          kfs[index] = { ...kfs[index], timeMs: newTimeMs }
-          kfs.sort((a, b) => a.timeMs - b.timeMs)
-          return {
-            project: {
-              ...s.project,
-              effects: { ...s.project.effects, zoomKeyframes: kfs },
-            },
-          }
-        }),
 
       setCurrentTime: (ms) => set({ currentTime: ms }),
       setIsPlaying: (playing) => set({ isPlaying: playing }),
@@ -563,17 +475,16 @@ export const useEditorStore = create<EditorState>()(
           }
         }),
 
-      // Clip-scoped zoom actions
-      addZoomKeyframeToClip: (clipIndex, kf) =>
+      // Clip-scoped zoom event actions
+      addZoomEvent: (clipIndex, event) =>
         set((s) => {
           if (!s.project) return s
           const { sequence } = s.project
           const clip = sequence.clips[clipIndex]
           if (!clip) return s
-          const filtered = clip.zoomKeyframes.filter((k) => k.timeMs !== kf.timeMs)
-          const updated = [...filtered, kf].sort((a, b) => a.timeMs - b.timeMs)
+          const updated = [...clip.zoomEvents, event].sort((a, b) => a.timeMs - b.timeMs)
           const newClips = [...sequence.clips]
-          newClips[clipIndex] = { ...clip, zoomKeyframes: updated }
+          newClips[clipIndex] = { ...clip, zoomEvents: updated }
           return {
             project: {
               ...s.project,
@@ -582,7 +493,7 @@ export const useEditorStore = create<EditorState>()(
           }
         }),
 
-      removeZoomKeyframeFromClip: (clipIndex, timeMs) =>
+      removeZoomEvent: (clipIndex, eventId) =>
         set((s) => {
           if (!s.project) return s
           const { sequence } = s.project
@@ -591,7 +502,7 @@ export const useEditorStore = create<EditorState>()(
           const newClips = [...sequence.clips]
           newClips[clipIndex] = {
             ...clip,
-            zoomKeyframes: clip.zoomKeyframes.filter((k) => k.timeMs !== timeMs),
+            zoomEvents: clip.zoomEvents.filter((e) => e.id !== eventId),
           }
           return {
             project: {
@@ -601,32 +512,51 @@ export const useEditorStore = create<EditorState>()(
           }
         }),
 
-      updateClipZoomKeyframe: (clipIndex, kfIndex, updates) =>
-        set((s) => {
-          if (!s.project) return s
-          const { sequence } = s.project
-          const clip = sequence.clips[clipIndex]
-          if (!clip || kfIndex < 0 || kfIndex >= clip.zoomKeyframes.length) return s
-          const newKfs = [...clip.zoomKeyframes]
-          newKfs[kfIndex] = { ...newKfs[kfIndex], ...updates }
-          const newClips = [...sequence.clips]
-          newClips[clipIndex] = { ...clip, zoomKeyframes: newKfs }
-          return {
-            project: {
-              ...s.project,
-              sequence: { ...sequence, clips: newClips },
-            },
-          }
-        }),
-
-      clearClipZoomKeyframes: (clipIndex) =>
+      updateZoomEvent: (clipIndex, eventId, updates) =>
         set((s) => {
           if (!s.project) return s
           const { sequence } = s.project
           const clip = sequence.clips[clipIndex]
           if (!clip) return s
           const newClips = [...sequence.clips]
-          newClips[clipIndex] = { ...clip, zoomKeyframes: [] }
+          newClips[clipIndex] = {
+            ...clip,
+            zoomEvents: clip.zoomEvents.map((e) =>
+              e.id === eventId ? { ...e, ...updates } : e
+            ),
+          }
+          return {
+            project: {
+              ...s.project,
+              sequence: { ...sequence, clips: newClips },
+            },
+          }
+        }),
+
+      setClipZoomEvents: (clipIndex, events) =>
+        set((s) => {
+          if (!s.project) return s
+          const { sequence } = s.project
+          const clip = sequence.clips[clipIndex]
+          if (!clip) return s
+          const newClips = [...sequence.clips]
+          newClips[clipIndex] = { ...clip, zoomEvents: events }
+          return {
+            project: {
+              ...s.project,
+              sequence: { ...sequence, clips: newClips },
+            },
+          }
+        }),
+
+      clearZoomEvents: (clipIndex) =>
+        set((s) => {
+          if (!s.project) return s
+          const { sequence } = s.project
+          const clip = sequence.clips[clipIndex]
+          if (!clip) return s
+          const newClips = [...sequence.clips]
+          newClips[clipIndex] = { ...clip, zoomEvents: [] }
           return {
             project: {
               ...s.project,

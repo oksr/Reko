@@ -19,7 +19,6 @@ const MOCK_PROJECT: EditorProject = {
     cameraBubble: { visible: false, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff" },
     frame: { borderRadius: 12, shadow: false, shadowIntensity: 0 },
     cursor: { enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6 },
-    zoomKeyframes: [],
   },
 }
 
@@ -67,16 +66,16 @@ describe("sequence editing e2e", () => {
     store.rippleDelete()
     expect(seq().clips).toHaveLength(2)
 
-    // 7. Add zoom keyframe to first clip
-    store.addZoomKeyframeToClip(0, {
-      timeMs: 500, x: 0.5, y: 0.5, scale: 2.0, easing: "spring",
+    // 7. Add zoom event to first clip
+    store.addZoomEvent(0, {
+      id: "z1", timeMs: 500, durationMs: 1500, x: 0.5, y: 0.5, scale: 2.0,
     })
-    expect(seq().clips[0].zoomKeyframes).toHaveLength(1)
+    expect(seq().clips[0].zoomEvents).toHaveLength(1)
 
-    // 8. Undo should revert the zoom keyframe add
+    // 8. Undo should revert the zoom event add
     await new Promise((r) => setTimeout(r, 600)) // wait for throttle
     useEditorStore.temporal.getState().undo()
-    expect(seq().clips[0].zoomKeyframes).toHaveLength(0)
+    expect(seq().clips[0].zoomEvents).toHaveLength(0)
   })
 
   it("trim workflow: trim start and end of clips", () => {

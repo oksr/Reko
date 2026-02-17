@@ -7,6 +7,7 @@ use commands::export::ExportState;
 use commands::recording::RecordingState;
 use std::sync::Mutex;
 use swift_ffi::RekoEngine;
+use tauri::Manager;
 
 #[tauri::command]
 fn get_engine_version() -> String {
@@ -33,6 +34,36 @@ pub fn run() {
         })
         .manage(ExportState {
             active_export_id: Mutex::new(None),
+        })
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            {
+                use objc2_app_kit::NSColor;
+
+                if let Some(recorder) = app.get_webview_window("recorder") {
+                    if let Ok(ns_window) = recorder.ns_window() {
+                        unsafe {
+                            let ns_window: *mut objc2_app_kit::NSWindow =
+                                ns_window.cast();
+                            let ns_window = &*ns_window;
+
+                            // Make the window background fully transparent
+                            let clear = NSColor::clearColor();
+                            ns_window.setBackgroundColor(Some(&clear));
+
+                            // Set corner radius on the window's content view layer
+                            if let Some(content_view) = ns_window.contentView() {
+                                content_view.setWantsLayer(true);
+                                if let Some(layer) = content_view.layer() {
+                                    layer.setCornerRadius(12.0);
+                                    layer.setMasksToBounds(true);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_engine_version,

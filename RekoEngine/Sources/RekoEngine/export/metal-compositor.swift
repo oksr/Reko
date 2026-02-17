@@ -862,19 +862,17 @@ public final class MetalCompositor {
         }
 
         // --- Click highlight ---
-        // In the preview, `size` is CSS px inside the video element.
-        // The video fills the frame, so size is relative to the displayed video.
-        // We express the radius as a fraction of screen-rect width and resolve
-        // to canvas pixels in the shader via scrSize.
-        // Preview video display width ≈ 640px (typical editor preview).
-        // `size / 640` gives the normalised fraction of screen width.
+        // `size` is CSS px radius inside the preview's video frame element.
+        // The preview video frame is ~540px wide (640px container minus ~8% padding each side).
+        // Scale to export canvas pixels proportionally to the screen rect width.
+        let previewVideoWidth = 540.0
+        let clickExportScale = 1.5  // empirical boost to match perceived preview size
         if effects.clickHighlightEnabled, let cx = clickX, let cy = clickY {
             uniforms.hasClick = 1.0
             uniforms.clickX = Float(cx)
             uniforms.clickY = Float(cy)
             uniforms.clickProgress = Float(clickProgress)
-            // Scale: size is in preview-CSS-px; convert to export canvas px
-            let scaledRadius = effects.clickHighlightSize * scrRect.size.width / 640.0
+            let scaledRadius = effects.clickHighlightSize * scrRect.size.width / previewVideoWidth * clickExportScale
             uniforms.clickRadius = Float(scaledRadius)
             uniforms.clickOpacity = Float(effects.clickHighlightOpacity)
             uniforms.clickColor = parseHexColor(effects.clickHighlightColor)

@@ -30,7 +30,7 @@ describe("getSequenceSnapPoints", () => {
     sourceStart: start,
     sourceEnd: end,
     speed: 1,
-    zoomKeyframes: [],
+    zoomEvents: [],
   })
 
   it("returns clip boundaries and playhead", () => {

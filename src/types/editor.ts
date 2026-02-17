@@ -24,7 +24,6 @@ export interface Effects {
   cameraBubble: CameraBubbleConfig
   frame: FrameConfig
   cursor: CursorConfig
-  zoomKeyframes: ZoomKeyframe[]
 }
 
 export interface BackgroundConfig {
@@ -89,24 +88,21 @@ export interface MouseEvent {
   type: "move" | "click" | "rightClick" | "scroll"
 }
 
-export interface ZoomKeyframe {
-  timeMs: number
-  x: number           // center of zoom region, normalized 0-1
-  y: number           // center of zoom region, normalized 0-1
-  scale: number       // 1.0 = no zoom, 2.0 = 2x zoom, etc.
-  easing: "spring" | "ease-out" | "linear"  // transition TO this keyframe
+export interface ZoomEvent {
+  id: string              // unique ID for selection/editing
+  timeMs: number          // when the zoom starts (clip-relative)
+  durationMs: number      // how long the zoom holds
+  x: number               // normalized center (0-1)
+  y: number               // normalized center (0-1)
+  scale: number           // zoom factor (e.g. 2.0)
 }
 
 export interface AutoZoomSettings {
   zoomScale: number           // 1.5 - 3.0, default 2.0
-  transitionSpeed: "slow" | "medium" | "fast"  // maps to spring response
-  cursorFollowStrength: number  // 0.0 - 1.0, default 0.3
 }
 
 export const DEFAULT_AUTO_ZOOM_SETTINGS: AutoZoomSettings = {
   zoomScale: 2.0,
-  transitionSpeed: "medium",
-  cursorFollowStrength: 0.3,
 }
 
 export interface Clip {
@@ -114,7 +110,7 @@ export interface Clip {
   sourceStart: number
   sourceEnd: number
   speed: number
-  zoomKeyframes: ZoomKeyframe[]
+  zoomEvents: ZoomEvent[]
 }
 
 export interface Transition {

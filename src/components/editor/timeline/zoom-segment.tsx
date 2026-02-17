@@ -1,29 +1,27 @@
 import { useCallback, useState } from "react"
 import { useEditorStore, pauseUndo, resumeUndo } from "@/stores/editor-store"
-import { Mouse, Lock } from "lucide-react"
 import { ZoomPopover } from "./zoom-popover"
-import type { ZoomRegion } from "./zoom-track"
+import type { SequenceZoomEvent } from "./zoom-track"
 import type { TimelineContext } from "./types"
 
 interface ZoomSegmentProps {
-  region: ZoomRegion
-  index: number
+  seqEvent: SequenceZoomEvent
   ctx: TimelineContext
   isSelected: boolean
-  onSelect: (index: number) => void
+  onSelect: () => void
 }
 
-export function ZoomSegment({ region, index, ctx, isSelected, onSelect }: ZoomSegmentProps) {
+export function ZoomSegment({ seqEvent, ctx, isSelected, onSelect }: ZoomSegmentProps) {
   const { msToPercent, containerRef, durationMs } = ctx
-  const updateClipZoomKeyframe = useEditorStore((s) => s.updateClipZoomKeyframe)
-  const removeZoomKeyframeFromClip = useEditorStore((s) => s.removeZoomKeyframeFromClip)
+  const updateZoomEvent = useEditorStore((s) => s.updateZoomEvent)
+  const removeZoomEvent = useEditorStore((s) => s.removeZoomEvent)
   const [popoverOpen, setPopoverOpen] = useState(false)
 
-  const leftPct = msToPercent(region.startMs)
-  const widthPct = msToPercent(region.endMs) - leftPct
-  const isAuto = region.keyframes.some((k) => k.x !== 0.5 || k.y !== 0.5)
+  const { clipIndex, event } = seqEvent
+  const leftPct = msToPercent(seqEvent.seqStartMs)
+  const widthPct = msToPercent(seqEvent.seqEndMs) - leftPct
 
-  // Drag to move all keyframes in the region
+  // Drag to move
   const handleBodyDrag = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation()
@@ -31,21 +29,14 @@ export function ZoomSegment({ region, index, ctx, isSelected, onSelect }: ZoomSe
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
       const startX = e.clientX
-      const origStartMs = region.startMs
+      const origTimeMs = event.timeMs
       pauseUndo()
 
       const onMove = (ev: MouseEvent) => {
         const dx = ev.clientX - startX
         const dtMs = (dx / rect.width) * durationMs
-        const newStartMs = Math.max(0, Math.round(origStartMs + dtMs))
-        const delta = newStartMs - origStartMs
-
-        // Move all keyframes in the region by delta
-        for (const kf of region.keyframes) {
-          updateClipZoomKeyframe(kf.clipIndex, kf.kfIndex, {
-            timeMs: Math.max(0, kf.clipRelativeTimeMs + delta),
-          })
-        }
+        const newTimeMs = Math.max(0, Math.round(origTimeMs + dtMs))
+        updateZoomEvent(clipIndex, event.id, { timeMs: newTimeMs })
       }
 
       const onUp = () => {
@@ -57,22 +48,80 @@ export function ZoomSegment({ region, index, ctx, isSelected, onSelect }: ZoomSe
       document.addEventListener("mousemove", onMove)
       document.addEventListener("mouseup", onUp)
     },
-    [containerRef, durationMs, region, updateClipZoomKeyframe]
+    [containerRef, durationMs, clipIndex, event, updateZoomEvent]
+  )
+
+  // Drag left edge to resize start
+  const handleLeftResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const startX = e.clientX
+      const origTimeMs = event.timeMs
+      const origDurationMs = event.durationMs
+      pauseUndo()
+
+      const onMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX
+        const dtMs = (dx / rect.width) * durationMs
+        const newTimeMs = Math.max(0, Math.round(origTimeMs + dtMs))
+        const newDuration = Math.max(200, origDurationMs - (newTimeMs - origTimeMs))
+        updateZoomEvent(clipIndex, event.id, { timeMs: newTimeMs, durationMs: newDuration })
+      }
+
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove)
+        document.removeEventListener("mouseup", onUp)
+        resumeUndo()
+      }
+
+      document.addEventListener("mousemove", onMove)
+      document.addEventListener("mouseup", onUp)
+    },
+    [containerRef, durationMs, clipIndex, event, updateZoomEvent]
+  )
+
+  // Drag right edge to resize end
+  const handleRightResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      const startX = e.clientX
+      const origDurationMs = event.durationMs
+      pauseUndo()
+
+      const onMove = (ev: MouseEvent) => {
+        const dx = ev.clientX - startX
+        const dtMs = (dx / rect.width) * durationMs
+        const newDuration = Math.max(200, Math.round(origDurationMs + dtMs))
+        updateZoomEvent(clipIndex, event.id, { durationMs: newDuration })
+      }
+
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove)
+        document.removeEventListener("mouseup", onUp)
+        resumeUndo()
+      }
+
+      document.addEventListener("mousemove", onMove)
+      document.addEventListener("mouseup", onUp)
+    },
+    [containerRef, durationMs, clipIndex, event, updateZoomEvent]
   )
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    onSelect(index)
+    onSelect()
     setPopoverOpen(true)
   }
 
   const handleDelete = useCallback(() => {
-    // Delete all keyframes in the region (in reverse order to preserve indices)
-    const sorted = [...region.keyframes].sort((a, b) => b.kfIndex - a.kfIndex)
-    for (const kf of sorted) {
-      removeZoomKeyframeFromClip(kf.clipIndex, kf.clipRelativeTimeMs)
-    }
-  }, [region, removeZoomKeyframeFromClip])
+    removeZoomEvent(clipIndex, event.id)
+  }, [clipIndex, event.id, removeZoomEvent])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -85,14 +134,13 @@ export function ZoomSegment({ region, index, ctx, isSelected, onSelect }: ZoomSe
 
   return (
     <ZoomPopover
-      region={region}
-      index={index}
+      seqEvent={seqEvent}
       open={popoverOpen}
       onOpenChange={setPopoverOpen}
       onDelete={handleDelete}
     >
       <div
-        className={`absolute top-0 bottom-0 rounded-md cursor-grab active:cursor-grabbing transition-shadow ${
+        className={`absolute top-0 bottom-0 rounded-md cursor-grab active:cursor-grabbing transition-shadow group ${
           isSelected
             ? "ring-2 ring-primary shadow-lg shadow-primary/20"
             : "hover:ring-1 hover:ring-primary/50"
@@ -107,13 +155,19 @@ export function ZoomSegment({ region, index, ctx, isSelected, onSelect }: ZoomSe
         onKeyDown={handleKeyDown}
         tabIndex={0}
       >
-        {/* Labels */}
-        <div className="flex flex-col items-center justify-center h-full text-white/90 pointer-events-none overflow-hidden px-1">
-          <span className="text-[9px] font-medium leading-tight opacity-70">Zoom</span>
-          <div className="flex items-center gap-1 text-[10px] font-semibold leading-tight">
-            <span>{region.peakScale.toFixed(1)}x</span>
-            {isAuto ? <Mouse className="w-2.5 h-2.5" /> : <Lock className="w-2.5 h-2.5" />}
-          </div>
+        {/* Left resize handle */}
+        <div
+          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/20 rounded-l-md"
+          onMouseDown={handleLeftResize}
+        />
+        {/* Right resize handle */}
+        <div
+          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/20 rounded-r-md"
+          onMouseDown={handleRightResize}
+        />
+        {/* Label */}
+        <div className="flex items-center justify-center h-full text-white/90 pointer-events-none overflow-hidden px-2">
+          <span className="text-[10px] font-semibold">{event.scale.toFixed(1)}x</span>
         </div>
       </div>
     </ZoomPopover>

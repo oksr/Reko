@@ -6,13 +6,13 @@ import {
   sourceTimeToSequenceTime,
   splitClip,
 } from "@/lib/sequence"
-import type { Clip, Transition, ZoomKeyframe } from "@/types/editor"
+import type { Clip, Transition, ZoomEvent } from "@/types/editor"
 
 describe("sequence helpers", () => {
   const clips: Clip[] = [
-    { id: "a", sourceStart: 0, sourceEnd: 3000, speed: 1, zoomKeyframes: [] },
-    { id: "b", sourceStart: 5000, sourceEnd: 8000, speed: 1, zoomKeyframes: [] },
-    { id: "c", sourceStart: 10000, sourceEnd: 12000, speed: 1, zoomKeyframes: [] },
+    { id: "a", sourceStart: 0, sourceEnd: 3000, speed: 1, zoomEvents: [] },
+    { id: "b", sourceStart: 5000, sourceEnd: 8000, speed: 1, zoomEvents: [] },
+    { id: "c", sourceStart: 10000, sourceEnd: 12000, speed: 1, zoomEvents: [] },
   ]
   const transitions: (Transition | null)[] = [null, null] // cuts between clips
 
@@ -51,7 +51,7 @@ describe("sequence helpers", () => {
     expect(clip.sourceStart).toBe(1000)
     expect(clip.sourceEnd).toBe(5000)
     expect(clip.speed).toBe(1)
-    expect(clip.zoomKeyframes).toEqual([])
+    expect(clip.zoomEvents).toEqual([])
   })
 })
 
@@ -62,7 +62,7 @@ describe("splitClip", () => {
       sourceStart: 0,
       sourceEnd: 6000,
       speed: 1,
-      zoomKeyframes: [],
+      zoomEvents: [],
     }
     const [left, right] = splitClip(clip, 3000)
     expect(left.sourceStart).toBe(0)
@@ -72,31 +72,31 @@ describe("splitClip", () => {
     expect(left.id).not.toBe(right.id)
   })
 
-  it("distributes zoom keyframes to correct clip", () => {
-    const kf1: ZoomKeyframe = {
-      timeMs: 500, x: 0.5, y: 0.5, scale: 2, easing: "spring",
+  it("distributes zoom events to correct clip", () => {
+    const evt1: ZoomEvent = {
+      id: "z1", timeMs: 500, durationMs: 1000, x: 0.5, y: 0.5, scale: 2,
     }
-    const kf2: ZoomKeyframe = {
-      timeMs: 3500, x: 0.3, y: 0.7, scale: 1.5, easing: "linear",
+    const evt2: ZoomEvent = {
+      id: "z2", timeMs: 3500, durationMs: 1500, x: 0.3, y: 0.7, scale: 1.5,
     }
     const clip: Clip = {
       id: "a",
       sourceStart: 0,
       sourceEnd: 6000,
       speed: 1,
-      zoomKeyframes: [kf1, kf2],
+      zoomEvents: [evt1, evt2],
     }
     const [left, right] = splitClip(clip, 3000)
-    expect(left.zoomKeyframes).toEqual([kf1])
-    // kf2 should have timeMs adjusted relative to right clip start
-    expect(right.zoomKeyframes).toEqual([
-      { ...kf2, timeMs: 500 }, // 3500 - 3000
+    expect(left.zoomEvents).toEqual([evt1])
+    // evt2 should have timeMs adjusted relative to right clip start
+    expect(right.zoomEvents).toEqual([
+      { ...evt2, timeMs: 500 }, // 3500 - 3000
     ])
   })
 
   it("throws if split point is outside clip range", () => {
     const clip: Clip = {
-      id: "a", sourceStart: 1000, sourceEnd: 5000, speed: 1, zoomKeyframes: [],
+      id: "a", sourceStart: 1000, sourceEnd: 5000, speed: 1, zoomEvents: [],
     }
     expect(() => splitClip(clip, 500)).toThrow()
     expect(() => splitClip(clip, 6000)).toThrow()

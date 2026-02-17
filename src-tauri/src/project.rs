@@ -25,8 +25,6 @@ pub struct Effects {
     pub frame: FrameConfig,
     #[serde(default)]
     pub cursor: Option<CursorConfig>,
-    #[serde(default)]
-    pub zoom_keyframes: Option<Vec<ZoomKeyframe>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -95,20 +93,19 @@ pub struct ClickHighlightConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct ZoomKeyframe {
+pub struct ZoomEvent {
+    pub id: String,
     pub time_ms: u64,
+    pub duration_ms: u64,
     pub x: f64,                   // 0-1 normalized
     pub y: f64,                   // 0-1 normalized
-    pub scale: f64,               // 1.0 = no zoom
-    pub easing: String,           // "spring" | "ease-out" | "linear"
+    pub scale: f64,               // zoom factor (e.g. 2.0)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoZoomSettings {
     pub zoom_scale: f64,               // 1.5 - 3.0
-    pub transition_speed: String,      // "slow" | "medium" | "fast"
-    pub cursor_follow_strength: f64,   // 0.0 - 1.0
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -118,7 +115,7 @@ pub struct Clip {
     pub source_start: u64,
     pub source_end: u64,
     pub speed: f64,
-    pub zoom_keyframes: Vec<ZoomKeyframe>,
+    pub zoom_events: Vec<ZoomEvent>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -317,7 +314,6 @@ mod tests {
                     shadow_intensity: 0.7,
                 },
                 cursor: None,
-                zoom_keyframes: None,
             }),
             sequence: None,
             auto_zoom_settings: None,
@@ -372,35 +368,34 @@ mod tests {
     }
 
     #[test]
-    fn test_zoom_keyframe_serialization() {
-        let kf = ZoomKeyframe {
+    fn test_zoom_event_serialization() {
+        let evt = ZoomEvent {
+            id: "z1".to_string(),
             time_ms: 5000,
+            duration_ms: 1500,
             x: 0.5,
             y: 0.3,
             scale: 2.0,
-            easing: "spring".to_string(),
         };
-        let json = serde_json::to_string(&kf).unwrap();
+        let json = serde_json::to_string(&evt).unwrap();
         assert!(json.contains("\"timeMs\":5000"));
-        let parsed: ZoomKeyframe = serde_json::from_str(&json).unwrap();
+        assert!(json.contains("\"durationMs\":1500"));
+        let parsed: ZoomEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.scale, 2.0);
     }
 
     #[test]
-    fn test_effects_with_cursor_and_zoom() {
-        let json = r##"{"background":{"type":"solid","color":"#000","gradientFrom":"#000","gradientTo":"#000","gradientAngle":0,"padding":8,"presetId":null},"cameraBubble":{"visible":false,"position":"bottom-right","size":15,"shape":"circle","borderWidth":3,"borderColor":"#fff"},"frame":{"borderRadius":12,"shadow":true,"shadowIntensity":0.5},"cursor":{"type":"highlight","enabled":true,"size":40,"color":"#ffcc00","opacity":0.6},"zoomKeyframes":[{"timeMs":5000,"x":0.5,"y":0.3,"scale":2.0,"easing":"spring"}]}"##;
+    fn test_effects_with_cursor() {
+        let json = r##"{"background":{"type":"solid","color":"#000","gradientFrom":"#000","gradientTo":"#000","gradientAngle":0,"padding":8,"presetId":null},"cameraBubble":{"visible":false,"position":"bottom-right","size":15,"shape":"circle","borderWidth":3,"borderColor":"#fff"},"frame":{"borderRadius":12,"shadow":true,"shadowIntensity":0.5},"cursor":{"type":"highlight","enabled":true,"size":40,"color":"#ffcc00","opacity":0.6}}"##;
         let parsed: Effects = serde_json::from_str(json).unwrap();
         assert!(parsed.cursor.is_some());
-        let kfs = parsed.zoom_keyframes.unwrap();
-        assert_eq!(kfs.len(), 1);
     }
 
     #[test]
-    fn test_effects_without_cursor_backward_compat() {
+    fn test_effects_without_cursor() {
         let json = r##"{"background":{"type":"solid","color":"#000","gradientFrom":"#000","gradientTo":"#000","gradientAngle":0,"padding":8,"presetId":null},"cameraBubble":{"visible":false,"position":"bottom-right","size":15,"shape":"circle","borderWidth":3,"borderColor":"#fff"},"frame":{"borderRadius":12,"shadow":true,"shadowIntensity":0.5}}"##;
         let parsed: Effects = serde_json::from_str(json).unwrap();
         assert!(parsed.cursor.is_none());
-        assert!(parsed.zoom_keyframes.is_none());
     }
 
     #[test]

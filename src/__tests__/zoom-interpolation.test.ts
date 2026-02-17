@@ -1,9 +1,9 @@
 import { describe, test, expect } from "vitest"
-import { interpolateZoom, interpolateZoomAtSequenceTime, springEase } from "@/lib/zoom-interpolation"
-import type { ZoomKeyframe, Clip, Transition } from "@/types/editor"
+import { interpolateZoomEvents, interpolateZoomAtSequenceTime, springEase } from "@/lib/zoom-interpolation"
+import type { ZoomEvent, Clip, Transition } from "@/types/editor"
 
-const kf = (timeMs: number, x = 0.3, y = 0.7, scale = 2.0, easing: ZoomKeyframe["easing"] = "spring"): ZoomKeyframe => ({
-  timeMs, x, y, scale, easing,
+const evt = (timeMs: number, durationMs: number, x = 0.3, y = 0.7, scale = 2.0): ZoomEvent => ({
+  id: crypto.randomUUID(), timeMs, durationMs, x, y, scale,
 })
 
 describe("springEase", () => {
@@ -39,70 +39,52 @@ describe("springEase", () => {
   })
 })
 
-describe("interpolateZoom (keyframe-pair model)", () => {
-  test("empty keyframes returns default", () => {
-    expect(interpolateZoom([], 1000)).toEqual({ x: 0.5, y: 0.5, scale: 1 })
+describe("interpolateZoomEvents (event-based model)", () => {
+  test("empty events returns default", () => {
+    expect(interpolateZoomEvents([], 1000)).toEqual({ x: 0.5, y: 0.5, scale: 1 })
   })
 
-  test("before first keyframe returns first keyframe's values", () => {
-    const result = interpolateZoom([kf(1000, 0.3, 0.7, 2.0)], 500)
+  test("before lead-in returns default (scale 1)", () => {
+    // Event starts at 1000, lead-in at 750 (1000-250)
+    const result = interpolateZoomEvents([evt(1000, 1500)], 500)
+    expect(result.scale).toBe(1)
+  })
+
+  test("during hold phase returns full scale", () => {
+    const result = interpolateZoomEvents([evt(1000, 1500, 0.3, 0.7, 2.0)], 1500)
+    expect(result.scale).toBeCloseTo(2.0)
     expect(result.x).toBeCloseTo(0.3)
     expect(result.y).toBeCloseTo(0.7)
-    expect(result.scale).toBeCloseTo(2.0)
   })
 
-  test("after last keyframe returns last keyframe's values", () => {
-    const result = interpolateZoom([kf(1000, 0.3, 0.7, 2.0)], 2500)
-    expect(result.x).toBeCloseTo(0.3)
-    expect(result.y).toBeCloseTo(0.7)
-    expect(result.scale).toBeCloseTo(2.0)
+  test("after lead-out returns default", () => {
+    // Event ends at 1000+1500=2500, lead-out ends at 2750
+    const result = interpolateZoomEvents([evt(1000, 1500)], 3000)
+    expect(result.scale).toBe(1)
   })
 
-  test("linear interpolation at midpoint", () => {
-    const kfs = [
-      kf(0, 0.5, 0.5, 1.0, "linear"),
-      kf(1000, 0.3, 0.7, 2.0, "linear"),
+  test("during lead-in phase, scale is between 1 and target", () => {
+    // Lead-in starts at 750, hold starts at 1000
+    const result = interpolateZoomEvents([evt(1000, 1500, 0.3, 0.7, 2.0)], 875)
+    expect(result.scale).toBeGreaterThan(1.0)
+    expect(result.scale).toBeLessThan(2.0)
+  })
+
+  test("during lead-out phase, scale is between target and 1", () => {
+    // Hold ends at 2500, lead-out ends at 2750
+    const result = interpolateZoomEvents([evt(1000, 1500, 0.3, 0.7, 2.0)], 2625)
+    expect(result.scale).toBeGreaterThan(1.0)
+    expect(result.scale).toBeLessThan(2.0)
+  })
+
+  test("overlapping events: highest scale wins", () => {
+    const events = [
+      evt(1000, 2000, 0.3, 0.3, 1.5),
+      evt(1500, 1000, 0.7, 0.7, 2.5),
     ]
-    const result = interpolateZoom(kfs, 500)
-    expect(result.x).toBeCloseTo(0.4)
-    expect(result.y).toBeCloseTo(0.6)
-    expect(result.scale).toBeCloseTo(1.5)
-  })
-
-  test("spring overshoots linear midpoint", () => {
-    const kfs = [
-      kf(0, 0.5, 0.5, 1.0, "linear"),
-      kf(1000, 0.3, 0.7, 2.0, "spring"),
-    ]
-    const result = interpolateZoom(kfs, 500)
-    expect(result.scale).toBeGreaterThan(1.5)
-  })
-
-  test("ease-out at midpoint", () => {
-    const kfs = [
-      kf(0, 0.3, 0.7, 2.0, "spring"),
-      kf(1000, 0.3, 0.7, 1.0, "ease-out"),
-    ]
-    const result = interpolateZoom(kfs, 500)
-    // ease-out at t=0.5: 1-(1-0.5)^2 = 0.75, scale = 2.0 + (1.0-2.0)*0.75 = 1.25
-    expect(result.scale).toBeCloseTo(1.25, 1)
-  })
-
-  test("cursor follow blends position when zoomed", () => {
-    const kfs = [
-      kf(0, 0.5, 0.5, 1.0, "linear"),
-      kf(1000, 0.3, 0.3, 2.0, "linear"),
-    ]
-    const result = interpolateZoom(kfs, 1000, { x: 0.8, y: 0.8 }, 0.5)
-    expect(result.x).toBeCloseTo(0.55, 1)
-    expect(result.y).toBeCloseTo(0.55, 1)
-  })
-
-  test("cursor follow does not apply at scale 1.0", () => {
-    const kfs = [kf(0, 0.5, 0.5, 1.0, "linear")]
-    const result = interpolateZoom(kfs, 0, { x: 0.8, y: 0.8 }, 1.0)
-    expect(result.x).toBeCloseTo(0.5)
-    expect(result.y).toBeCloseTo(0.5)
+    const result = interpolateZoomEvents(events, 1800)
+    expect(result.scale).toBeCloseTo(2.5)
+    expect(result.x).toBeCloseTo(0.7)
   })
 })
 
@@ -110,22 +92,20 @@ describe("interpolateZoomAtSequenceTime", () => {
   const clips: Clip[] = [
     {
       id: "a", sourceStart: 0, sourceEnd: 3000, speed: 1,
-      zoomKeyframes: [
-        kf(0, 0.5, 0.5, 1.0, "linear"),
-        kf(500, 0.3, 0.3, 2.0, "spring"),
-        kf(1500, 0.3, 0.3, 1.0, "ease-out"),
+      zoomEvents: [
+        evt(500, 1500, 0.3, 0.3, 2.0),
       ],
     },
     {
       id: "b", sourceStart: 5000, sourceEnd: 8000, speed: 1,
-      zoomKeyframes: [],
+      zoomEvents: [],
     },
   ]
   const transitions: (Transition | null)[] = [null]
 
-  test("resolves zoom-in from first clip", () => {
-    // At time 500, should be fully zoomed in
-    const result = interpolateZoomAtSequenceTime(500, clips, transitions)
+  test("resolves zoom from first clip during hold", () => {
+    // At sequence time 1000 → clip-relative 1000, event hold is [500, 2000]
+    const result = interpolateZoomAtSequenceTime(1000, clips, transitions)
     expect(result.scale).toBeCloseTo(2.0)
   })
 
@@ -134,8 +114,8 @@ describe("interpolateZoomAtSequenceTime", () => {
     expect(result.scale).toBe(1)
   })
 
-  test("returns default for no keyframes in clip", () => {
-    // Second clip has no keyframes
+  test("returns default for no events in clip", () => {
+    // Second clip has no events, starts at sequence time 3000
     const result = interpolateZoomAtSequenceTime(4000, clips, transitions)
     expect(result.scale).toBe(1)
   })
