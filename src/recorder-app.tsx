@@ -15,19 +15,27 @@ import type { DisplayInfo, AudioInputInfo, CameraInfo, ProjectState } from "@/ty
 
 type AppState = "permission-check" | "idle" | "recording"
 
-// ease-in-out-quart — for on-screen morphing (Emil: "elements already on screen that move")
-const MORPH_EASE = [0.77, 0, 0.175, 1] as const
-const MORPH_DURATION = 0.3
+// Dynamic Island–style container morph
+const TOOLBAR_WIDTHS = { idle: 720, recording: 340 } as const
 
-const contentVariants = {
-  initial: { opacity: 0, scale: 0.96 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.96 },
+const CONTAINER_SPRING = {
+  type: "spring" as const,
+  stiffness: 380,
+  damping: 28,
+  mass: 1,
 }
 
-const contentTransition = {
-  duration: MORPH_DURATION * 0.4, // 120ms — fast enough to feel snappy within the 300ms morph
-  ease: MORPH_EASE,
+// Content cross-fade with blur dissolve
+const contentVariants = {
+  initial: { opacity: 0, scale: 0.92, filter: "blur(4px)" },
+  animate: {
+    opacity: 1, scale: 1, filter: "blur(0px)",
+    transition: { duration: 0.15, ease: [0, 0, 0.2, 1] },
+  },
+  exit: {
+    opacity: 0, scale: 0.92, filter: "blur(4px)",
+    transition: { duration: 0.08, ease: [0.4, 0, 1, 1] },
+  },
 }
 
 export function RecorderApp() {
@@ -145,6 +153,37 @@ export function RecorderApp() {
 
   // Sync window size to toolbar's rendered width via callback ref
   const observerRef = useRef<ResizeObserver | null>(null)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const syncWindowSize = useCallback(async (width: number) => {
+    const win = getCurrentWindow()
+    try {
+      const monitor = await currentMonitor()
+      if (!monitor) return
+      const factor = monitor.scaleFactor
+      const screenW = monitor.size.width / factor
+      const screenH = monitor.size.height / factor
+      const winW = Math.round(width)
+      const winH = 58
+      const margin = 50
+      const x = Math.round((screenW - winW) / 2)
+      const y = Math.round(screenH - winH - margin)
+      const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi")
+      await win.setResizable(true)
+      await win.setSize(new LogicalSize(winW, winH))
+      await win.setResizable(false)
+      await win.setPosition(new LogicalPosition(x, y))
+    } catch (e) {
+      console.error("Failed to sync window size:", e)
+    }
+  }, [])
+
+  // On state change, immediately expand window to max width so content never clips during spring
+  useEffect(() => {
+    if (appState === "permission-check") return
+    const maxWidth = Math.max(TOOLBAR_WIDTHS.idle, TOOLBAR_WIDTHS.recording)
+    syncWindowSize(maxWidth)
+  }, [appState, syncWindowSize])
 
   const toolbarRef = useCallback((el: HTMLDivElement | null) => {
     // Clean up previous observer
@@ -152,36 +191,20 @@ export function RecorderApp() {
       observerRef.current.disconnect()
       observerRef.current = null
     }
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    }
     if (!el) return
 
-    const sync = async (width: number) => {
-      const win = getCurrentWindow()
-      try {
-        const monitor = await currentMonitor()
-        if (!monitor) return
-        const factor = monitor.scaleFactor
-        const screenW = monitor.size.width / factor
-        const screenH = monitor.size.height / factor
-        const winW = Math.round(width)
-        const winH = 58
-        const margin = 50
-        const x = Math.round((screenW - winW) / 2)
-        const y = Math.round(screenH - winH - margin)
-        const { LogicalPosition, LogicalSize } = await import("@tauri-apps/api/dpi")
-        await win.setResizable(true)
-        await win.setSize(new LogicalSize(winW, winH))
-        await win.setResizable(false)
-        await win.setPosition(new LogicalPosition(x, y))
-      } catch (e) {
-        console.error("Failed to sync window size:", e)
-      }
-    }
-
     observerRef.current = new ResizeObserver(() => {
-      sync(el.offsetWidth)
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+      debounceRef.current = setTimeout(() => {
+        syncWindowSize(el.offsetWidth)
+      }, 100)
     })
     observerRef.current.observe(el)
-  }, [])
+  }, [syncWindowSize])
 
   // Refs for stale closure avoidance in event listeners
   const micEnabledRef = useRef(micEnabled)
@@ -391,23 +414,28 @@ export function RecorderApp() {
             <PermissionCheck onPermissionGranted={handlePermissionGranted} />
           </div>
         ) : (
-          <div
+          <motion.div
             ref={toolbarRef}
             className="recorder-toolbar"
             onMouseDown={handleDrag}
             role="toolbar"
             aria-label="Recording controls"
+            animate={{
+              width: appState === "recording"
+                ? TOOLBAR_WIDTHS.recording
+                : TOOLBAR_WIDTHS.idle,
+            }}
+            transition={shouldReduceMotion ? { duration: 0 } : CONTAINER_SPRING}
           >
             <AnimatePresence mode="wait" initial={false}>
               {appState === "idle" && (
                 <motion.div
                   key="idle"
                   className="flex w-full items-center"
-                  variants={contentVariants}
+                  variants={shouldReduceMotion ? undefined : contentVariants}
                   initial={shouldReduceMotion ? false : "initial"}
                   animate="animate"
                   exit={shouldReduceMotion ? undefined : "exit"}
-                  transition={contentTransition}
                 >
                   {/* Close button */}
                   <div className="toolbar-group">
@@ -486,11 +514,10 @@ export function RecorderApp() {
                 <motion.div
                   key="recording"
                   className="flex items-center"
-                  variants={contentVariants}
+                  variants={shouldReduceMotion ? undefined : contentVariants}
                   initial={shouldReduceMotion ? false : "initial"}
                   animate="animate"
                   exit={shouldReduceMotion ? undefined : "exit"}
-                  transition={contentTransition}
                 >
                   <RecordingBar
                     isPaused={isPaused}
@@ -503,7 +530,7 @@ export function RecorderApp() {
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
+          </motion.div>
         )}
       </div>
     </TooltipProvider>

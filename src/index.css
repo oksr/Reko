@@ -148,7 +148,7 @@ body:has(.window-picker) {
 
 .recorder-toolbar {
   background: rgba(30, 30, 30, 0.95);
-  border-radius: 12px;
+  border-radius: 14px;
   border: 0.5px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
   height: 56px;
@@ -159,9 +159,16 @@ body:has(.window-picker) {
   align-items: center;
   gap: 0;
   margin: 0 auto;
-  width: fit-content;
   align-self: center;
   overflow: hidden;
+  will-change: width;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recorder-toolbar {
+    transition: none !important;
+    will-change: auto;
+  }
 }
 
 .toolbar-group {
