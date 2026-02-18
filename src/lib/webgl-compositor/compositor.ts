@@ -1,5 +1,5 @@
 import { compileShader, linkProgram, getUniform } from "./shader-utils"
-import { screenRect, cameraRect, type NRect } from "./layout"
+import { screenRect, cameraRect, applyZoomToRect, type NRect } from "./layout"
 import type { Effects } from "@/types/editor"
 
 import quadVert from "./shaders/quad.vert"
@@ -18,12 +18,14 @@ export interface RenderParams {
   cursor?: { x: number; y: number } | null
   click?: { x: number; y: number; progress: number } | null
   motionBlur?: { dx: number; dy: number; intensity: number } | null
+  cursorVelocity?: { dx: number; dy: number } | null
 }
 
 export class WebGLCompositor {
   private gl: WebGL2RenderingContext
   private canvasWidth = 0
   private canvasHeight = 0
+  private cameraAspect = 16 / 9
 
   private bgProgram!: WebGLProgram
   private videoProgram!: WebGLProgram
@@ -40,6 +42,8 @@ export class WebGLCompositor {
   private fboTexture: WebGLTexture | null = null
 
   private vao!: WebGLVertexArrayObject
+
+  private uniformCache = new WeakMap<WebGLProgram, Map<string, WebGLUniformLocation>>()
 
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
     const gl = canvas.getContext("webgl2", {
@@ -78,24 +82,44 @@ export class WebGLCompositor {
 
   uploadCamera(source: HTMLVideoElement | VideoFrame): void {
     this.cameraTexture = this.uploadToTexture(this.cameraTexture, source)
+    // Track actual camera aspect ratio
+    if (source instanceof HTMLVideoElement) {
+      if (source.videoWidth && source.videoHeight) {
+        this.cameraAspect = source.videoWidth / source.videoHeight
+      }
+    } else {
+      if (source.displayWidth && source.displayHeight) {
+        this.cameraAspect = source.displayWidth / source.displayHeight
+      }
+    }
   }
 
   async loadBackgroundImage(imageUrl: string, _blur: number): Promise<void> {
-    const img = new Image()
-    img.crossOrigin = "anonymous"
-    await new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve()
-      img.onerror = () => reject(new Error(`Failed to load background: ${imageUrl}`))
-      img.src = imageUrl
-    })
-    this.bgImageTexture = this.uploadToTexture(this.bgImageTexture, img)
+    try {
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error(`Failed to load background: ${imageUrl}`))
+        img.src = imageUrl
+      })
+      // Blur is applied in the fragment shader via u_blurUv — no preprocessing needed.
+      this.bgImageTexture = this.uploadToTexture(this.bgImageTexture, img)
+    } catch (err) {
+      console.warn("[WebGLCompositor] Background image load failed:", err)
+      // bgImageTexture stays null — background falls back to solid/gradient
+    }
   }
 
   render(params: RenderParams): void {
     const gl = this.gl
-    const { effects, screenWidth, screenHeight, zoom, cursor, click, motionBlur } = params
+    const { effects, screenWidth, screenHeight, zoom, cursor, click, motionBlur, cursorVelocity } = params
 
-    const useMotionBlur = motionBlur && motionBlur.intensity > 0.001
+    const useMotionBlur = motionBlur != null && (
+      Math.abs(motionBlur.dx) > 0.0005 ||
+      Math.abs(motionBlur.dy) > 0.0005 ||
+      Math.abs(motionBlur.intensity) > 0.001
+    )
     if (useMotionBlur && this.fbo) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo)
     } else {
@@ -112,15 +136,16 @@ export class WebGLCompositor {
     // Layer 1: Background
     this.renderBackground(effects)
 
-    // Layer 2: Screen (with zoom, border radius, shadow)
-    const scrRect = screenRect(
+    // Layer 2: Screen with canvas-space zoom transform
+    const baseScrRect = screenRect(
       this.canvasWidth, this.canvasHeight,
       screenWidth, screenHeight,
       effects.background.padding
     )
-    this.renderScreen(effects, scrRect, zoom)
+    const zoomedScrRect = applyZoomToRect(baseScrRect, zoom)
+    this.renderScreen(effects, zoomedScrRect)
 
-    // Layer 3: Camera bubble
+    // Layer 3: Camera bubble (stays fixed in corner, independent of zoom)
     if (effects.cameraBubble.visible && this.cameraTexture) {
       const camRect = cameraRect(
         this.canvasWidth, this.canvasHeight,
@@ -132,19 +157,19 @@ export class WebGLCompositor {
 
     // Layer 4: Cursor
     if (effects.cursor.enabled && cursor) {
-      this.renderCursor(effects, scrRect, zoom, cursor)
+      this.renderCursor(effects, zoomedScrRect, zoom.scale, cursor, cursorVelocity ?? null)
     }
 
     // Layer 5: Click ripple
     if (effects.cursor.clickHighlight?.enabled && click) {
-      this.renderClick(effects, scrRect, zoom, click)
+      this.renderClick(effects, zoomedScrRect, zoom.scale, click)
     }
 
     // Layer 6: Motion blur post-process
     if (useMotionBlur && this.fbo && this.fboTexture) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null)
       gl.viewport(0, 0, this.canvasWidth, this.canvasHeight)
-      this.renderMotionBlur(motionBlur!, zoom)
+      this.renderMotionBlur(motionBlur!)
     }
 
     gl.bindVertexArray(null)
@@ -152,6 +177,11 @@ export class WebGLCompositor {
 
   destroy(): void {
     const gl = this.gl
+    // Unbind before delete
+    gl.useProgram(null)
+    gl.bindTexture(gl.TEXTURE_2D, null)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.bindVertexArray(null)
     gl.deleteProgram(this.bgProgram)
     gl.deleteProgram(this.videoProgram)
     gl.deleteProgram(this.cameraProgram)
@@ -166,6 +196,14 @@ export class WebGLCompositor {
     gl.deleteVertexArray(this.vao)
   }
 
+  private u(program: WebGLProgram, name: string): WebGLUniformLocation {
+    let map = this.uniformCache.get(program)
+    if (!map) { map = new Map(); this.uniformCache.set(program, map) }
+    let loc = map.get(name)
+    if (loc === undefined) { loc = getUniform(this.gl, program, name); map.set(name, loc) }
+    return loc
+  }
+
   // --- Private rendering methods ---
 
   private renderBackground(effects: Effects): void {
@@ -176,38 +214,44 @@ export class WebGLCompositor {
     const typeMap: Record<string, number> = {
       solid: 0, gradient: 1, image: 2, wallpaper: 2, custom: 2, preset: 1,
     }
-    gl.uniform1i(getUniform(gl, this.bgProgram, "u_type"), typeMap[bg.type] ?? 0)
-    gl.uniform4fv(getUniform(gl, this.bgProgram, "u_colorFrom"), hexToVec4(bg.type === "gradient" || bg.type === "preset" ? bg.gradientFrom : bg.color))
-    gl.uniform4fv(getUniform(gl, this.bgProgram, "u_colorTo"), hexToVec4(bg.gradientTo))
-    gl.uniform1f(getUniform(gl, this.bgProgram, "u_angleDeg"), bg.gradientAngle)
+    gl.uniform1i(this.u(this.bgProgram, "u_type"), typeMap[bg.type] ?? 0)
+    gl.uniform4fv(this.u(this.bgProgram, "u_colorFrom"), hexToVec4(bg.type === "gradient" || bg.type === "preset" ? bg.gradientFrom : bg.color))
+    gl.uniform4fv(this.u(this.bgProgram, "u_colorTo"), hexToVec4(bg.gradientTo))
+    gl.uniform1f(this.u(this.bgProgram, "u_angleDeg"), bg.gradientAngle)
 
     const hasBgImage = this.bgImageTexture ? 1.0 : 0.0
-    gl.uniform1f(getUniform(gl, this.bgProgram, "u_hasBgImage"), hasBgImage)
+    gl.uniform1f(this.u(this.bgProgram, "u_hasBgImage"), hasBgImage)
     if (this.bgImageTexture) {
       gl.activeTexture(gl.TEXTURE0)
       gl.bindTexture(gl.TEXTURE_2D, this.bgImageTexture)
-      gl.uniform1i(getUniform(gl, this.bgProgram, "u_bgImage"), 0)
+      gl.uniform1i(this.u(this.bgProgram, "u_bgImage"), 0)
     }
+
+    // Pass blur as UV-space tap spacing so the shader applies a Gaussian blur
+    const blurPx = bg.imageBlur ?? 0
+    gl.uniform2f(
+      this.u(this.bgProgram, "u_blurUv"),
+      blurPx / this.canvasWidth,
+      blurPx / this.canvasHeight
+    )
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
 
-  private renderScreen(effects: Effects, rect: NRect, zoom: RenderParams["zoom"]): void {
+  private renderScreen(effects: Effects, rect: NRect): void {
     const gl = this.gl
     if (!this.screenTexture) return
     gl.useProgram(this.videoProgram)
 
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.screenTexture)
-    gl.uniform1i(getUniform(gl, this.videoProgram, "u_screen"), 0)
-    gl.uniform2f(getUniform(gl, this.videoProgram, "u_screenOrigin"), rect.x, rect.y)
-    gl.uniform2f(getUniform(gl, this.videoProgram, "u_screenSize"), rect.w, rect.h)
-    gl.uniform1f(getUniform(gl, this.videoProgram, "u_borderRadius"), effects.frame.borderRadius)
-    gl.uniform1f(getUniform(gl, this.videoProgram, "u_hasShadow"), effects.frame.shadow ? 1.0 : 0.0)
-    gl.uniform1f(getUniform(gl, this.videoProgram, "u_shadowIntensity"), effects.frame.shadowIntensity)
-    gl.uniform2f(getUniform(gl, this.videoProgram, "u_canvasSize"), this.canvasWidth, this.canvasHeight)
-    gl.uniform2f(getUniform(gl, this.videoProgram, "u_zoomCenter"), zoom.x, zoom.y)
-    gl.uniform1f(getUniform(gl, this.videoProgram, "u_zoomScale"), zoom.scale)
+    gl.uniform1i(this.u(this.videoProgram, "u_screen"), 0)
+    gl.uniform2f(this.u(this.videoProgram, "u_screenOrigin"), rect.x, rect.y)
+    gl.uniform2f(this.u(this.videoProgram, "u_screenSize"), rect.w, rect.h)
+    gl.uniform1f(this.u(this.videoProgram, "u_borderRadius"), effects.frame.borderRadius)
+    gl.uniform1f(this.u(this.videoProgram, "u_hasShadow"), effects.frame.shadow ? 1.0 : 0.0)
+    gl.uniform1f(this.u(this.videoProgram, "u_shadowIntensity"), effects.frame.shadowIntensity)
+    gl.uniform2f(this.u(this.videoProgram, "u_canvasSize"), this.canvasWidth, this.canvasHeight)
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
@@ -219,14 +263,20 @@ export class WebGLCompositor {
 
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.cameraTexture)
-    gl.uniform1i(getUniform(gl, this.cameraProgram, "u_camera"), 0)
-    gl.uniform2f(getUniform(gl, this.cameraProgram, "u_camOrigin"), rect.x, rect.y)
-    gl.uniform2f(getUniform(gl, this.cameraProgram, "u_camSize"), rect.w, rect.h)
-    gl.uniform1f(getUniform(gl, this.cameraProgram, "u_isCircle"), effects.cameraBubble.shape === "circle" ? 1.0 : 0.0)
-    gl.uniform1f(getUniform(gl, this.cameraProgram, "u_borderWidth"), effects.cameraBubble.borderWidth / this.canvasWidth)
-    gl.uniform4fv(getUniform(gl, this.cameraProgram, "u_borderColor"), hexToVec4(effects.cameraBubble.borderColor))
-    gl.uniform1f(getUniform(gl, this.cameraProgram, "u_cameraAspect"), 16 / 9) // TODO: get from video track
-    gl.uniform1f(getUniform(gl, this.cameraProgram, "u_hasCamera"), 1.0)
+    gl.uniform1i(this.u(this.cameraProgram, "u_camera"), 0)
+    gl.uniform2f(this.u(this.cameraProgram, "u_camOrigin"), rect.x, rect.y)
+    gl.uniform2f(this.u(this.cameraProgram, "u_camSize"), rect.w, rect.h)
+    gl.uniform1f(this.u(this.cameraProgram, "u_isCircle"), effects.cameraBubble.shape === "circle" ? 1.0 : 0.0)
+    // borderWidth is in pixels; convert to bubble-local UV space
+    // where 1.0 spans the bubble's height in pixels (rect.h * canvasHeight)
+    const bubbleSizePx = rect.h * this.canvasHeight
+    gl.uniform1f(this.u(this.cameraProgram, "u_borderWidth"), effects.cameraBubble.borderWidth / bubbleSizePx)
+    gl.uniform4fv(this.u(this.cameraProgram, "u_borderColor"), hexToVec4(effects.cameraBubble.borderColor))
+    gl.uniform1f(this.u(this.cameraProgram, "u_cameraAspect"), this.cameraAspect)
+    gl.uniform1f(this.u(this.cameraProgram, "u_hasCamera"), 1.0)
+    gl.uniform1f(this.u(this.cameraProgram, "u_canvasAspect"), this.canvasWidth / this.canvasHeight)
+    gl.uniform1f(this.u(this.cameraProgram, "u_hasShadow"), effects.cameraBubble.shadow ? 1.0 : 0.0)
+    gl.uniform1f(this.u(this.cameraProgram, "u_shadowIntensity"), effects.cameraBubble.shadowIntensity ?? 1.0)
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
@@ -234,21 +284,28 @@ export class WebGLCompositor {
   private renderCursor(
     effects: Effects,
     scrRect: NRect,
-    zoom: RenderParams["zoom"],
-    cursor: { x: number; y: number }
+    zoomScale: number,
+    cursor: { x: number; y: number },
+    cursorVelocity: { dx: number; dy: number } | null
   ): void {
     const gl = this.gl
     gl.useProgram(this.cursorProgram)
 
-    const cx = scrRect.x + (scrRect.w * (zoom.x + (cursor.x - zoom.x) * zoom.scale))
-    const cy = scrRect.y + (scrRect.h * (zoom.y + (cursor.y - zoom.y) * zoom.scale))
+    // scrRect is already zoom-transformed; cursor UV maps directly into it
+    const cx = scrRect.x + cursor.x * scrRect.w
+    const cy = scrRect.y + cursor.y * scrRect.h
 
-    gl.uniform1f(getUniform(gl, this.cursorProgram, "u_hasCursor"), 1.0)
-    gl.uniform2f(getUniform(gl, this.cursorProgram, "u_cursorPos"), cx, cy)
-    gl.uniform1f(getUniform(gl, this.cursorProgram, "u_cursorRadius"), effects.cursor.size / this.canvasWidth * zoom.scale)
-    gl.uniform1f(getUniform(gl, this.cursorProgram, "u_isSpotlight"), effects.cursor.type === "spotlight" ? 1.0 : 0.0)
-    gl.uniform1f(getUniform(gl, this.cursorProgram, "u_cursorOpacity"), effects.cursor.opacity)
-    gl.uniform4fv(getUniform(gl, this.cursorProgram, "u_cursorColor"), hexToVec4(effects.cursor.color))
+    gl.uniform1f(this.u(this.cursorProgram, "u_hasCursor"), 1.0)
+    gl.uniform2f(this.u(this.cursorProgram, "u_cursorPos"), cx, cy)
+    gl.uniform1f(this.u(this.cursorProgram, "u_cursorRadius"), effects.cursor.size / this.canvasWidth * zoomScale)
+    gl.uniform1f(this.u(this.cursorProgram, "u_isSpotlight"), effects.cursor.type === "spotlight" ? 1.0 : 0.0)
+    gl.uniform1f(this.u(this.cursorProgram, "u_cursorOpacity"), effects.cursor.opacity)
+    gl.uniform4fv(this.u(this.cursorProgram, "u_cursorColor"), hexToVec4(effects.cursor.color))
+    gl.uniform2f(
+      this.u(this.cursorProgram, "u_cursorVelocity"),
+      cursorVelocity?.dx ?? 0,
+      cursorVelocity?.dy ?? 0
+    )
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
@@ -256,40 +313,39 @@ export class WebGLCompositor {
   private renderClick(
     effects: Effects,
     scrRect: NRect,
-    zoom: RenderParams["zoom"],
+    zoomScale: number,
     click: { x: number; y: number; progress: number }
   ): void {
     const gl = this.gl
     const clickCfg = effects.cursor.clickHighlight
     gl.useProgram(this.clickProgram)
 
-    const cx = scrRect.x + (scrRect.w * (zoom.x + (click.x - zoom.x) * zoom.scale))
-    const cy = scrRect.y + (scrRect.h * (zoom.y + (click.y - zoom.y) * zoom.scale))
+    // scrRect is already zoom-transformed; click UV maps directly into it
+    const cx = scrRect.x + click.x * scrRect.w
+    const cy = scrRect.y + click.y * scrRect.h
 
-    gl.uniform1f(getUniform(gl, this.clickProgram, "u_hasClick"), 1.0)
-    gl.uniform2f(getUniform(gl, this.clickProgram, "u_clickPos"), cx, cy)
-    gl.uniform1f(getUniform(gl, this.clickProgram, "u_clickProgress"), click.progress)
-    gl.uniform1f(getUniform(gl, this.clickProgram, "u_clickRadius"), clickCfg.size / this.canvasWidth * zoom.scale)
-    gl.uniform1f(getUniform(gl, this.clickProgram, "u_clickOpacity"), clickCfg.opacity)
-    gl.uniform4fv(getUniform(gl, this.clickProgram, "u_clickColor"), hexToVec4(clickCfg.color))
+    gl.uniform1f(this.u(this.clickProgram, "u_hasClick"), 1.0)
+    gl.uniform2f(this.u(this.clickProgram, "u_clickPos"), cx, cy)
+    gl.uniform1f(this.u(this.clickProgram, "u_clickProgress"), click.progress)
+    gl.uniform1f(this.u(this.clickProgram, "u_clickRadius"), clickCfg.size / this.canvasWidth * zoomScale)
+    gl.uniform1f(this.u(this.clickProgram, "u_clickOpacity"), clickCfg.opacity)
+    gl.uniform4fv(this.u(this.clickProgram, "u_clickColor"), hexToVec4(clickCfg.color))
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
 
-  private renderMotionBlur(
-    mb: { dx: number; dy: number; intensity: number },
-    zoom: RenderParams["zoom"]
-  ): void {
+  private renderMotionBlur(mb: { dx: number; dy: number; intensity: number }): void {
     const gl = this.gl
     gl.useProgram(this.motionBlurProgram)
     gl.disable(gl.BLEND)
 
     gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, this.fboTexture!)
-    gl.uniform1i(getUniform(gl, this.motionBlurProgram, "u_scene"), 0)
-    gl.uniform2f(getUniform(gl, this.motionBlurProgram, "u_velocity"), mb.dx, mb.dy)
-    gl.uniform1f(getUniform(gl, this.motionBlurProgram, "u_intensity"), mb.intensity)
-    gl.uniform2f(getUniform(gl, this.motionBlurProgram, "u_zoomCenter"), zoom.x, zoom.y)
+    gl.uniform1i(this.u(this.motionBlurProgram, "u_scene"), 0)
+    gl.uniform2f(this.u(this.motionBlurProgram, "u_velocity"), mb.dx, mb.dy)
+    gl.uniform1f(this.u(this.motionBlurProgram, "u_intensity"), mb.intensity)
+    // Zoom center is always canvas center (0.5, 0.5) in canvas-space zoom approach
+    gl.uniform2f(this.u(this.motionBlurProgram, "u_zoomCenter"), 0.5, 0.5)
 
     gl.drawArrays(gl.TRIANGLES, 0, 3)
     gl.enable(gl.BLEND)

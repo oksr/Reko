@@ -1,35 +1,33 @@
 import type { ZoomEvent, Clip, Transition } from "@/types/editor"
 import { sequenceTimeToSourceTime } from "@/lib/sequence"
 
-// ── Spring physics ──
-
-const SPRING_RESPONSE = 1.0
-const SPRING_DAMPING = 1.0
-const TRANSITION_MS = 450 // lead-in / lead-out duration
+const TRANSITION_MS = 380 // lead-in / lead-out duration
 
 /**
- * Critically-damped spring easing.
- * Must match Swift `springEase` exactly.
+ * Sine ease-in-out: zero velocity at both ends, peak speed in the middle.
+ * Mirrors how a real camera operator moves — gentle start, accelerates
+ * through the middle, decelerates into the hold. Classic cinematic feel.
  */
-export function springEase(t: number, response: number = SPRING_RESPONSE, damping: number = SPRING_DAMPING): number {
+function easeInOutSine(t: number): number {
   if (t <= 0) return 0
   if (t >= 1) return 1
+  return 0.5 * (1 - Math.cos(Math.PI * t))
+}
 
+/**
+ * Critically-damped spring easing (kept for potential future use).
+ */
+export function springEase(t: number, response = 1.0, damping = 1.0): number {
+  if (t <= 0) return 0
+  if (t >= 1) return 1
   const omega = (2 * Math.PI) / response
   const actualT = t * response * 2
   const decay = Math.exp(-damping * omega * actualT)
-
   if (damping >= 1.0) {
     return 1.0 - (1.0 + omega * actualT) * decay
-  } else {
-    const dampedFreq = omega * Math.sqrt(1 - damping * damping)
-    return (
-      1.0 -
-      decay *
-        (Math.cos(dampedFreq * actualT) +
-          ((damping * omega) / dampedFreq) * Math.sin(dampedFreq * actualT))
-    )
   }
+  const dampedFreq = omega * Math.sqrt(1 - damping * damping)
+  return 1.0 - decay * (Math.cos(dampedFreq * actualT) + ((damping * omega) / dampedFreq) * Math.sin(dampedFreq * actualT))
 }
 
 /**
@@ -45,7 +43,8 @@ export function springEase(t: number, response: number = SPRING_RESPONSE, dampin
  */
 export function interpolateZoomEvents(
   events: ZoomEvent[],
-  timeMs: number
+  timeMs: number,
+  cursor?: { x: number; y: number } | null
 ): { x: number; y: number; scale: number } {
   const none = { x: 0.5, y: 0.5, scale: 1 }
   if (events.length === 0) return none
@@ -70,7 +69,7 @@ export function interpolateZoomEvents(
     if (timeMs < holdStart) {
       // Lead-in phase
       const t = (timeMs - leadInStart) / TRANSITION_MS
-      const eased = springEase(t)
+      const eased = easeInOutSine(t)
       scale = 1.0 + (evt.scale - 1.0) * eased
       blend = eased
     } else if (timeMs <= holdEnd) {
@@ -80,7 +79,7 @@ export function interpolateZoomEvents(
     } else {
       // Lead-out phase
       const t = (timeMs - holdEnd) / TRANSITION_MS
-      const eased = springEase(t)
+      const eased = easeInOutSine(t)
       scale = evt.scale + (1.0 - evt.scale) * eased
       blend = 1.0 - eased
     }
@@ -88,8 +87,12 @@ export function interpolateZoomEvents(
     // If this event has higher scale influence, it wins
     if (scale > bestScale) {
       bestScale = scale
-      bestX = 0.5 + (evt.x - 0.5) * blend
-      bestY = 0.5 + (evt.y - 0.5) * blend
+      // Use live cursor position as pan center so the viewport follows the cursor
+      // while zoomed (like Screen Studio). Falls back to the event's click position.
+      const cx = cursor ? cursor.x : evt.x
+      const cy = cursor ? cursor.y : evt.y
+      bestX = 0.5 + (cx - 0.5) * blend
+      bestY = 0.5 + (cy - 0.5) * blend
     }
   }
 
