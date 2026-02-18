@@ -278,7 +278,7 @@ public enum ExportMath {
 
 // MARK: - Cursor helper types (private, used internally by ExportPipeline)
 
-private struct MouseEvt: Codable {
+public struct MouseEvt: Codable {
     let timeMs: UInt64
     let x: Double
     let y: Double

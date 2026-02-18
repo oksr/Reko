@@ -333,3 +333,83 @@ public func ck_finish_export(exportId: UInt64) -> Int32 {
     exportsLock.unlock()
     return 0
 }
+
+// MARK: - Preview API
+
+private var activePreview: PreviewRenderer? = nil
+private let previewLock = NSLock()
+
+/// Configure the preview renderer. Returns JSON: {"width": N, "height": N} or error code.
+@_cdecl("ck_preview_configure")
+public func ck_preview_configure(
+    projectJson: UnsafePointer<CChar>,
+    outJson: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32 {
+    let json = String(cString: projectJson)
+    let renderer = PreviewRenderer()
+
+    do {
+        let dims = try renderer.configure(projectJson: json)
+        previewLock.lock()
+        activePreview = renderer
+        previewLock.unlock()
+        outJson.pointee = strdup("{\"width\":\(dims.width),\"height\":\(dims.height)}")
+        return 0
+    } catch {
+        print("Preview configure error: \(error)")
+        return -1
+    }
+}
+
+/// Render a preview frame. Returns malloc'd JPEG bytes via pointer + length.
+/// Caller must call ck_preview_free_bytes() on the returned pointer.
+@_cdecl("ck_preview_frame")
+public func ck_preview_frame(
+    sourceTimeMs: UInt64,
+    effectsJson: UnsafePointer<CChar>,
+    zoomEventsJson: UnsafePointer<CChar>,
+    outLength: UnsafeMutablePointer<Int>
+) -> UnsafeMutablePointer<UInt8>? {
+    // Grab strong reference under lock (ARC keeps object alive even if
+    // ck_preview_destroy nils activePreview concurrently)
+    previewLock.lock()
+    guard let renderer = activePreview else {
+        previewLock.unlock()
+        outLength.pointee = 0
+        return nil
+    }
+    previewLock.unlock()
+
+    let effects = String(cString: effectsJson)
+    let zoomEvents = String(cString: zoomEventsJson)
+
+    do {
+        let jpegData = try renderer.renderFrame(
+            sourceTimeMs: sourceTimeMs,
+            effectsJson: effects,
+            zoomEventsJson: zoomEvents
+        )
+        let length = jpegData.count
+        let ptr = UnsafeMutablePointer<UInt8>.allocate(capacity: length)
+        jpegData.copyBytes(to: ptr, count: length)
+        outLength.pointee = length
+        return ptr
+    } catch {
+        print("Preview frame error: \(error)")
+        outLength.pointee = 0
+        return nil
+    }
+}
+
+@_cdecl("ck_preview_free_bytes")
+public func ck_preview_free_bytes(ptr: UnsafeMutablePointer<UInt8>?) {
+    ptr?.deallocate()
+}
+
+@_cdecl("ck_preview_destroy")
+public func ck_preview_destroy() {
+    previewLock.lock()
+    activePreview?.destroy()
+    activePreview = nil
+    previewLock.unlock()
+}

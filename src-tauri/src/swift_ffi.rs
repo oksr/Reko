@@ -25,6 +25,18 @@ extern "C" {
     fn ck_check_camera_permission() -> i32;
     fn ck_check_accessibility_permission() -> i32;
     fn ck_check_screen_recording_permission() -> i32;
+    fn ck_preview_configure(
+        project_json: *const c_char,
+        out_json: *mut *const c_char,
+    ) -> i32;
+    fn ck_preview_frame(
+        source_time_ms: u64,
+        effects_json: *const c_char,
+        zoom_events_json: *const c_char,
+        out_length: *mut usize,
+    ) -> *mut u8;
+    fn ck_preview_free_bytes(ptr: *mut u8);
+    fn ck_preview_destroy();
 }
 
 unsafe fn call_json(call: impl FnOnce(*mut *const c_char) -> i32) -> Result<String, String> {
@@ -156,5 +168,35 @@ impl RekoEngine {
 
     pub fn check_screen_recording_permission() -> i32 {
         unsafe { ck_check_screen_recording_permission() }
+    }
+
+    /// Configure the preview renderer. Returns JSON: {"width": N, "height": N}
+    pub fn preview_configure(project_json: &str) -> Result<String, String> {
+        let c = CString::new(project_json).map_err(|e| e.to_string())?;
+        unsafe { call_json(|p| ck_preview_configure(c.as_ptr(), p)) }
+    }
+
+    /// Render a preview frame. Returns raw JPEG bytes.
+    pub fn preview_frame(
+        source_time_ms: u64,
+        effects_json: &str,
+        zoom_events_json: &str,
+    ) -> Result<Vec<u8>, String> {
+        let e = CString::new(effects_json).map_err(|e| e.to_string())?;
+        let z = CString::new(zoom_events_json).map_err(|e| e.to_string())?;
+        let mut length: usize = 0;
+        unsafe {
+            let ptr = ck_preview_frame(source_time_ms, e.as_ptr(), z.as_ptr(), &mut length);
+            if ptr.is_null() || length == 0 {
+                return Err("Failed to render preview frame".into());
+            }
+            let bytes = std::slice::from_raw_parts(ptr, length).to_vec();
+            ck_preview_free_bytes(ptr);
+            Ok(bytes)
+        }
+    }
+
+    pub fn preview_destroy() {
+        unsafe { ck_preview_destroy() }
     }
 }
