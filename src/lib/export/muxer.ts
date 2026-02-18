@@ -1,9 +1,16 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer"
 
+export interface AudioConfig {
+  codec: "aac" | "opus"
+  sampleRate: number
+  numberOfChannels: number
+}
+
 export interface MuxerConfig {
   width: number
   height: number
   fps: number
+  audio?: AudioConfig
 }
 
 export class Mp4Muxer {
@@ -19,6 +26,13 @@ export class Mp4Muxer {
         width: config.width,
         height: config.height,
       },
+      audio: config.audio
+        ? {
+            codec: config.audio.codec,
+            sampleRate: config.audio.sampleRate,
+            numberOfChannels: config.audio.numberOfChannels,
+          }
+        : undefined,
       fastStart: "in-memory",
     })
   }
@@ -26,6 +40,11 @@ export class Mp4Muxer {
   addVideoChunk(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata): void {
     if (!this.muxer) throw new Error("Muxer not initialized")
     this.muxer.addVideoChunk(chunk, meta)
+  }
+
+  addAudioChunk(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata): void {
+    if (!this.muxer) throw new Error("Muxer not initialized")
+    this.muxer.addAudioChunk(chunk, meta)
   }
 
   finalize(): ArrayBuffer {
