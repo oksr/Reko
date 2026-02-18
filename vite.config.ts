@@ -3,6 +3,7 @@ import fs from "fs"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig, type Plugin } from "vitest/config"
+import glsl from "vite-plugin-glsl"
 import mime from "mime-types"
 
 /**
@@ -56,7 +57,7 @@ function serveLocalAssets(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), serveLocalAssets()],
+  plugins: [react(), tailwindcss(), glsl(), serveLocalAssets()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

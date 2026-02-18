@@ -26,6 +26,8 @@
     "lucide-react": "^0.563.0",
     "mime-types": "^3.0.2",
     "motion": "^12.34.0",
+    "mp4-muxer": "^5.2.2",
+    "mp4box": "^2.3.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -55,6 +57,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
+    "vite-plugin-glsl": "^1.5.5",
     "vitest": "^4.0.18"
   }
 }
