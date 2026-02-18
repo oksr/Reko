@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { save } from "@tauri-apps/plugin-dialog"
 import { Button } from "@/components/ui/button"
@@ -6,12 +6,12 @@ import { Download, X, Check, FolderOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/stores/editor-store"
 import { sanitizeProject } from "@/hooks/use-auto-save"
+import { useExport } from "@/hooks/use-export"
 import {
     BITRATE_MAP,
     type ExportResolution,
     type ExportQuality,
     type ExportConfig,
-    type ExportProgress,
 } from "@/types/editor"
 
 function PillGroup<T extends string>({
@@ -71,21 +71,29 @@ export function ExportButton() {
     const [resolution, setResolution] = useState<ExportResolution>("1080p")
     const [quality, setQuality] = useState<ExportQuality>("high")
     const [outputPath, setOutputPath] = useState("")
-    const [exporting, setExporting] = useState(false)
-    const [progress, setProgress] = useState<ExportProgress | null>(null)
     const [result, setResult] = useState<string | null>(null)
     const [error, setError] = useState<string | null>(null)
-    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-    const stopPolling = useCallback(() => {
-        if (pollRef.current) {
-            clearInterval(pollRef.current)
-            pollRef.current = null
+    const { progress, startExport, cancelExport } = useExport()
+
+    const exporting =
+        progress !== null &&
+        (progress.phase === "compositing" || progress.phase === "finalizing")
+
+    // React to progress changes — detect completion and errors
+    useEffect(() => {
+        if (!progress) return
+
+        if (progress.phase === "done") {
+            setResult(outputPath)
+            setTimeout(() => {
+                setResult(null)
+                setShowPanel(false)
+            }, 5000)
+        } else if (progress.phase === "error") {
+            setError("Export failed")
         }
-    }, [])
-
-    // Clean up polling on unmount
-    useEffect(() => stopPolling, [stopPolling])
+    }, [progress?.phase, outputPath])
 
     // Initialize output path on mount
     useEffect(() => {
@@ -99,10 +107,8 @@ export function ExportButton() {
     if (!project) return null
 
     const handleExport = async () => {
-        setExporting(true)
         setError(null)
         setResult(null)
-        setProgress(null)
 
         try {
             // Save project state first
@@ -116,52 +122,14 @@ export function ExportButton() {
                 bitrate: resolveBitrate(resolution, quality),
                 outputPath,
             }
-            await invoke<number>("start_export", {
-                projectId: project.id,
-                exportConfig: config,
-            })
-
-            // Start polling progress
-            pollRef.current = setInterval(async () => {
-                try {
-                    const prog =
-                        await invoke<ExportProgress>("get_export_progress")
-                    setProgress(prog)
-
-                    if (prog.phase === "done") {
-                        stopPolling()
-                        setExporting(false)
-                        setResult(config.outputPath)
-                        await invoke("finish_export")
-                        setTimeout(() => {
-                            setResult(null)
-                            setShowPanel(false)
-                        }, 5000)
-                    } else if (prog.phase === "error") {
-                        stopPolling()
-                        setExporting(false)
-                        setError("Export failed")
-                        await invoke("finish_export")
-                    }
-                } catch {
-                    // polling error — might be transient
-                }
-            }, 200)
+            await startExport(config)
         } catch (e) {
             setError(String(e))
-            setExporting(false)
         }
     }
 
-    const handleCancel = async () => {
-        stopPolling()
-        try {
-            await invoke("cancel_export")
-        } catch {
-            /* ignore */
-        }
-        setExporting(false)
-        setProgress(null)
+    const handleCancel = () => {
+        cancelExport()
     }
 
     const handleChooseDestination = async () => {
