@@ -13,7 +13,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api", "protocol-asset"] }
+tauri = { version = "2", features = ["macos-private-api", "protocol-asset", "tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
@@ -27,6 +27,6 @@ tauri-plugin-dialog = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSView", "NSColor"] }
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSView", "NSColor", "NSApplication"] }
 objc2-foundation = "0.3"
 objc2-quartz-core = { version = "0.3", features = ["CALayer"] }

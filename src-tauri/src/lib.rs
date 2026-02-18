@@ -2,8 +2,8 @@ pub mod autozoom;
 mod commands;
 pub mod project;
 mod swift_ffi;
+mod tray;
 
-use commands::export::ExportState;
 use commands::recording::RecordingState;
 use std::sync::Mutex;
 use swift_ffi::RekoEngine;
@@ -87,10 +87,9 @@ pub fn run() {
             active_session_id: Mutex::new(None),
             active_project_id: Mutex::new(None),
         })
-        .manage(ExportState {
-            active_export_id: Mutex::new(None),
-        })
         .setup(|app| {
+            tray::setup(app)?;
+
             #[cfg(target_os = "macos")]
             {
                 use objc2_app_kit::NSColor;
@@ -145,13 +144,8 @@ pub fn run() {
             commands::editor::list_projects,
             commands::editor::load_project,
             commands::editor::save_project_state,
-            commands::export::start_export,
-            commands::export::get_export_progress,
-            commands::export::cancel_export,
-            commands::export::finish_export,
-            commands::preview::configure_preview,
-            commands::preview::render_preview_frame,
-            commands::preview::destroy_preview,
+            commands::export::write_export_file,
+            commands::export::mux_audio,
             commands::editor::generate_auto_zoom,
             commands::editor::download_background_image,
             commands::editor::list_wallpapers,
