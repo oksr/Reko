@@ -6,9 +6,11 @@ import { sequenceTimeToSourceTime } from "@/lib/sequence"
 
 export function PreviewCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const screenVideoRef = useRef<HTMLVideoElement>(null)
+  const cameraVideoRef = useRef<HTMLVideoElement>(null)
   const micRef = useRef<HTMLAudioElement>(null)
   const systemAudioRef = useRef<HTMLAudioElement>(null)
-  const { dims } = usePreviewRenderer(canvasRef)
+  const { dims } = usePreviewRenderer(canvasRef, screenVideoRef, cameraVideoRef)
 
   const project = useEditorStore((s) => s.project)
   const currentTime = useEditorStore((s) => s.currentTime)
@@ -29,11 +31,14 @@ export function PreviewCanvas() {
     }
   }, [currentTime, isPlaying, project?.sequence])
 
-  // Play/pause audio
+  // Play/pause audio and video
   useEffect(() => {
     const audios = [micRef.current, systemAudioRef.current].filter(
       Boolean
     ) as HTMLAudioElement[]
+    const screenVideo = screenVideoRef.current
+    const cameraVideo = cameraVideoRef.current
+
     if (isPlaying && project?.sequence) {
       const mapping = sequenceTimeToSourceTime(
         useEditorStore.getState().currentTime,
@@ -48,9 +53,22 @@ export function PreviewCanvas() {
           a.playbackRate = clip.speed
           a.play().catch(() => {})
         })
+        // Play video elements (muted — they are texture sources only)
+        if (screenVideo) {
+          screenVideo.currentTime = sourceTimeSec
+          screenVideo.playbackRate = clip.speed
+          screenVideo.play().catch(() => {})
+        }
+        if (cameraVideo) {
+          cameraVideo.currentTime = sourceTimeSec
+          cameraVideo.playbackRate = clip.speed
+          cameraVideo.play().catch(() => {})
+        }
       }
     } else {
       audios.forEach((a) => a.pause())
+      if (screenVideo) screenVideo.pause()
+      if (cameraVideo) cameraVideo.pause()
     }
   }, [isPlaying]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -66,10 +84,31 @@ export function PreviewCanvas() {
     >
       <canvas
         ref={canvasRef}
-        width={dims?.width ?? 1280}
-        height={dims?.height ?? 720}
+        width={dims?.width ?? 1920}
+        height={dims?.height ?? 1080}
         className="w-full h-full"
       />
+      {/* Hidden video elements as texture sources */}
+      <video
+        ref={screenVideoRef}
+        src={assetUrl(project.tracks.screen)}
+        muted
+        playsInline
+        preload="auto"
+        className="hidden"
+        data-testid="screen-video"
+      />
+      {project.tracks.camera && (
+        <video
+          ref={cameraVideoRef}
+          src={assetUrl(project.tracks.camera)}
+          muted
+          playsInline
+          preload="auto"
+          className="hidden"
+          data-testid="camera-video"
+        />
+      )}
       {/* Hidden audio elements for preview playback */}
       {project.tracks.mic && (
         <audio

@@ -5,8 +5,28 @@ import { useEditorStore } from "@/stores/editor-store"
 import type { EditorProject } from "@/types/editor"
 
 vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+  invoke: vi.fn().mockResolvedValue(null),
   convertFileSrc: (path: string) => `asset://${path}`,
+}))
+
+vi.mock("@/lib/webgl-compositor", () => ({
+  WebGLCompositor: vi.fn().mockImplementation(() => ({
+    configure: vi.fn(),
+    uploadScreen: vi.fn(),
+    uploadCamera: vi.fn(),
+    loadBackgroundImage: vi.fn().mockResolvedValue(undefined),
+    render: vi.fn(),
+    destroy: vi.fn(),
+  })),
+}))
+
+vi.mock("@/hooks/use-mouse-events", () => ({
+  useMouseEvents: () => ({
+    cursorPos: null,
+    events: [],
+    getCursorAt: () => null,
+    getClicksInRange: () => [],
+  }),
 }))
 
 const MOCK_PROJECT: EditorProject = {
@@ -16,10 +36,23 @@ const MOCK_PROJECT: EditorProject = {
   tracks: { screen: "/screen.mov", mic: "/mic.wav", system_audio: null, camera: null, mouse_events: null },
   timeline: { duration_ms: 10000, in_point: 0, out_point: 10000 },
   effects: {
-    background: { type: "solid", color: "#000", gradientFrom: "#000", gradientTo: "#111", gradientAngle: 135, padding: 8, presetId: null },
+    background: {
+      type: "solid", color: "#000", gradientFrom: "#000", gradientTo: "#111",
+      gradientAngle: 135, padding: 8, presetId: null, imageUrl: null,
+      imageBlur: 0, unsplashId: null, unsplashAuthor: null, wallpaperId: null,
+    },
     cameraBubble: { visible: false, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff" },
     frame: { borderRadius: 12, shadow: true, shadowIntensity: 0.5 },
-    cursor: { enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6 },
+    cursor: {
+      enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6,
+      clickHighlight: { enabled: true, color: "#ffffff", opacity: 0.5, size: 30 },
+    },
+  },
+  sequence: {
+    clips: [{ id: "clip-1", sourceStart: 0, sourceEnd: 10000, speed: 1, zoomEvents: [] }],
+    transitions: [],
+    overlayTracks: [],
+    overlays: [],
   },
 }
 
@@ -33,6 +66,12 @@ describe("PreviewCanvas", () => {
     render(<PreviewCanvas />)
     const canvas = document.querySelector("canvas")
     expect(canvas).toBeTruthy()
+  })
+
+  it("renders hidden video for screen track", () => {
+    render(<PreviewCanvas />)
+    const video = document.querySelector('video[data-testid="screen-video"]')
+    expect(video).toBeTruthy()
   })
 
   it("renders audio element when mic track exists", () => {
