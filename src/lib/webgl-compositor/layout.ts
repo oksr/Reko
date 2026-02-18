@@ -12,10 +12,9 @@ export function screenRect(
   recordingH: number,
   paddingPercent: number
 ): NRect {
-  const padX = canvasW * paddingPercent / 100
-  const padY = canvasH * paddingPercent / 100
-  const availW = canvasW - padX * 2
-  const availH = canvasH - padY * 2
+  const pad = canvasW * paddingPercent / 100
+  const availW = canvasW - pad * 2
+  const availH = canvasH - pad * 2
   const recAspect = recordingW / recordingH
   const availAspect = availW / availH
 
@@ -28,8 +27,8 @@ export function screenRect(
     fitW = availH * recAspect
   }
 
-  const originX = padX + (availW - fitW) / 2
-  const originY = padY + (availH - fitH) / 2
+  const originX = pad + (availW - fitW) / 2
+  const originY = pad + (availH - fitH) / 2
 
   return {
     x: originX / canvasW,

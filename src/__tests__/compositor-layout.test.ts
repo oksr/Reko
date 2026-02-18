@@ -9,12 +9,18 @@ describe("compositor layout", () => {
   describe("screenRect", () => {
     it("aspect-fits 1920x1080 into 1920x1080 canvas with 4% padding", () => {
       const rect = screenRect(1920, 1080, 1920, 1080, 4)
-      // Proportional padding: padX = 1920*0.04 = 76.8, padY = 1080*0.04 = 43.2
-      // Same aspect ratio fills padded area exactly
-      expect(rect.x).toBeCloseTo(76.8 / 1920, 3)
-      expect(rect.y).toBeCloseTo(43.2 / 1080, 3)
-      expect(rect.w).toBeCloseTo(1766.4 / 1920, 3)
-      expect(rect.h).toBeCloseTo(993.6 / 1080, 3)
+      // pad = 1920 * 4/100 = 76.8 (CSS convention: width-based on all sides)
+      // avail = 1766.4 x 926.4 (aspect ~1.91, wider than 16:9)
+      // Recording is height-limited: fitH = 926.4, fitW = 926.4 * (16/9) ≈ 1646.93
+      const pad = 76.8
+      const availW = 1920 - pad * 2  // 1766.4
+      const availH = 1080 - pad * 2  // 926.4
+      const fitH = availH            // height-limited
+      const fitW = fitH * (1920 / 1080)
+      expect(rect.x).toBeCloseTo((pad + (availW - fitW) / 2) / 1920, 3)
+      expect(rect.y).toBeCloseTo(pad / 1080, 3)
+      expect(rect.w).toBeCloseTo(fitW / 1920, 3)
+      expect(rect.h).toBeCloseTo(fitH / 1080, 3)
     })
 
     it("aspect-fits 1920x1200 (16:10) into 1920x1080 canvas with 0% padding", () => {
