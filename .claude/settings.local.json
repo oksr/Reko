@@ -44,7 +44,24 @@
       "Bash(gh issue list:*)",
       "Bash(gh issue view:*)",
       "Bash(gh api:*)",
-      "Bash(cargo tree:*)"
+      "Bash(cargo tree:*)",
+      "Bash(xargs cat:*)",
+      "Bash(sudo xcodebuild:*)",
+      "Bash(npm run build:*)",
+      "Bash(node -e \"const p = require\\(''/Users/ofekseroussi/Dev/reko/node_modules/mp4box/package.json''\\); console.log\\(''types:'', p.types || p.typings || ''none''\\)\")",
+      "Bash(node -e:*)",
+      "WebFetch(domain:webkit.org)",
+      "Bash(ffprobe:*)",
+      "mcp__octocode__localGetFileContent",
+      "mcp__octocode__localSearchCode",
+      "Bash(RAW='/Users/ofekseroussi/Library/Application Support/com.reko.app/projects/730b15ad-d375-462d-b153-f5079835f961/raw')",
+      "Bash(__NEW_LINE_005f2dc1a6bdb4bf__ echo \"=== MIC: RMS of first 0.5s vs next 0.5s ===\")",
+      "Bash(ffmpeg:*)",
+      "Bash(__NEW_LINE_ecd4de62fb2a0e77__ echo -e \"\\\\n=== SYSTEM AUDIO: RMS of first 0.5s vs next 0.5s ===\")",
+      "Bash(__NEW_LINE_762d4aa8beaccf91__ echo \"=== MIC peak volume at each 0.5s interval ===\")",
+      "Bash(__NEW_LINE_762d4aa8beaccf91__ echo -e \"\\\\n=== SYSTEM AUDIO peak volume ===\")",
+      "Bash(pnpm:*)",
+      "Bash(perl -pi -e 's/\\\\bassetUrl\\\\\\(/this.assetUrl\\(/g':*)"
     ]
   }
 }

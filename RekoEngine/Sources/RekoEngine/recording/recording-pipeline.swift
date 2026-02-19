@@ -177,6 +177,7 @@ public final class RecordingPipeline {
 
         frameCount = 0
         startTime = mach_absolute_time()
+        mouseLogger?.resetStartTime()
         isRecording = true
 
         let videoHandler: (CMSampleBuffer) -> Void = { [weak self] sampleBuffer in

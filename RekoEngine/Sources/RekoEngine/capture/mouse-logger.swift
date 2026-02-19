@@ -129,6 +129,13 @@ public final class MouseLogger {
         return tapOK
     }
 
+    /// Reset the logger's time origin so that subsequent events are
+    /// timestamped relative to this moment. Call after video recording
+    /// actually begins to synchronize mouse events with video frames.
+    public func resetStartTime() {
+        startTime = Self.currentTimeMs()
+    }
+
     public func pause() {
         lock.lock()
         _isPaused = true
