@@ -45,6 +45,11 @@ function EditorContent() {
   useKeyboardShortcuts(mergedSync)
   useAutoSave()
 
+  // Show window after first paint (window opens hidden for fade-in effect)
+  useEffect(() => {
+    platform.window.show().catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Re-seek video when clip data changes (reorder, trim, speed) so preview
   // shows the correct frame for the current timeline position.
   const clipFingerprint = useEditorStore((s) =>
@@ -188,9 +193,9 @@ function EditorContent() {
   const handleRedo = () => useEditorStore.temporal.getState().redo()
 
   return (
-    <div className="h-screen flex flex-col bg-background text-foreground">
+    <div className="editor-window h-screen flex flex-col bg-background text-foreground">
       {/* Header */}
-      <header className="h-12 border-b border-white/[0.06] flex items-center pr-4 pl-[78px] gap-3 shrink-0 relative">
+      <header className="h-12 border-b border-white/6 flex items-center pr-4 pl-[78px] gap-3 shrink-0 relative">
         <div data-tauri-drag-region className="absolute inset-0" />
         <h1 data-tauri-drag-region className="absolute left-1/2 -translate-x-1/2 text-xs text-muted-foreground font-medium truncate pointer-events-none">
           {project.name}
@@ -213,7 +218,7 @@ function EditorContent() {
       {/* Main area */}
       <div className="flex-1 flex min-h-0">
         {/* Inspector */}
-        <aside className="w-80 border-r overflow-y-auto p-4">
+        <aside className="w-[320px] flex flex-col bg-muted/20 border-r border-white/[0.06]">
           <Inspector />
         </aside>
 
