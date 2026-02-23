@@ -243,24 +243,42 @@ export function usePreviewRenderer(
 
     if (!screenVideo) return
 
-    let done = false
+    let cancelled = false
+    let rafId = 0
+
+    // After seeked, poll via rAF until the video frame is paint-ready for WebGL.
+    // WKWebView fires seeked before texImage2D can see the new pixel data —
+    // deferring to the next paint cycle (or a few) fixes the stale-frame issue.
+    const renderWhenReady = (attemptsLeft: number) => {
+      if (cancelled) return
+      if (screenVideo.readyState >= 2) {
+        renderFrame(currentTime)
+        return
+      }
+      if (attemptsLeft > 0) {
+        rafId = requestAnimationFrame(() => renderWhenReady(attemptsLeft - 1))
+      }
+    }
+
     const onSeeked = () => {
-      if (done) return
-      done = true
-      renderFrame(currentTime)
+      if (cancelled) return
+      rafId = requestAnimationFrame(() => renderWhenReady(10))
     }
 
     // Render as soon as the video has decoded the target frame
     screenVideo.addEventListener("seeked", onSeeked, { once: true })
     screenVideo.currentTime = sourceTimeSec
 
-    // Fallback: render after 300ms in case the seeked event doesn't fire
-    // (e.g. video already at that position, or WKWebView quirk)
-    const fallback = setTimeout(onSeeked, 300)
+    // Fallback: render after 500ms in case seeked never fires
+    // (e.g. video already at that exact position)
+    const fallback = setTimeout(() => {
+      if (!cancelled) renderWhenReady(5)
+    }, 500)
 
     return () => {
-      done = true
+      cancelled = true
       screenVideo.removeEventListener("seeked", onSeeked)
+      cancelAnimationFrame(rafId)
       clearTimeout(fallback)
     }
   }, [currentTime, isPlaying, mapTime, renderFrame, screenVideoRef, cameraVideoRef])
