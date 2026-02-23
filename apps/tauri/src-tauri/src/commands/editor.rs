@@ -43,6 +43,7 @@ pub fn open_editor(
     .traffic_light_position(LogicalPosition::new(16.0, 18.0))
     .inner_size(1400.0, 900.0)
     .center()
+    .visible(false)
     .build()
     .map_err(|e| e.to_string())?;
 

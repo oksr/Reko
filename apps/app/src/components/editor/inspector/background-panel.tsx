@@ -1,20 +1,19 @@
 import { useState } from "react"
+import { Image, Maximize2 } from "lucide-react"
 import { useEditorStore } from "@/stores/editor-store"
 import { GRADIENT_PRESETS } from "@/types/editor"
 import { SegmentedControl } from "./segmented-control"
 import { StyledSlider } from "./styled-slider"
 import { UnsplashBackgroundSection } from "./unsplash-background-section"
 import { WallpaperSection } from "./wallpaper-section"
-import { CustomBackgroundSection } from "./custom-background-section"
 
-type TopTab = "wallpaper" | "unsplash" | "color" | "custom"
+type TopTab = "wallpaper" | "unsplash" | "color"
 type ColorSubTab = "solid" | "gradient"
 
 function deriveTopTab(type: string): TopTab {
-  if (type === "wallpaper") return "wallpaper"
+  if (type === "wallpaper" || type === "custom") return "wallpaper"
   if (type === "image") return "unsplash"
-  if (type === "custom") return "custom"
-  return "color" // solid, gradient, preset
+  return "color"
 }
 
 export function BackgroundPanel() {
@@ -30,18 +29,9 @@ export function BackgroundPanel() {
 
   const handleTopTabChange = (tab: TopTab) => {
     switch (tab) {
-      case "wallpaper":
-        setBackground({ type: "wallpaper" })
-        break
-      case "unsplash":
-        setBackground({ type: "image" })
-        break
-      case "color":
-        setBackground({ type: colorSubTab === "solid" ? "solid" : "gradient" })
-        break
-      case "custom":
-        setBackground({ type: "custom" })
-        break
+      case "wallpaper": setBackground({ type: "wallpaper" }); break
+      case "unsplash":  setBackground({ type: "image" }); break
+      case "color":     setBackground({ type: colorSubTab === "solid" ? "solid" : "gradient" }); break
     }
   }
 
@@ -60,164 +50,170 @@ export function BackgroundPanel() {
     })
   }
 
+  const showBlur = (topTab === "wallpaper" || topTab === "unsplash") && background.imageUrl
+
   return (
-    <div className="space-y-4 py-4">
-      <h3 className="text-[13px] font-semibold tracking-tight">Background</h3>
+    <>
+      {/* Tab bar */}
+      <div className="px-4 pt-5 pb-4">
+        <SegmentedControl
+          options={[
+            { value: "wallpaper" as TopTab, label: "Wallpaper" },
+            { value: "unsplash" as TopTab, label: "Unsplash" },
+            { value: "color" as TopTab, label: "Color" },
+          ]}
+          value={topTab}
+          onChange={handleTopTabChange}
+        />
+      </div>
 
-      <SegmentedControl
-        options={[
-          { value: "wallpaper" as TopTab, label: "Wallpaper" },
-          { value: "unsplash" as TopTab, label: "Unsplash" },
-          { value: "color" as TopTab, label: "Color" },
-          { value: "custom" as TopTab, label: "Custom" },
-        ]}
-        value={topTab}
-        onChange={handleTopTabChange}
-      />
+      {/* Section header */}
+      <div className="px-4 pb-3 flex items-center gap-2.5">
+        <Image className="size-3.5 text-white/60 shrink-0" />
+        <span className="text-[13px] font-semibold text-white leading-none">
+          {topTab === "wallpaper" ? "Wallpaper"
+            : topTab === "unsplash" ? "Unsplash"
+            : "Color"}
+        </span>
+      </div>
 
-      {topTab === "wallpaper" && <WallpaperSection />}
+      {/* Content */}
+      <div className="px-4 pb-2">
+        {topTab === "wallpaper" && <WallpaperSection />}
+        {topTab === "unsplash" && <UnsplashBackgroundSection />}
 
-      {topTab === "unsplash" && <UnsplashBackgroundSection />}
+        {topTab === "color" && (
+          <div className="space-y-4">
+            <SegmentedControl
+              options={[
+                { value: "solid" as ColorSubTab, label: "Solid" },
+                { value: "gradient" as ColorSubTab, label: "Gradient" },
+              ]}
+              value={background.type === "solid" ? "solid" : "gradient"}
+              onChange={handleColorSubTabChange}
+            />
 
-      {topTab === "color" && (
-        <div className="space-y-3">
-          <SegmentedControl
-            options={[
-              { value: "solid" as ColorSubTab, label: "Solid" },
-              { value: "gradient" as ColorSubTab, label: "Gradient" },
-            ]}
-            value={
-              background.type === "solid" ? "solid" : "gradient"
-            }
-            onChange={handleColorSubTabChange}
-          />
+            {(background.type === "gradient" || background.type === "preset") && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-4 gap-2">
+                  {GRADIENT_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      className={`aspect-square rounded-[10px] transition-all duration-150 ${
+                        background.presetId === preset.id
+                          ? "ring-2 ring-violet-400 ring-offset-1 ring-offset-black scale-[1.04]"
+                          : "hover:scale-[1.06] hover:ring-1 hover:ring-white/20"
+                      }`}
+                      style={{ background: `linear-gradient(${preset.angle}deg, ${preset.from}, ${preset.to})` }}
+                      onClick={() => handlePresetClick(preset)}
+                      title={preset.name}
+                    />
+                  ))}
+                </div>
 
-          {(background.type === "gradient" || background.type === "preset") && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-4 gap-2">
-                {GRADIENT_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    className={`aspect-square rounded-lg transition-all duration-150 ${
-                      background.presetId === preset.id
-                        ? "ring-2 ring-violet-400 ring-offset-1 ring-offset-background scale-[1.04]"
-                        : "hover:scale-[1.06] hover:ring-1 hover:ring-white/20"
-                    }`}
-                    style={{
-                      background: `linear-gradient(${preset.angle}deg, ${preset.from}, ${preset.to})`,
-                    }}
-                    onClick={() => handlePresetClick(preset)}
-                    title={preset.name}
-                  />
-                ))}
-              </div>
-
-              <div className="flex gap-3">
-                <div className="flex-1 space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground">From</label>
-                  <div className="relative">
+                <div className="flex gap-3">
+                  <div className="flex-1 space-y-1.5">
+                    <label className="text-[12px] text-white/40">From</label>
                     <input
                       type="color"
                       value={background.gradientFrom}
                       onChange={(e) => setBackground({ gradientFrom: e.target.value, presetId: null, type: "gradient" })}
-                      className="w-full h-8 rounded-md cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-none"
+                      className="w-full h-8 rounded-[8px] cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[5px] [&::-webkit-color-swatch]:border-none"
                     />
                   </div>
-                </div>
-                <div className="flex-1 space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground">To</label>
-                  <div className="relative">
+                  <div className="flex-1 space-y-1.5">
+                    <label className="text-[12px] text-white/40">To</label>
                     <input
                       type="color"
                       value={background.gradientTo}
                       onChange={(e) => setBackground({ gradientTo: e.target.value, presetId: null, type: "gradient" })}
-                      className="w-full h-8 rounded-md cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-none"
+                      className="w-full h-8 rounded-[8px] cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[5px] [&::-webkit-color-swatch]:border-none"
                     />
                   </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] text-muted-foreground">Angle</label>
-                  <span className="text-[11px] text-muted-foreground tabular-nums">{background.gradientAngle}&deg;</span>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-white/40">Angle</span>
+                    <span className="text-[11px] tabular-nums">{background.gradientAngle}°</span>
+                  </div>
+                  <StyledSlider min={0} max={360} value={background.gradientAngle} onChange={(v) => setBackground({ gradientAngle: v })} />
                 </div>
-                <StyledSlider
-                  min={0}
-                  max={360}
-                  value={background.gradientAngle}
-                  onChange={(v) => setBackground({ gradientAngle: v })}
+              </div>
+            )}
+
+            {background.type === "solid" && (
+              <div className="space-y-1.5">
+                <label className="text-[12px] text-white/40">Color</label>
+                <input
+                  type="color"
+                  value={background.color}
+                  onChange={(e) => setBackground({ color: e.target.value })}
+                  className="w-full h-9 rounded-[8px] cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[5px] [&::-webkit-color-swatch]:border-none"
                 />
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-          {background.type === "solid" && (
-            <div className="space-y-1.5">
-              <label className="text-[11px] text-muted-foreground">Color</label>
-              <input
-                type="color"
-                value={background.color}
-                onChange={(e) => setBackground({ color: e.target.value })}
-                className="w-full h-9 rounded-md cursor-pointer border border-white/[0.08] bg-transparent [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[4px] [&::-webkit-color-swatch]:border-none"
-              />
-            </div>
-          )}
+        {topTab === "unsplash" && background.unsplashAuthor && (
+          <p className="text-[11px] text-white/25 mt-3">
+            Photo by {background.unsplashAuthor} on{" "}
+            <a href="https://unsplash.com" target="_blank" rel="noopener noreferrer" className="underline hover:text-white/45">
+              Unsplash
+            </a>
+          </p>
+        )}
+      </div>
+
+      {/* Padding section */}
+      <div className="border-t border-white/[0.07] mx-4 mt-3" />
+      <div className="px-4 pt-4 pb-5 space-y-3">
+        <div className="flex items-center gap-2.5">
+          <Maximize2 className="size-3.5 text-white/60 shrink-0" />
+          <span className="text-[13px] font-semibold text-white leading-none">Padding</span>
         </div>
-      )}
-
-      {topTab === "custom" && <CustomBackgroundSection />}
-
-      {/* Blur slider - shown for wallpaper, unsplash, and custom when an image is set */}
-      {(topTab === "wallpaper" || topTab === "unsplash" || topTab === "custom") && background.imageUrl && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] text-muted-foreground">Blur</label>
-            <span className="text-[11px] text-muted-foreground tabular-nums">
-              {background.imageBlur}px
-            </span>
+            <span className="text-[11px] text-white/40">Amount</span>
+            <span className="text-[11px] tabular-nums">{background.padding}%</span>
           </div>
           <StyledSlider
             min={0}
             max={20}
-            value={background.imageBlur}
-            onChange={(v) => setBackground({ imageBlur: v })}
-            showReset={background.imageBlur !== 0}
-            onReset={() => setBackground({ imageBlur: 0 })}
+            value={background.padding}
+            onChange={(v) => setBackground({ padding: v })}
+            showReset={background.padding !== 0}
+            onReset={() => setBackground({ padding: 0 })}
           />
         </div>
-      )}
-
-      {/* Padding slider */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-[11px] text-muted-foreground">Padding</label>
-          <span className="text-[11px] text-muted-foreground tabular-nums">{background.padding}%</span>
-        </div>
-        <StyledSlider
-          min={0}
-          max={20}
-          value={background.padding}
-          onChange={(v) => setBackground({ padding: v })}
-          showReset={background.padding !== 0}
-          onReset={() => setBackground({ padding: 0 })}
-        />
       </div>
 
-      {/* Unsplash attribution */}
-      {topTab === "unsplash" && background.unsplashAuthor && (
-        <p className="text-[10px] text-muted-foreground/60">
-          Photo by {background.unsplashAuthor} on{" "}
-          <a
-            href="https://unsplash.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-muted-foreground"
-          >
-            Unsplash
-          </a>
-        </p>
+      {/* Blur section (conditional) */}
+      {showBlur && (
+        <>
+          <div className="border-t border-white/[0.07] mx-4" />
+          <div className="px-4 pt-4 pb-5 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-[13px] font-semibold text-white leading-none">Blur</span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-white/40">Amount</span>
+                <span className="text-[11px] tabular-nums">{background.imageBlur}px</span>
+              </div>
+              <StyledSlider
+                min={0}
+                max={20}
+                value={background.imageBlur}
+                onChange={(v) => setBackground({ imageBlur: v })}
+                showReset={background.imageBlur !== 0}
+                onReset={() => setBackground({ imageBlur: 0 })}
+              />
+            </div>
+          </div>
+        </>
       )}
-    </div>
+    </>
   )
 }

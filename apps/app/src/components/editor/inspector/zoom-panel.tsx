@@ -2,7 +2,7 @@ import { usePlatform } from "@/platform/PlatformContext"
 import { useEditorStore } from "@/stores/editor-store"
 import { sourceTimeToSequenceTime } from "@/lib/sequence"
 import { useState } from "react"
-import { Wand2, Plus, X, ChevronDown } from "lucide-react"
+import { Wand2, Plus, X, ChevronDown, ZoomIn } from "lucide-react"
 import type { ZoomEvent } from "@/types/editor"
 import { DEFAULT_AUTO_ZOOM_SETTINGS } from "@/types/editor"
 
@@ -35,7 +35,6 @@ export function ZoomPanel() {
         zoomScale: settings.zoomScale,
       })
       const clip = sequence.clips[selectedClipIndex]
-      // Filter to events within this clip's source range and convert to clip-relative time
       const clipEvents = generated
         .filter((e) => e.timeMs >= clip.sourceStart && e.timeMs < clip.sourceEnd)
         .map((e) => ({ ...e, timeMs: e.timeMs - clip.sourceStart }))
@@ -55,7 +54,6 @@ export function ZoomPanel() {
       sequence.transitions
     )
     const clipRelativeTime = Math.max(0, currentTime - clipSeqStart)
-
     const newEvent: ZoomEvent = {
       id: crypto.randomUUID(),
       timeMs: Math.max(0, Math.round(clipRelativeTime - 300)),
@@ -64,7 +62,6 @@ export function ZoomPanel() {
       y: 0.5,
       scale: 2.0,
     }
-
     addZoomEvent(selectedClipIndex, newEvent)
   }
 
@@ -75,94 +72,96 @@ export function ZoomPanel() {
   }
 
   return (
-    <div className="space-y-4 py-4">
-      <h3 className="text-[13px] font-semibold tracking-tight">Zoom</h3>
+    <div className="px-4 pt-4 pb-5 space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-2.5">
+        <ZoomIn className="size-3.5 text-white/60 shrink-0" />
+        <span className="text-[13px] font-semibold text-white leading-none">Zoom</span>
+      </div>
 
-      {selectedClipIndex === null && (
-        <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-          Select a clip to edit zoom events.
+      {selectedClipIndex === null ? (
+        <p className="text-[12px] text-white/30 leading-relaxed">
+          Select a clip in the timeline to edit zoom events.
         </p>
-      )}
-
-      {selectedClipIndex !== null && (
+      ) : (
         <>
+          {/* Action buttons */}
           <div className="flex gap-1.5">
             <button
-              className="flex items-center gap-1.5 flex-1 text-[11px] font-medium py-2 px-3 rounded-lg bg-white/[0.05] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              className="flex items-center gap-1.5 flex-1 text-[13px] font-medium py-2 px-3 rounded-[10px] bg-white/[0.06] hover:bg-white/[0.09] text-white/60 hover:text-white transition-all disabled:opacity-30 disabled:pointer-events-none"
               onClick={handleAutoZoom}
               disabled={generating || !project.tracks.mouse_events}
             >
               <Wand2 className="w-3.5 h-3.5" />
-              {generating ? "Generating..." : "Auto-Zoom"}
+              {generating ? "Generating…" : "Auto-Zoom"}
             </button>
             <button
-              className="flex items-center justify-center w-9 text-[11px] rounded-lg bg-white/[0.05] hover:bg-white/[0.08] text-muted-foreground hover:text-foreground transition-colors"
+              className="flex items-center justify-center w-[38px] rounded-[10px] bg-white/[0.06] hover:bg-white/[0.09] text-white/60 hover:text-white transition-all"
               onClick={handleAddEvent}
+              title="Add zoom event at playhead"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {!project.tracks.mouse_events && (
-            <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-              No mouse events recorded. Re-record with Accessibility permission to enable auto-zoom.
+            <p className="text-[12px] text-white/30 leading-relaxed">
+              No mouse events. Re-record with Accessibility permission for auto-zoom.
             </p>
           )}
 
-          {/* Auto-Zoom Settings */}
-          <div className="rounded-lg bg-white/[0.03] overflow-hidden">
+          {/* Settings accordion */}
+          <div className="rounded-[10px] bg-white/[0.04] overflow-hidden">
             <button
-              className="flex items-center justify-between w-full text-[11px] text-muted-foreground px-3 py-2 hover:bg-white/[0.03] transition-colors"
+              className="flex items-center justify-between w-full px-3.5 py-2.5 text-left"
               onClick={() => setShowSettings(!showSettings)}
             >
-              <span>Auto-Zoom Settings</span>
-              <ChevronDown className={`w-3 h-3 transition-transform ${showSettings ? "rotate-180" : ""}`} />
+              <span className="text-[13px] text-white/50">Auto-Zoom Settings</span>
+              <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform duration-200 ${showSettings ? "rotate-180" : ""}`} />
             </button>
 
             {showSettings && (
-              <div className="px-3 pb-3 space-y-3">
-                {/* Zoom Intensity */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-muted-foreground/70">Zoom Intensity</label>
-                    <span className="text-[10px] text-muted-foreground tabular-nums">{settings.zoomScale.toFixed(1)}x</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1.5"
-                    max="3.0"
-                    step="0.1"
-                    value={settings.zoomScale}
-                    onChange={(e) => setAutoZoomSettings({ zoomScale: parseFloat(e.target.value) })}
-                    className="w-full h-1 rounded-full appearance-none bg-white/10 accent-violet-400"
-                  />
+              <div className="px-3.5 pb-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[12px] text-white/40">Zoom Intensity</span>
+                  <span className="text-[12px] text-white font-semibold tabular-nums">{settings.zoomScale.toFixed(1)}x</span>
                 </div>
+                <input
+                  type="range"
+                  min="1.5"
+                  max="3.0"
+                  step="0.1"
+                  value={settings.zoomScale}
+                  onChange={(e) => setAutoZoomSettings({ zoomScale: parseFloat(e.target.value) })}
+                  className="w-full h-1 rounded-full appearance-none bg-white/10 accent-violet-500"
+                />
               </div>
             )}
           </div>
 
+          {/* Events list */}
           {events.length > 0 && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] text-muted-foreground">Events ({events.length})</label>
+                <span className="text-[12px] text-white/40">Events ({events.length})</span>
                 <button
-                  className="text-[10px] text-muted-foreground/60 hover:text-destructive transition-colors"
+                  className="text-[11px] text-white/25 hover:text-red-400 transition-colors"
                   onClick={() => clearZoomEvents(selectedClipIndex)}
                 >
                   Clear all
                 </button>
               </div>
-              <div className="max-h-36 overflow-y-auto space-y-0.5 rounded-lg">
+              <div className="max-h-36 overflow-y-auto space-y-0.5 rounded-[10px] overflow-hidden">
                 {events.map((evt) => (
                   <div
                     key={evt.id}
-                    className="flex items-center justify-between text-[11px] rounded-md px-2.5 py-1.5 bg-white/[0.03] hover:bg-white/[0.06] text-muted-foreground transition-colors"
+                    className="flex items-center justify-between px-3 py-2 bg-white/[0.04] hover:bg-white/[0.07] text-white/50 transition-colors"
                   >
-                    <span className="font-mono tabular-nums">{formatTime(evt.timeMs)}</span>
-                    <span className="tabular-nums">{evt.scale.toFixed(1)}x</span>
-                    <span className="text-[10px] text-muted-foreground/50 tabular-nums">{(evt.durationMs / 1000).toFixed(1)}s</span>
+                    <span className="text-[12px] font-mono tabular-nums">{formatTime(evt.timeMs)}</span>
+                    <span className="text-[12px] tabular-nums">{evt.scale.toFixed(1)}x</span>
+                    <span className="text-[11px] text-white/25 tabular-nums flex-1 text-right mr-2">{(evt.durationMs / 1000).toFixed(1)}s</span>
                     <button
-                      className="p-0.5 rounded hover:bg-white/[0.1] text-muted-foreground/50 hover:text-foreground transition-colors"
+                      className="p-1 rounded hover:bg-white/[0.1] text-white/25 hover:text-white/60 transition-colors"
                       onClick={(e) => {
                         e.stopPropagation()
                         removeZoomEvent(selectedClipIndex, evt.id)

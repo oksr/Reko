@@ -1,5 +1,7 @@
+import { SquareDashed, Layers2 } from "lucide-react"
 import { useEditorStore } from "@/stores/editor-store"
 import { StyledSlider } from "./styled-slider"
+import { ToggleSwitch } from "./toggle-switch"
 
 export function FramePanel() {
   const frame = useEditorStore((s) => s.project?.effects.frame)
@@ -8,46 +10,45 @@ export function FramePanel() {
   if (!frame) return null
 
   return (
-    <div className="space-y-4 py-4">
-      <h3 className="text-[13px] font-semibold tracking-tight">Frame</h3>
-
-      {/* Border Radius */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-[11px] text-muted-foreground">Rounded corners</label>
-          <span className="text-[11px] text-muted-foreground tabular-nums">{frame.borderRadius}px</span>
+    <>
+      {/* Rounded corners */}
+      <div className="px-4 pt-4 pb-5 space-y-3">
+        <div className="flex items-center gap-2.5">
+          <SquareDashed className="size-3.5 text-white/60 shrink-0" />
+          <span className="text-[13px] font-semibold text-white leading-none">Rounded corners</span>
         </div>
-        <StyledSlider
-          min={0}
-          max={48}
-          value={frame.borderRadius}
-          onChange={(v) => setFrame({ borderRadius: v })}
-          showReset={frame.borderRadius !== 12}
-          onReset={() => setFrame({ borderRadius: 12 })}
-        />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] text-white/40">Radius</span>
+            <span className="text-[11px] tabular-nums">{frame.borderRadius}</span>
+          </div>
+          <StyledSlider
+            min={0}
+            max={96}
+            value={frame.borderRadius}
+            onChange={(v) => setFrame({ borderRadius: v })}
+            showReset={frame.borderRadius !== 12}
+            onReset={() => setFrame({ borderRadius: 12 })}
+          />
+        </div>
       </div>
 
       {/* Shadow */}
-      <div className="space-y-2">
+      <div className="border-t border-white/[0.07] mx-4" />
+      <div className="px-4 pt-4 pb-5 space-y-3">
         <div className="flex items-center justify-between">
-          <label className="text-[11px] text-muted-foreground">Shadow</label>
-          <button
-            className={`text-[11px] px-2 py-0.5 rounded-md transition-colors ${
-              frame.shadow
-                ? "bg-violet-400/20 text-violet-300"
-                : "bg-white/[0.05] text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setFrame({ shadow: !frame.shadow })}
-          >
-            {frame.shadow ? "On" : "Off"}
-          </button>
+          <div className="flex items-center gap-2.5">
+            <Layers2 className="size-3.5 text-white/60 shrink-0" />
+            <span className="text-[13px] font-semibold text-white leading-none">Shadow</span>
+          </div>
+          <ToggleSwitch checked={frame.shadow} onChange={(v) => setFrame({ shadow: v })} />
         </div>
 
         {frame.shadow && (
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-[11px] text-muted-foreground">Intensity</label>
-              <span className="text-[11px] text-muted-foreground tabular-nums">{Math.round(frame.shadowIntensity * 100)}%</span>
+              <span className="text-[11px] text-white/40">Intensity</span>
+              <span className="text-[11px] tabular-nums">{Math.round(frame.shadowIntensity * 100)}%</span>
             </div>
             <StyledSlider
               min={0}
@@ -58,6 +59,6 @@ export function FramePanel() {
           </div>
         )}
       </div>
-    </div>
+    </>
   )
 }

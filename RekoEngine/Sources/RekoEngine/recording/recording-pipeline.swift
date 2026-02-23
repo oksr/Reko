@@ -151,7 +151,7 @@ public final class RecordingPipeline {
                 format: format
             )
             try mic.start { [weak self] buffer, _ in
-                guard let self = self, !self.isPaused else { return }
+                guard let self = self, self.isRecording, !self.isPaused else { return }
                 writer.write(buffer: buffer)
                 let level = AudioLevelCalculator.peakLevel(from: buffer)
                 self.levelsLock.lock()

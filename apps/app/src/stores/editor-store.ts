@@ -80,6 +80,7 @@ interface EditorState {
 
   // Playback state (NOT tracked by undo)
   currentTime: number
+  hoverTime: number | null
   isPlaying: boolean
 
   // Selection state
@@ -100,6 +101,7 @@ interface EditorState {
   setSelectedZoomEventId: (id: string | null) => void
   setZoomPopoverOpen: (open: boolean) => void
   setCurrentTime: (ms: number) => void
+  setHoverTime: (ms: number | null) => void
   setIsPlaying: (playing: boolean) => void
 
   // Sequence actions
@@ -145,6 +147,7 @@ export const useEditorStore = create<EditorState>()(
     (set, _get) => ({
       project: null,
       currentTime: 0,
+      hoverTime: null,
       isPlaying: false,
       selectedZoomEventId: null,
       zoomPopoverOpen: false,
@@ -277,6 +280,7 @@ export const useEditorStore = create<EditorState>()(
       setZoomPopoverOpen: (open) => set({ zoomPopoverOpen: open }),
 
       setCurrentTime: (ms) => set({ currentTime: ms }),
+      setHoverTime: (ms) => set({ hoverTime: ms }),
       setIsPlaying: (playing) => set({ isPlaying: playing }),
 
       // Sequence actions

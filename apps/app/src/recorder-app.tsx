@@ -13,7 +13,7 @@ import type { DisplayInfo, AudioInputInfo, CameraInfo, ProjectState } from "@/ty
 type AppState = "permission-check" | "idle" | "recording"
 
 // Dynamic Island–style container morph
-const TOOLBAR_WIDTHS = { idle: 720, recording: 340 } as const
+const TOOLBAR_WIDTHS = {} as const
 
 const CONTAINER_SPRING = {
   type: "spring" as const,
@@ -131,8 +131,8 @@ export function RecorderApp() {
           const screenW = monitor.size.width / factor
           const screenH = monitor.size.height / factor
           const winH = 58
-          const margin = 50
-          const x = Math.round((screenW - 684) / 2)
+          const margin = 65
+          const x = Math.round(screenW / 2)
           const y = Math.round(screenH - winH - margin)
           await platform.window.setPosition(x, y)
         }
@@ -159,7 +159,7 @@ export function RecorderApp() {
       const screenH = monitor.size.height / factor
       const winW = Math.round(width)
       const winH = 58
-      const margin = 50
+      const margin = 65
       const x = Math.round((screenW - winW) / 2)
       const y = Math.round(screenH - winH - margin)
       await platform.window.setResizable(true)
@@ -171,12 +171,6 @@ export function RecorderApp() {
     }
   }, [platform])
 
-  // On state change, immediately expand window to max width so content never clips during spring
-  useEffect(() => {
-    if (appState === "permission-check") return
-    const maxWidth = Math.max(TOOLBAR_WIDTHS.idle, TOOLBAR_WIDTHS.recording)
-    syncWindowSize(maxWidth)
-  }, [appState, syncWindowSize])
 
   const toolbarRef = useCallback((el: HTMLDivElement | null) => {
     // Clean up previous observer
@@ -304,8 +298,6 @@ export function RecorderApp() {
     setIsLoading(true)
     try {
       const project = await platform.invoke<ProjectState>("stop_recording")
-      windowHiddenRef.current = true
-      await platform.window.hide()
       setAppState("idle")
       setIsPaused(false)
       setRecentProjects((prev) => [project, ...prev.slice(0, 4)])
@@ -408,12 +400,9 @@ export function RecorderApp() {
             onMouseDown={handleDrag}
             role="toolbar"
             aria-label="Recording controls"
-            animate={{
-              width: appState === "recording"
-                ? TOOLBAR_WIDTHS.recording
-                : TOOLBAR_WIDTHS.idle,
-            }}
+            layout
             transition={shouldReduceMotion ? { duration: 0 } : CONTAINER_SPRING}
+            style={{ width: "max-content" }}
           >
             <AnimatePresence mode="wait" initial={false}>
               {appState === "idle" && (
@@ -513,7 +502,6 @@ export function RecorderApp() {
                     onPause={handlePause}
                     onResume={handleResume}
                     micEnabled={micEnabled}
-                    systemAudioEnabled={systemAudioEnabled}
                   />
                 </motion.div>
               )}

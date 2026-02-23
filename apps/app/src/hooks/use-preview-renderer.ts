@@ -30,6 +30,7 @@ export function usePreviewRenderer(
   const effects = useEditorStore((s) => s.project?.effects)
   const assetUrl = useAssetUrl()
   const currentTime = useEditorStore((s) => s.currentTime)
+  const hoverTime = useEditorStore((s) => s.hoverTime)
   const isPlaying = useEditorStore((s) => s.isPlaying)
 
   const compositorRef = useRef<WebGLCompositor | null>(null)
@@ -171,8 +172,10 @@ export function usePreviewRenderer(
         const panDy = -(zoom.y - prevZoom.y) * sr.h * zoom.scale * PAN_BLUR
 
         // Radial: scale change → zoom blur (capped to avoid extreme blur mid-spring)
+        // Zoom-out (dScale < 0) uses a lower cap — outward radial blur is more noticeable
         const dScale = zoom.scale - prevZoom.scale
-        const intensity = Math.min(Math.abs(dScale) * SCALE_BLUR, 0.15) * Math.sign(dScale)
+        const cap = dScale < 0 ? 0.06 : 0.15
+        const intensity = Math.min(Math.abs(dScale) * SCALE_BLUR, cap) * Math.sign(dScale)
 
         if (Math.abs(panDx) > 0.0005 || Math.abs(panDy) > 0.0005 || Math.abs(intensity) > 0.001) {
           motionBlurParam = { dx: panDx, dy: panDy, intensity }
@@ -228,10 +231,11 @@ export function usePreviewRenderer(
     }
   }, [effects?.background.type, effects?.background.imageUrl, effects?.background.imageBlur, renderFrame])
 
-  // Seek video elements when scrubbing (not playing)
+  // Seek video elements when scrubbing (not playing) or hovering
   useEffect(() => {
     if (isPlaying) return
-    const { sourceTimeMs } = mapTime(currentTime)
+    const seekTime = hoverTime ?? currentTime
+    const { sourceTimeMs } = mapTime(seekTime)
     const sourceTimeSec = sourceTimeMs / 1000
 
     const screenVideo = screenVideoRef.current
@@ -251,7 +255,7 @@ export function usePreviewRenderer(
       if (cancelled) return
       cancelled = true // prevent double-render from fallback + rVFC race
       clearTimeout(fallbackTimer)
-      renderFrame(currentTime)
+      renderFrame(seekTime)
     }
 
     if ("requestVideoFrameCallback" in screenVideo) {
@@ -281,7 +285,7 @@ export function usePreviewRenderer(
       }
       clearTimeout(fallbackTimer)
     }
-  }, [currentTime, isPlaying, mapTime, renderFrame, screenVideoRef, cameraVideoRef])
+  }, [currentTime, hoverTime, isPlaying, mapTime, renderFrame, screenVideoRef, cameraVideoRef])
 
   // Re-render when effects change
   useEffect(() => {

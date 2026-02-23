@@ -61,7 +61,8 @@
       "Bash(__NEW_LINE_762d4aa8beaccf91__ echo \"=== MIC peak volume at each 0.5s interval ===\")",
       "Bash(__NEW_LINE_762d4aa8beaccf91__ echo -e \"\\\\n=== SYSTEM AUDIO peak volume ===\")",
       "Bash(pnpm:*)",
-      "Bash(perl -pi -e 's/\\\\bassetUrl\\\\\\(/this.assetUrl\\(/g':*)"
+      "Bash(perl -pi -e 's/\\\\bassetUrl\\\\\\(/this.assetUrl\\(/g':*)",
+      "Bash(/Users/ofekseroussi/Dev/reko/apps/app/src/index.css:*)"
     ]
   }
 }

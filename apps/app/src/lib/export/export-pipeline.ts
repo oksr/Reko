@@ -274,7 +274,8 @@ export class ExportPipeline {
           const panDx = -(zoom.x - prevZoom.x) * sr.w * zoom.scale * PAN_BLUR
           const panDy = -(zoom.y - prevZoom.y) * sr.h * zoom.scale * PAN_BLUR
           const dScale = zoom.scale - prevZoom.scale
-          const intensity = Math.min(Math.abs(dScale) * SCALE_BLUR, 0.15) * Math.sign(dScale)
+          const cap = dScale < 0 ? 0.06 : 0.15
+          const intensity = Math.min(Math.abs(dScale) * SCALE_BLUR, cap) * Math.sign(dScale)
 
           if (Math.abs(panDx) > 0.0005 || Math.abs(panDy) > 0.0005 || Math.abs(intensity) > 0.001) {
             motionBlurParam = { dx: panDx, dy: panDy, intensity }

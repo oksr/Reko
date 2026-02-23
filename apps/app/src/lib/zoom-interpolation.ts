@@ -77,11 +77,14 @@ export function interpolateZoomEvents(
       scale = evt.scale
       blend = 1.0
     } else {
-      // Lead-out phase
+      // Lead-out phase — scale eases back to 1.0
       const t = (timeMs - holdEnd) / TRANSITION_MS
       const eased = easeInOutSine(t)
       scale = evt.scale + (1.0 - evt.scale) * eased
-      blend = 1.0 - eased
+      // Derive blend from how much zoom remains so position tracks scale.
+      // At scale=2.0 blend=1 (fully at target), at scale=1.0 blend=0 (center).
+      // This makes the viewport expand in place rather than sliding to center.
+      blend = evt.scale > 1.0 ? (scale - 1.0) / (evt.scale - 1.0) : 1.0 - eased
     }
 
     // If this event has higher scale influence, it wins

@@ -4,7 +4,6 @@ import {
   Camera, CameraOff,
   Mic, MicOff,
   Volume2, VolumeOff,
-  ChevronDown,
 } from "lucide-react"
 
 type InputType = "camera" | "mic" | "system-audio"
@@ -61,10 +60,8 @@ export function InputToggle({
   const Icon = enabled ? IconOn : IconOff
   const hasDevices = type === "system-audio" || devices.length > 0
   const isDisabled = type !== "system-audio" && devices.length === 0
-  const showChevron = type !== "system-audio" && hasDevices
-
   const selectedDevice = devices.find((d) => d.id === selectedDeviceId)
-  const label = enabled && selectedDevice
+  const tooltipLabel = enabled && selectedDevice
     ? selectedDevice.name
     : enabled && type === "system-audio"
       ? "System audio"
@@ -72,6 +69,12 @@ export function InputToggle({
 
   const handleClick = () => {
     if (isDisabled) return
+    if (!enabled && type !== "system-audio" && hasDevices) {
+      onToggle(true)
+      if (!selectedDeviceId && devices.length > 0) onDeviceSelect(devices[0].id)
+      showDeviceMenu()
+      return
+    }
     onToggle(!enabled)
   }
 
@@ -115,30 +118,16 @@ export function InputToggle({
   }
 
   return (
-    <div className="relative flex items-center">
-      <button
-        className={`toolbar-btn ${enabled ? "active" : ""} ${isDisabled ? "disabled" : ""}`}
-        onClick={handleClick}
-        onContextMenu={handleContextMenu}
-        onMouseDown={(e) => e.stopPropagation()}
-        aria-pressed={enabled}
-        aria-label={ariaLabel}
-        title={isDisabled ? labelNone : undefined}
-      >
-        <Icon size={18} strokeWidth={2} />
-        <span className="max-w-[80px] truncate">{label}</span>
-        {showChevron && (
-          <span
-            className="flex items-center justify-center min-w-[28px] min-h-[28px]"
-            onClick={handleChevronClick}
-            onMouseDown={(e) => e.stopPropagation()}
-            role="button"
-            aria-label={`Select ${type === "camera" ? "camera" : "microphone"} device`}
-          >
-            <ChevronDown size={10} className="opacity-50" />
-          </span>
-        )}
-      </button>
-    </div>
+    <button
+      className={`toolbar-btn-icon ${enabled ? "active" : "input-toggle-off"} ${isDisabled ? "disabled" : ""}`}
+      onClick={handleClick}
+      onContextMenu={handleContextMenu}
+      onMouseDown={(e) => e.stopPropagation()}
+      aria-pressed={enabled}
+      aria-label={ariaLabel}
+      title={isDisabled ? labelNone : tooltipLabel}
+    >
+      <Icon size={16} strokeWidth={2} />
+    </button>
   )
 }

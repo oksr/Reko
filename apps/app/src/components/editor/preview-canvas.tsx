@@ -1,32 +1,8 @@
-import { useRef, useEffect, useState, useCallback } from "react"
+import { useRef, useEffect } from "react"
 import { usePreviewRenderer } from "@/hooks/use-preview-renderer"
 import { useEditorStore } from "@/stores/editor-store"
 import { useAssetUrl } from "@/lib/asset-url"
 import { sequenceTimeToSourceTime } from "@/lib/sequence"
-
-/**
- * Compute the time-scale ratio for an audio element relative to the video.
- * Older recordings have a bug where system_audio.wav is ~2x the video duration
- * because non-interleaved audio was misinterpreted. The ratio lets us scale
- * seek positions so audio stays in sync.
- */
-function computeTimeScale(
-  audio: HTMLMediaElement | null,
-  video: HTMLMediaElement | null
-): number {
-  if (
-    !audio ||
-    !video ||
-    !isFinite(audio.duration) ||
-    !isFinite(video.duration) ||
-    video.duration < 0.1
-  )
-    return 1
-  const ratio = audio.duration / video.duration
-  // If audio is roughly 2x video, scale by that ratio (known recording bug)
-  if (ratio > 1.5) return ratio
-  return 1
-}
 
 export function PreviewCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -41,35 +17,6 @@ export function PreviewCanvas() {
   const currentTime = useEditorStore((s) => s.currentTime)
   const isPlaying = useEditorStore((s) => s.isPlaying)
 
-  // Time-scale ratios for audio files (1.0 for correct recordings, ~2.0 for buggy ones)
-  const [micScale, setMicScale] = useState(1)
-  const [sysScale, setSysScale] = useState(1)
-
-  // Recompute scales when media durations are available
-  useEffect(() => {
-    const video = screenVideoRef.current
-    const mic = micRef.current
-    const sys = systemAudioRef.current
-
-    const update = () => {
-      setMicScale(computeTimeScale(mic, video))
-      setSysScale(computeTimeScale(sys, video))
-    }
-
-    const elements = [video, mic, sys].filter(Boolean) as HTMLMediaElement[]
-    elements.forEach((el) => el.addEventListener("loadedmetadata", update))
-    update()
-    return () => {
-      elements.forEach((el) => el.removeEventListener("loadedmetadata", update))
-    }
-  }, [project?.tracks.screen, project?.tracks.mic, project?.tracks.system_audio])
-
-  /** Map a video source time to the corresponding audio file position */
-  const audioTime = useCallback(
-    (sourceTimeSec: number, scale: number) => sourceTimeSec * scale,
-    []
-  )
-
   // Sync audio on seek (when not playing) — map sequence time -> source time
   useEffect(() => {
     if (isPlaying || !project?.sequence) return
@@ -80,12 +27,10 @@ export function PreviewCanvas() {
     )
     if (mapping) {
       const sourceTimeSec = mapping.sourceTime / 1000
-      if (micRef.current)
-        micRef.current.currentTime = audioTime(sourceTimeSec, micScale)
-      if (systemAudioRef.current)
-        systemAudioRef.current.currentTime = audioTime(sourceTimeSec, sysScale)
+      if (micRef.current) micRef.current.currentTime = sourceTimeSec
+      if (systemAudioRef.current) systemAudioRef.current.currentTime = sourceTimeSec
     }
-  }, [currentTime, isPlaying, project?.sequence, micScale, sysScale, audioTime])
+  }, [currentTime, isPlaying, project?.sequence])
 
   // Play/pause audio and video
   useEffect(() => {
@@ -100,33 +45,16 @@ export function PreviewCanvas() {
       )
       if (mapping) {
         const clip = project.sequence.clips[mapping.clipIndex]
-        const sourceTimeSec = mapping.sourceTime / 1000
 
-        // Set video elements to source time
-        const videos = [screenVideo, cameraVideo].filter(
-          Boolean
-        ) as HTMLMediaElement[]
-        videos.forEach((m) => {
-          m.currentTime = sourceTimeSec
+        // Don't re-seek here — the video is already positioned by the scrub seek
+        // effect. Re-seeking immediately before play() causes an AbortError in
+        // WKWebView when playbackClock's first RAF tick has already advanced
+        // currentTime, making the seek target slightly different from the video's
+        // current position and leaving the video paused.
+        const allMedia = [screenVideo, cameraVideo, micRef.current, systemAudioRef.current].filter(Boolean) as HTMLMediaElement[]
+        allMedia.forEach((m) => {
           m.playbackRate = clip.speed
         })
-
-        // Set audio elements with time-scale applied
-        if (micRef.current) {
-          micRef.current.currentTime = audioTime(sourceTimeSec, micScale)
-          micRef.current.playbackRate = clip.speed * micScale
-        }
-        if (systemAudioRef.current) {
-          systemAudioRef.current.currentTime = audioTime(sourceTimeSec, sysScale)
-          systemAudioRef.current.playbackRate = clip.speed * sysScale
-        }
-
-        // Start playback
-        const allMedia = [
-          ...videos,
-          micRef.current,
-          systemAudioRef.current,
-        ].filter(Boolean) as HTMLMediaElement[]
         allMedia.forEach((m) =>
           m.play().catch((e) => console.warn("[preview] play failed:", e))
         )
@@ -136,31 +64,23 @@ export function PreviewCanvas() {
         .filter(Boolean)
         .forEach((m) => (m as HTMLMediaElement).pause())
     }
-  }, [isPlaying, micScale, sysScale, audioTime]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isPlaying]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Periodic audio drift correction during playback (with time-scale)
+  // Periodic audio drift correction during playback
   useEffect(() => {
     if (!isPlaying || !project?.sequence) return
     const interval = setInterval(() => {
       const screenVideo = screenVideoRef.current
       if (!screenVideo) return
       const videoTime = screenVideo.currentTime
-
-      if (micRef.current) {
-        const expected = audioTime(videoTime, micScale)
-        if (Math.abs(micRef.current.currentTime - expected) > 0.15) {
-          micRef.current.currentTime = expected
-        }
-      }
-      if (systemAudioRef.current) {
-        const expected = audioTime(videoTime, sysScale)
-        if (Math.abs(systemAudioRef.current.currentTime - expected) > 0.15) {
-          systemAudioRef.current.currentTime = expected
+      for (const audio of [micRef.current, systemAudioRef.current]) {
+        if (audio && Math.abs(audio.currentTime - videoTime) > 0.15) {
+          audio.currentTime = videoTime
         }
       }
     }, 500)
     return () => clearInterval(interval)
-  }, [isPlaying, project?.sequence, micScale, sysScale, audioTime])
+  }, [isPlaying, project?.sequence])
 
   if (!project) return null
 

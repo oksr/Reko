@@ -6,14 +6,14 @@ interface SegmentedControlProps<T extends string> {
 
 export function SegmentedControl<T extends string>({ options, value, onChange }: SegmentedControlProps<T>) {
   return (
-    <div className="flex gap-0.5 p-0.5 rounded-lg bg-white/[0.05]">
+    <div className="flex gap-1 p-1 rounded-full bg-white/[0.07]">
       {options.map((option) => (
         <button
           key={option.value}
-          className={`flex-1 text-xs font-medium py-1.5 px-3 rounded-md transition-all duration-150 ${
+          className={`flex-1 text-[11px] font-medium py-1.5 px-2 rounded-full transition-all duration-200 ${
             value === option.value
-              ? "bg-white/[0.12] text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground/80"
+              ? "bg-violet-500 text-white shadow-sm"
+              : "text-white/45 hover:text-white/70"
           }`}
           onClick={() => onChange(option.value)}
         >

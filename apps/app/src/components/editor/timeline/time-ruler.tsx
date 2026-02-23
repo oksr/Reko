@@ -1,4 +1,5 @@
-import { useMemo, useCallback } from "react"
+import { useMemo, useCallback, useState } from "react"
+import { useEditorStore } from "@/stores/editor-store"
 import type { TimelineContext } from "./types"
 
 function formatTime(ms: number): string {
@@ -14,6 +15,8 @@ interface TimeRulerProps {
 
 export function TimeRuler({ ctx }: TimeRulerProps) {
   const { durationMs, msToPercent } = ctx
+  const setHoverTime = useEditorStore((s) => s.setHoverTime)
+  const [hoverPct, setHoverPct] = useState<number | null>(null)
 
   const marks = useMemo(() => {
     const stepMs = durationMs <= 10000 ? 1000
@@ -29,21 +32,47 @@ export function TimeRuler({ ctx }: TimeRulerProps) {
     return result
   }, [durationMs, msToPercent])
 
+  const getPctFromEvent = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!ctx.containerRef.current) return null
+      const rect = ctx.containerRef.current.getBoundingClientRect()
+      return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+    },
+    [ctx.containerRef]
+  )
+
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!ctx.containerRef.current) return
-      const rect = ctx.containerRef.current.getBoundingClientRect()
-      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-      const timeMs = pct * durationMs
-      ctx.videoSync.seek(timeMs)
+      const pct = getPctFromEvent(e)
+      if (pct === null) return
+      ctx.videoSync.seek(pct * durationMs)
     },
-    [ctx, durationMs]
+    [ctx, durationMs, getPctFromEvent]
   )
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const pct = getPctFromEvent(e)
+      if (pct === null) return
+      setHoverPct(pct)
+      setHoverTime(pct * durationMs)
+    },
+    [getPctFromEvent, durationMs, setHoverTime]
+  )
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverPct(null)
+    setHoverTime(null)
+  }, [setHoverTime])
+
+  const hoverMs = hoverPct !== null ? hoverPct * durationMs : null
 
   return (
     <div
       className="relative h-6 cursor-pointer select-none"
       onClick={handleClick}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       style={{ fontVariantNumeric: "tabular-nums" }}
     >
       {marks.map((m) =>
@@ -62,6 +91,21 @@ export function TimeRuler({ ctx }: TimeRulerProps) {
             style={{ left: `${m.pct}%` }}
           />
         )
+      )}
+
+      {/* Ghost hover handle + tooltip */}
+      {hoverPct !== null && hoverMs !== null && (
+        <div
+          className="absolute top-0 z-30 -translate-x-1/2 pointer-events-none"
+          style={{ left: `${hoverPct * 100}%` }}
+        >
+          {/* Tooltip */}
+          <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] px-1.5 py-0.5 rounded shadow-md whitespace-nowrap">
+            {formatTime(hoverMs)}
+          </div>
+          {/* Pin handle */}
+          <div className="w-2.5 h-2.5 rounded-full bg-white/60 border border-white/80 mt-0.5" />
+        </div>
       )}
     </div>
   )

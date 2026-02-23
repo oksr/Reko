@@ -1,6 +1,8 @@
+import { Video } from "lucide-react"
 import { useEditorStore } from "@/stores/editor-store"
 import { SegmentedControl } from "./segmented-control"
 import { StyledSlider } from "./styled-slider"
+import { ToggleSwitch } from "./toggle-switch"
 
 export function CameraPanel() {
   const cameraBubble = useEditorStore((s) => s.project?.effects.cameraBubble)
@@ -17,34 +19,32 @@ export function CameraPanel() {
   ]
 
   return (
-    <div className="space-y-4 py-4">
+    <div className="px-4 pt-4 pb-5 space-y-4">
+      {/* Header with toggle */}
       <div className="flex items-center justify-between">
-        <h3 className="text-[13px] font-semibold tracking-tight">Camera</h3>
-        <button
-          className={`text-[11px] px-2 py-0.5 rounded-md transition-colors ${
-            cameraBubble.visible
-              ? "bg-violet-400/20 text-violet-300"
-              : "bg-white/[0.05] text-muted-foreground hover:text-foreground"
-          }`}
-          onClick={() => setCameraBubble({ visible: !cameraBubble.visible })}
-        >
-          {cameraBubble.visible ? "On" : "Off"}
-        </button>
+        <div className="flex items-center gap-2.5">
+          <Video className="size-3.5 text-white/60 shrink-0" />
+          <span className="text-[13px] font-semibold text-white leading-none">Camera</span>
+        </div>
+        <ToggleSwitch
+          checked={cameraBubble.visible}
+          onChange={(v) => setCameraBubble({ visible: v })}
+        />
       </div>
 
       {cameraBubble.visible && (
         <>
-          {/* Position grid */}
+          {/* Position */}
           <div className="space-y-2">
-            <label className="text-[11px] text-muted-foreground">Position</label>
-            <div className="grid grid-cols-4 gap-1">
+            <span className="text-[11px] text-white/40 block">Position</span>
+            <div className="grid grid-cols-4 gap-1.5">
               {positions.map((pos) => (
                 <button
                   key={pos.value}
-                  className={`text-[10px] font-medium py-1.5 rounded-md transition-all ${
+                  className={`text-[11px] font-semibold py-2 rounded-[8px] transition-all duration-150 ${
                     cameraBubble.position === pos.value
-                      ? "bg-white/[0.12] text-foreground"
-                      : "bg-white/[0.04] text-muted-foreground hover:bg-white/[0.08]"
+                      ? "bg-white/[0.14] text-white"
+                      : "bg-white/[0.05] text-white/40 hover:bg-white/[0.09] hover:text-white/65"
                   }`}
                   onClick={() => setCameraBubble({ position: pos.value })}
                 >
@@ -57,8 +57,8 @@ export function CameraPanel() {
           {/* Size */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-[11px] text-muted-foreground">Size</label>
-              <span className="text-[11px] text-muted-foreground tabular-nums">{cameraBubble.size}%</span>
+              <span className="text-[11px] text-white/40">Size</span>
+              <span className="text-[11px] tabular-nums">{cameraBubble.size}%</span>
             </div>
             <StyledSlider
               min={5}
@@ -80,13 +80,13 @@ export function CameraPanel() {
 
           {/* Border */}
           <div className="space-y-2">
-            <label className="text-[11px] text-muted-foreground">Border</label>
-            <div className="flex gap-2 items-center">
+            <span className="text-[11px] text-white/40 block">Border</span>
+            <div className="flex gap-2.5 items-center">
               <input
                 type="color"
                 value={cameraBubble.borderColor}
                 onChange={(e) => setCameraBubble({ borderColor: e.target.value })}
-                className="w-8 h-8 rounded-md cursor-pointer border border-white/[0.08] bg-transparent shrink-0 [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[3px] [&::-webkit-color-swatch]:border-none"
+                className="w-9 h-9 rounded-[8px] cursor-pointer border border-white/[0.08] bg-transparent shrink-0 [&::-webkit-color-swatch-wrapper]:p-0.5 [&::-webkit-color-swatch]:rounded-[5px] [&::-webkit-color-swatch]:border-none"
               />
               <div className="flex-1">
                 <StyledSlider
@@ -96,7 +96,7 @@ export function CameraPanel() {
                   onChange={(v) => setCameraBubble({ borderWidth: v })}
                 />
               </div>
-              <span className="text-[11px] text-muted-foreground tabular-nums shrink-0 w-6 text-right">{cameraBubble.borderWidth}px</span>
+              <span className="text-[11px] tabular-nums shrink-0 w-7 text-right">{cameraBubble.borderWidth}px</span>
             </div>
           </div>
         </>

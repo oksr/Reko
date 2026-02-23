@@ -16,22 +16,24 @@ export function SourceTypeButton({ sourceType, onSourceTypeChange }: Props) {
       aria-label="Capture source"
     >
       <button
-        className={`toolbar-btn ${sourceType === "display" ? "active" : ""}`}
+        className={`toolbar-btn ${sourceType === "display" ? "active" : "input-toggle-off"}`}
         role="radio"
         aria-checked={sourceType === "display"}
         onClick={() => onSourceTypeChange("display")}
+        title="Display"
       >
-        <Monitor size={20} strokeWidth={2} />
-        <span style={{ fontSize: 10, fontWeight: 500, opacity: 0.6 }}>Display</span>
+        <Monitor size={16} strokeWidth={2} />
+        {sourceType === "display" && <span style={{ fontSize: 12, fontWeight: 500 }}>Display</span>}
       </button>
       <button
-        className={`toolbar-btn ${sourceType === "window" ? "active" : ""}`}
+        className={`toolbar-btn ${sourceType === "window" ? "active" : "input-toggle-off"}`}
         role="radio"
         aria-checked={sourceType === "window"}
         onClick={() => onSourceTypeChange("window")}
+        title="Window"
       >
-        <AppWindow size={20} strokeWidth={2} />
-        <span style={{ fontSize: 10, fontWeight: 500, opacity: 0.6 }}>Window</span>
+        <AppWindow size={16} strokeWidth={2} />
+        {sourceType === "window" && <span style={{ fontSize: 12, fontWeight: 500 }}>Window</span>}
       </button>
     </div>
   )

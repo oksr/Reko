@@ -18,6 +18,7 @@ interface TimelineProps {
 export function Timeline({ videoSync }: TimelineProps) {
   const project = useEditorStore((s) => s.project)
   const currentTime = useEditorStore((s) => s.currentTime)
+  const hoverTime = useEditorStore((s) => s.hoverTime)
   const containerRef = useRef<HTMLDivElement>(null)
   const frozenDurationRef = useRef<number | null>(null)
 
@@ -65,6 +66,14 @@ export function Timeline({ videoSync }: TimelineProps) {
         {/* Time ruler + Playhead pin */}
         <TimeRuler ctx={ctx} />
         <PlayheadPin ctx={ctx} />
+
+        {/* Ghost hover line */}
+        {hoverTime !== null && (
+          <div
+            className="absolute top-6 bottom-0 w-px bg-white/30 z-10 pointer-events-none"
+            style={{ left: `${ctx.msToPercent(hoverTime)}%` }}
+          />
+        )}
 
         {/* Tracks */}
         <div className="space-y-1 mt-1">
