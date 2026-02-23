@@ -244,42 +244,42 @@ export function usePreviewRenderer(
     if (!screenVideo) return
 
     let cancelled = false
-    let rafId = 0
+    let rvcHandle: number | undefined
+    let fallbackTimer: ReturnType<typeof setTimeout>
 
-    // After seeked, poll via rAF until the video frame is paint-ready for WebGL.
-    // WKWebView fires seeked before texImage2D can see the new pixel data —
-    // deferring to the next paint cycle (or a few) fixes the stale-frame issue.
-    const renderWhenReady = (attemptsLeft: number) => {
+    const doRender = () => {
       if (cancelled) return
-      if (screenVideo.readyState >= 2) {
-        renderFrame(currentTime)
-        return
-      }
-      if (attemptsLeft > 0) {
-        rafId = requestAnimationFrame(() => renderWhenReady(attemptsLeft - 1))
-      }
+      cancelled = true // prevent double-render from fallback + rVFC race
+      clearTimeout(fallbackTimer)
+      renderFrame(currentTime)
     }
 
-    const onSeeked = () => {
-      if (cancelled) return
-      rafId = requestAnimationFrame(() => renderWhenReady(10))
+    if ("requestVideoFrameCallback" in screenVideo) {
+      // requestVideoFrameCallback fires after WebKit has updated the video's
+      // internal texture buffer — the only guarantee that texImage2D will see
+      // the new frame. seeked + readyState >= 2 is NOT sufficient in WKWebView.
+      rvcHandle = (screenVideo as any).requestVideoFrameCallback(doRender)
+    } else {
+      // Older Safari fallback: seeked event + one rAF to let the compositor tick
+      const onSeeked = () => {
+        if (cancelled) return
+        requestAnimationFrame(doRender)
+      }
+      screenVideo.addEventListener("seeked", onSeeked, { once: true })
     }
 
-    // Render as soon as the video has decoded the target frame
-    screenVideo.addEventListener("seeked", onSeeked, { once: true })
     screenVideo.currentTime = sourceTimeSec
 
-    // Fallback: render after 500ms in case seeked never fires
-    // (e.g. video already at that exact position)
-    const fallback = setTimeout(() => {
-      if (!cancelled) renderWhenReady(5)
-    }, 500)
+    // Hard fallback: render after 500ms if neither rVFC nor seeked fires
+    // (e.g. video is already exactly at the target position)
+    fallbackTimer = setTimeout(doRender, 500)
 
     return () => {
       cancelled = true
-      screenVideo.removeEventListener("seeked", onSeeked)
-      cancelAnimationFrame(rafId)
-      clearTimeout(fallback)
+      if (rvcHandle !== undefined) {
+        (screenVideo as any).cancelVideoFrameCallback?.(rvcHandle)
+      }
+      clearTimeout(fallbackTimer)
     }
   }, [currentTime, isPlaying, mapTime, renderFrame, screenVideoRef, cameraVideoRef])
 
