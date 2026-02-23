@@ -235,17 +235,34 @@ export function usePreviewRenderer(
     const sourceTimeSec = sourceTimeMs / 1000
 
     const screenVideo = screenVideoRef.current
-    if (screenVideo) {
-      screenVideo.currentTime = sourceTimeSec
-    }
     const cameraVideo = cameraVideoRef.current
+
     if (cameraVideo) {
       cameraVideo.currentTime = sourceTimeSec
     }
 
-    // Render after a short delay to let the video element seek
-    const timer = setTimeout(() => renderFrame(currentTime), 50)
-    return () => clearTimeout(timer)
+    if (!screenVideo) return
+
+    let done = false
+    const onSeeked = () => {
+      if (done) return
+      done = true
+      renderFrame(currentTime)
+    }
+
+    // Render as soon as the video has decoded the target frame
+    screenVideo.addEventListener("seeked", onSeeked, { once: true })
+    screenVideo.currentTime = sourceTimeSec
+
+    // Fallback: render after 300ms in case the seeked event doesn't fire
+    // (e.g. video already at that position, or WKWebView quirk)
+    const fallback = setTimeout(onSeeked, 300)
+
+    return () => {
+      done = true
+      screenVideo.removeEventListener("seeked", onSeeked)
+      clearTimeout(fallback)
+    }
   }, [currentTime, isPlaying, mapTime, renderFrame, screenVideoRef, cameraVideoRef])
 
   // Re-render when effects change
