@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useEditorStore } from "@/stores/editor-store"
 import { sourceTimeToSequenceTime, sequenceTimeToSourceTime } from "@/lib/sequence"
 import { ZoomSegment } from "./zoom-segment"
@@ -22,6 +22,7 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
   const selectedZoomEventId = useEditorStore((s) => s.selectedZoomEventId)
   const setSelectedZoomEventId = useEditorStore((s) => s.setSelectedZoomEventId)
   const addZoomEvent = useEditorStore((s) => s.addZoomEvent)
+  const removeZoomEvent = useEditorStore((s) => s.removeZoomEvent)
   const dragStartRef = useRef<{ x: number; timeMs: number } | null>(null)
 
   // Flatten all clip zoom events into sequence-time list
@@ -44,6 +45,27 @@ export function ZoomTrack({ ctx }: ZoomTrackProps) {
     }
     return result.sort((a, b) => a.seqStartMs - b.seqStartMs)
   }, [sequence])
+
+  // Delete selected zoom event on Delete/Backspace key (document-level so focus doesn't matter)
+  useEffect(() => {
+    if (!selectedZoomEventId) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return
+      const target = e.target as HTMLElement
+      const isTextInput =
+        (target.tagName === "INPUT" && (target as HTMLInputElement).type !== "range") ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      if (isTextInput) return
+      const seqEvt = allEvents.find((ev) => ev.event.id === selectedZoomEventId)
+      if (!seqEvt) return
+      e.preventDefault()
+      removeZoomEvent(seqEvt.clipIndex, seqEvt.event.id)
+      setSelectedZoomEventId(null)
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [selectedZoomEventId, allEvents, removeZoomEvent, setSelectedZoomEventId])
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {

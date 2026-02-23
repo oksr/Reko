@@ -140,15 +140,17 @@ export function ZoomSegment({ seqEvent, ctx, isSelected, onSelect }: ZoomSegment
       onDelete={handleDelete}
     >
       <div
-        className={`absolute top-0 bottom-0 rounded-md cursor-grab active:cursor-grabbing transition-shadow group ${
-          isSelected
-            ? "ring-2 ring-primary shadow-lg shadow-primary/20"
-            : "hover:ring-1 hover:ring-primary/50"
-        }`}
+        className="absolute top-0 bottom-0 rounded-md cursor-grab active:cursor-grabbing transition-all group"
         style={{
           left: `${leftPct}%`,
           width: `${Math.max(widthPct, 0.5)}%`,
-          background: "linear-gradient(to bottom, #7c5df5, #6344e0)",
+          background: "linear-gradient(135deg, rgba(124,93,245,0.35) 0%, rgba(99,68,224,0.28) 100%)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          boxShadow: isSelected
+            ? "inset 0 1px 0 rgba(255,255,255,0.25), 0 0 0 2px #7c5df5, 0 4px 12px rgba(124,93,245,0.35)"
+            : "inset 0 1px 0 rgba(255,255,255,0.18), 0 0 0 1px rgba(124,93,245,0.4)",
+          border: "none",
         }}
         onMouseDown={handleBodyDrag}
         onClick={handleClick}
@@ -166,8 +168,12 @@ export function ZoomSegment({ seqEvent, ctx, isSelected, onSelect }: ZoomSegment
           onMouseDown={handleRightResize}
         />
         {/* Label */}
-        <div className="flex items-center justify-center h-full text-white/90 pointer-events-none overflow-hidden px-2">
-          <span className="text-[10px] font-semibold">{event.scale.toFixed(1)}x</span>
+        <div className="flex items-center justify-center h-full pointer-events-none overflow-hidden px-2.5 gap-1.5">
+          <span className="text-[9px] font-semibold uppercase tracking-widest text-white/50 shrink-0">zoom</span>
+          <span className="text-[9px] text-white/25">·</span>
+          <span className="text-[10px] font-bold text-white/90 shrink-0">{event.scale.toFixed(1)}×</span>
+          <span className="text-[9px] text-white/25">·</span>
+          <span className="text-[9px] text-white/55 shrink-0">{(event.durationMs / 1000).toFixed(1)}s</span>
         </div>
       </div>
     </ZoomPopover>

@@ -29,7 +29,13 @@ export function ZoomPopover({ seqEvent, open, onOpenChange, onDelete, children }
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverAnchor asChild>{children}</PopoverAnchor>
-      <PopoverContent side="top" align="center" className="w-56 p-3 space-y-3">
+      <PopoverContent
+        side="top"
+        align="center"
+        className="w-56 p-3 space-y-3"
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+      >
         {/* Scale slider */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
