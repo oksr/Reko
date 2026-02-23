@@ -1,7 +1,7 @@
 import type { ZoomEvent, Clip, Transition } from "@/types/editor"
 import { sequenceTimeToSourceTime } from "@/lib/sequence"
 
-const TRANSITION_MS = 380 // lead-in / lead-out duration
+const TRANSITION_MS = 430 // lead-in / lead-out duration
 
 /**
  * Sine ease-in-out: zero velocity at both ends, peak speed in the middle.
@@ -81,10 +81,12 @@ export function interpolateZoomEvents(
       const t = (timeMs - holdEnd) / TRANSITION_MS
       const eased = easeInOutSine(t)
       scale = evt.scale + (1.0 - evt.scale) * eased
-      // Derive blend from how much zoom remains so position tracks scale.
-      // At scale=2.0 blend=1 (fully at target), at scale=1.0 blend=0 (center).
-      // This makes the viewport expand in place rather than sliding to center.
-      blend = evt.scale > 1.0 ? (scale - 1.0) / (evt.scale - 1.0) : 1.0 - eased
+      // Cubic blend: keeps position locked near the target while still zoomed,
+      // only releasing toward center in the final moments near scale 1.0.
+      // Linear blend moves position too visibly mid-zoom; cubic keeps blend
+      // high (0.98 at 1.9x, 0.87 at 1.5x) so the viewport zooms out "in place".
+      const ratio = evt.scale > 1.0 ? (scale - 1.0) / (evt.scale - 1.0) : 1.0 - eased
+      blend = 1.0 - (1.0 - ratio) ** 3
     }
 
     // If this event has higher scale influence, it wins

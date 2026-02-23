@@ -85,20 +85,12 @@ export function applyZoomToRect(
   base: NRect,
   zoom: { x: number; y: number; scale: number }
 ): NRect {
-  if (zoom.scale <= 1) return base
-  const newW = base.w * zoom.scale
-  const newH = base.h * zoom.scale
-  // Blend between base position and zoomed position based on how far
-  // above 1.0 the scale is. This avoids a hard snap at scale=1.0 —
-  // the zoom interpolation already drives position toward (0.5, 0.5)
-  // as scale → 1.0, but this extra lerp ensures any residual offset
-  // fades out smoothly in the last fraction of the transition.
-  const zoomFactor = Math.min((zoom.scale - 1.0) / 0.1, 1.0) // 0→1 over scale 1.0→1.1
-  const zoomedX = 0.5 - zoom.x * newW
-  const zoomedY = 0.5 - zoom.y * newH
+  const s = Math.max(zoom.scale, 1.0)
+  const newW = base.w * s
+  const newH = base.h * s
   return {
-    x: base.x + (zoomedX - base.x) * zoomFactor,
-    y: base.y + (zoomedY - base.y) * zoomFactor,
+    x: 0.5 - zoom.x * newW,
+    y: 0.5 - zoom.y * newH,
     w: newW,
     h: newH,
   }

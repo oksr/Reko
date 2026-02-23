@@ -123,7 +123,7 @@ export function usePreviewRenderer(
       // scrubbing/seeking snaps directly to avoid lag on manual seeks.
       const dt0 = seqTimeMs - prevSeqTimeRef.current
       const isPlaying0 = dt0 > 0 && dt0 <= MAX_FRAME_DELTA_MS
-      if (rawZoom.scale > 1 && isPlaying0) {
+      if (isPlaying0) {
         const alpha = 1 - Math.exp(-dt0 / 120) // 120ms time-constant
         smoothCenterRef.current = {
           x: smoothCenterRef.current.x + (rawZoom.x - smoothCenterRef.current.x) * alpha,

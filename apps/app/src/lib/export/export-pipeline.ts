@@ -233,14 +233,10 @@ export class ExportPipeline {
 
         // Smooth pan center with exponential decay (same 120ms time-constant as preview)
         const dtFrame = frameIntervalMs
-        if (rawZoom.scale > 1) {
-          const alpha = 1 - Math.exp(-dtFrame / 120)
-          smoothCenter = {
-            x: smoothCenter.x + (rawZoom.x - smoothCenter.x) * alpha,
-            y: smoothCenter.y + (rawZoom.y - smoothCenter.y) * alpha,
-          }
-        } else {
-          smoothCenter = { x: rawZoom.x, y: rawZoom.y }
+        const alpha = 1 - Math.exp(-dtFrame / 120)
+        smoothCenter = {
+          x: smoothCenter.x + (rawZoom.x - smoothCenter.x) * alpha,
+          y: smoothCenter.y + (rawZoom.y - smoothCenter.y) * alpha,
         }
         const zoom = { ...rawZoom, x: smoothCenter.x, y: smoothCenter.y }
         let clickParam: RenderParams["click"] = null
