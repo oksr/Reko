@@ -106,11 +106,6 @@ export function InputToggle({
     await platform.menu.showDropdown(items)
   }, [devices, selectedDeviceId, onToggle, onDeviceSelect, platform])
 
-  const handleChevronClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    showDeviceMenu()
-  }
-
   const handleContextMenu = (e: React.MouseEvent) => {
     if (type === "system-audio") return
     e.preventDefault()

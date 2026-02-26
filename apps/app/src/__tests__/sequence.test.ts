@@ -3,7 +3,6 @@ import {
   createClip,
   getSequenceDuration,
   sequenceTimeToSourceTime,
-  sourceTimeToSequenceTime,
   splitClip,
 } from "@/lib/sequence"
 import type { Clip, Transition, ZoomEvent } from "@/types/editor"

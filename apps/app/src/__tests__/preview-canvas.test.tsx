@@ -36,7 +36,7 @@ const MOCK_PROJECT: EditorProject = {
       gradientAngle: 135, padding: 8, presetId: null, imageUrl: null,
       imageBlur: 0, unsplashId: null, unsplashAuthor: null, wallpaperId: null,
     },
-    cameraBubble: { visible: false, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff" },
+    cameraBubble: { visible: false, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff", shadow: false, shadowIntensity: 0 },
     frame: { borderRadius: 12, shadow: true, shadowIntensity: 0.5 },
     cursor: {
       enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6,

@@ -24,10 +24,16 @@ const MOCK_PROJECT: EditorProject = {
   tracks: { screen: "/s.mov", mic: "/m.wav", system_audio: null, camera: "/c.mov", mouse_events: null },
   timeline: { duration_ms: 10000, in_point: 0, out_point: 10000 },
   effects: {
-    background: { type: "solid", color: "#000", gradientFrom: "#000", gradientTo: "#111", gradientAngle: 135, padding: 8, presetId: null },
-    cameraBubble: { visible: true, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff" },
+    background: { type: "solid", color: "#000", gradientFrom: "#000", gradientTo: "#111", gradientAngle: 135, padding: 8, presetId: null, imageUrl: null, imageBlur: 0, unsplashId: null, unsplashAuthor: null, wallpaperId: null },
+    cameraBubble: { visible: true, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff", shadow: false, shadowIntensity: 0 },
     frame: { borderRadius: 12, shadow: false, shadowIntensity: 0 },
-    cursor: { enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6 },
+    cursor: { enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6, clickHighlight: { enabled: false, color: "#ffffff", opacity: 0.5, size: 30 } },
+  },
+  sequence: {
+    clips: [{ id: "clip-1", sourceStart: 0, sourceEnd: 10000, speed: 1, zoomEvents: [] }],
+    transitions: [],
+    overlayTracks: [],
+    overlays: [],
   },
 }
 
@@ -121,7 +127,6 @@ describe("Timeline", () => {
 
   it("trims clip start via store action", () => {
     const store = useEditorStore.getState()
-    const clipBefore = store.project!.sequence.clips[0]
     store.trimClipStart(0, 1000)
     const clipAfter = useEditorStore.getState().project!.sequence.clips[0]
     expect(clipAfter.sourceStart).toBe(1000)
@@ -170,7 +175,7 @@ describe("Timeline", () => {
     store.setCurrentTime(2000)
     store.splitAtPlayhead()
 
-    const { getAllByTestId, getByTestId, getByText } = renderWithPlatform(
+    const { getAllByTestId, getByText } = renderWithPlatform(
       <Timeline videoSync={mockVideoSync} />
     )
 

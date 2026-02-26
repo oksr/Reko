@@ -269,7 +269,7 @@ export function usePreviewRenderer(
         if (cancelled) return
         requestAnimationFrame(doRender)
       }
-      screenVideo.addEventListener("seeked", onSeeked, { once: true })
+      ;(screenVideo as HTMLVideoElement).addEventListener("seeked", onSeeked, { once: true })
     }
 
     screenVideo.currentTime = sourceTimeSec

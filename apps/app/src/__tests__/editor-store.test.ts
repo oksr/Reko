@@ -27,6 +27,11 @@ const MOCK_PROJECT: EditorProject = {
       gradientAngle: 135,
       padding: 8,
       presetId: null,
+      imageUrl: null,
+      imageBlur: 0,
+      unsplashId: null,
+      unsplashAuthor: null,
+      wallpaperId: null,
     },
     cameraBubble: {
       visible: true,
@@ -35,6 +40,8 @@ const MOCK_PROJECT: EditorProject = {
       shape: "circle",
       borderWidth: 3,
       borderColor: "#ffffff",
+      shadow: false,
+      shadowIntensity: 0,
     },
     frame: {
       borderRadius: 12,
@@ -47,7 +54,14 @@ const MOCK_PROJECT: EditorProject = {
       size: 40,
       color: "#ffcc00",
       opacity: 0.6,
+      clickHighlight: { enabled: false, color: "#ffffff", opacity: 0.5, size: 30 },
     },
+  },
+  sequence: {
+    clips: [{ id: "clip-1", sourceStart: 0, sourceEnd: 10000, speed: 1, zoomEvents: [] }],
+    transitions: [],
+    overlayTracks: [],
+    overlays: [],
   },
 }
 
