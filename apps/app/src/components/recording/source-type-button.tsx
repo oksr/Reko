@@ -1,6 +1,6 @@
-import { Monitor, AppWindow } from "lucide-react"
+import { Monitor, AppWindow, BoxSelect } from "lucide-react"
 
-export type SourceType = "display" | "window"
+export type SourceType = "display" | "window" | "area"
 
 interface Props {
   sourceType: SourceType
@@ -34,6 +34,16 @@ export function SourceTypeButton({ sourceType, onSourceTypeChange }: Props) {
       >
         <AppWindow size={16} strokeWidth={2} />
         {sourceType === "window" && <span style={{ fontSize: 12, fontWeight: 500 }}>Window</span>}
+      </button>
+      <button
+        className={`toolbar-btn ${sourceType === "area" ? "active" : "input-toggle-off"}`}
+        role="radio"
+        aria-checked={sourceType === "area"}
+        onClick={() => onSourceTypeChange("area")}
+        title="Area"
+      >
+        <BoxSelect size={16} strokeWidth={2} />
+        {sourceType === "area" && <span style={{ fontSize: 12, fontWeight: 500 }}>Area</span>}
       </button>
     </div>
   )

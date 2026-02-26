@@ -12,9 +12,6 @@ import type { DisplayInfo, AudioInputInfo, CameraInfo, ProjectState } from "@/ty
 
 type AppState = "permission-check" | "idle" | "recording"
 
-// Dynamic Island–style container morph
-const TOOLBAR_WIDTHS = {} as const
-
 const CONTAINER_SPRING = {
   type: "spring" as const,
   stiffness: 380,
@@ -217,6 +214,7 @@ export function RecorderApp() {
             config: {
               display_id: null,
               window_id: windowId,
+              area: null,
               mic_id: micEnabledRef.current ? selectedMicRef.current : null,
               camera_id: cameraEnabledRef.current ? selectedCameraRef.current : null,
               capture_system_audio: systemAudioEnabledRef.current,
@@ -235,6 +233,40 @@ export function RecorderApp() {
     return () => { unlistenPromise.then((fn) => fn()) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Listen for area-selected event from area selection overlay
+  useEffect(() => {
+    const unlistenPromise = platform.window.listen<{
+      displayId: number
+      x: number
+      y: number
+      width: number
+      height: number
+    }>("area-selected", async (payload) => {
+      const { displayId, x, y, width, height } = payload
+      setIsLoading(true)
+      try {
+        await platform.invoke("start_recording", {
+          config: {
+            display_id: displayId,
+            window_id: null,
+            area: { x, y, width, height },
+            mic_id: micEnabledRef.current ? selectedMicRef.current : null,
+            camera_id: cameraEnabledRef.current ? selectedCameraRef.current : null,
+            capture_system_audio: systemAudioEnabledRef.current,
+            fps: 60,
+          },
+        })
+        setAppState("recording")
+        setIsPaused(false)
+      } catch (e) {
+        console.error("Failed to start recording:", e)
+      } finally {
+        setIsLoading(false)
+      }
+    })
+    return () => { unlistenPromise.then((fn) => fn()) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const openWindowPicker = async () => {
     try {
       const width = window.screen.width
@@ -243,6 +275,8 @@ export function RecorderApp() {
       await platform.navigation.openWindow({
         url: "/",
         label: "window-picker",
+        x: 0,
+        y: 0,
         width,
         height,
         decorations: false,
@@ -255,16 +289,44 @@ export function RecorderApp() {
     }
   }
 
+  const openAreaSelection = async () => {
+    try {
+      const width = window.screen.width
+      const height = window.screen.height
+
+      await platform.navigation.openWindow({
+        url: "/",
+        label: "area-selection",
+        x: 0,
+        y: 0,
+        width,
+        height,
+        decorations: false,
+        transparent: true,
+        alwaysOnTop: true,
+        resizable: false,
+      })
+    } catch (e) {
+      console.error("Failed to open area selection:", e)
+    }
+  }
+
   const handleSourceTypeChange = async (type: SourceType) => {
     setSourceType(type)
     if (type === "window") {
       openWindowPicker()
+    } else if (type === "area") {
+      openAreaSelection()
     }
   }
 
   const handleStartRecording = async () => {
     if (sourceType === "window") {
       openWindowPicker()
+      return
+    }
+    if (sourceType === "area") {
+      openAreaSelection()
       return
     }
     if (!selectedDisplay) return
@@ -278,6 +340,7 @@ export function RecorderApp() {
         config: {
           display_id: selectedDisplay,
           window_id: null,
+          area: null,
           mic_id: micEnabled ? selectedMic : null,
           camera_id: cameraEnabled ? selectedCamera : null,
           capture_system_audio: systemAudioEnabled,
@@ -473,6 +536,7 @@ export function RecorderApp() {
                       className={`record-btn ${(sourceType === "display" && !selectedDisplay) || isLoading ? "disabled" : ""}`}
                       onClick={handleStartRecording}
                       disabled={(sourceType === "display" && !selectedDisplay) || isLoading}
+
                       aria-label="Start Recording (Cmd+Shift+R)"
                       title="Start Recording (Cmd+Shift+R)"
                     >

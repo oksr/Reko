@@ -11,9 +11,18 @@ pub struct RecordingState {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct AreaRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RecordingConfig {
     pub display_id: Option<u32>,
     pub window_id: Option<u32>,
+    pub area: Option<AreaRect>,
     pub mic_id: Option<String>,
     pub camera_id: Option<String>,
     pub capture_system_audio: bool,
@@ -44,6 +53,12 @@ pub async fn start_recording(
     let swift_config = serde_json::json!({
         "display_id": config.display_id,
         "window_id": config.window_id,
+        "area": config.area.as_ref().map(|a| serde_json::json!({
+            "x": a.x,
+            "y": a.y,
+            "width": a.width,
+            "height": a.height,
+        })),
         "fps": config.fps,
         "capture_system_audio": config.capture_system_audio,
         "output_dir": raw.to_string_lossy(),
@@ -144,6 +159,7 @@ mod tests {
         let config = RecordingConfig {
             display_id: Some(1),
             window_id: None,
+            area: None,
             mic_id: None,
             camera_id: Some("cam-abc".to_string()),
             capture_system_audio: true,

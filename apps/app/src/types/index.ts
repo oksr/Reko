@@ -32,9 +32,17 @@ export interface AudioLevels {
   system_audio_level: number
 }
 
+export interface AreaRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface RecordingConfig {
   display_id: number | null
   window_id: number | null
+  area: AreaRect | null
   mic_id: string | null
   camera_id: string | null
   capture_system_audio: boolean

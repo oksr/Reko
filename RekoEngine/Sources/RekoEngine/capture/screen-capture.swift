@@ -71,8 +71,8 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             return ""
         }
         let icon = NSWorkspace.shared.icon(forFile: url.path)
-        // Render at 64x64
-        let size = NSSize(width: 64, height: 64)
+        // Render at 128x128 so the icon stays crisp on Retina displays
+        let size = NSSize(width: 128, height: 128)
         let bitmapRep = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height),
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
@@ -148,6 +148,7 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     public func startCapture(
         displayID: UInt32,
+        area: AreaRect? = nil,
         fps: Int,
         captureAudio: Bool,
         onVideoFrame: @escaping (CMSampleBuffer) -> Void,
@@ -169,8 +170,18 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
         let filter = SCContentFilter(display: display, excludingWindows: ownWindows)
         let config = SCStreamConfiguration()
-        config.width = display.width * 2
-        config.height = display.height * 2
+
+        if let area = area {
+            // Area capture: crop to the selected region using sourceRect
+            // sourceRect uses top-left origin in points (non-scaled coordinates)
+            config.sourceRect = CGRect(x: area.x, y: area.y, width: area.width, height: area.height)
+            config.width = Int(area.width) * 2
+            config.height = Int(area.height) * 2
+        } else {
+            config.width = display.width * 2
+            config.height = display.height * 2
+        }
+
         config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.showsCursor = true

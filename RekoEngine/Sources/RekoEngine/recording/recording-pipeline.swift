@@ -33,9 +33,17 @@ public enum AudioLevelCalculator {
     }
 }
 
+public struct AreaRect: Codable {
+    public let x: Double
+    public let y: Double
+    public let width: Double
+    public let height: Double
+}
+
 public struct RecordingConfig: Codable {
     public let displayId: UInt32?
     public let windowId: UInt32?
+    public let area: AreaRect?
     public let fps: Int
     public let captureSystemAudio: Bool
     public let outputDir: String
@@ -114,8 +122,15 @@ public final class RecordingPipeline {
             guard let display = displays.first(where: { $0.id == displayId }) else {
                 throw CaptureError.displayNotFound
             }
-            captureWidth = display.width * 2
-            captureHeight = display.height * 2
+
+            if let area = config.area {
+                // Area capture: dimensions match the selected area
+                captureWidth = Int(area.width) * 2
+                captureHeight = Int(area.height) * 2
+            } else {
+                captureWidth = display.width * 2
+                captureHeight = display.height * 2
+            }
 
             // Start mouse logging (display recording only)
             let mouseOutputURL = outputDir.appendingPathComponent("mouse_events.jsonl")
@@ -205,6 +220,7 @@ public final class RecordingPipeline {
         } else if let displayId = config.displayId {
             try await screenCapture.startCapture(
                 displayID: displayId,
+                area: config.area,
                 fps: config.fps,
                 captureAudio: config.captureSystemAudio,
                 onVideoFrame: videoHandler,
