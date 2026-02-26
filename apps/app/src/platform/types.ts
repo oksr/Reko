@@ -15,6 +15,8 @@ export interface WindowOptions {
   url: string
   label: string
   title?: string
+  x?: number
+  y?: number
   width?: number
   height?: number
   decorations?: boolean

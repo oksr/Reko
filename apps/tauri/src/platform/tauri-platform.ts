@@ -54,7 +54,7 @@ const tauriWindow: PlatformWindow = {
     getCurrentWindow().startDragging().catch(() => {})
   },
   async listen(event, handler) {
-    const unlisten = await getCurrentWindow().listen(event, (e) => handler(e.payload))
+    const unlisten = await getCurrentWindow().listen(event, (e) => handler(e.payload as any))
     return unlisten
   },
 }
@@ -64,6 +64,8 @@ const tauriNavigation: PlatformNavigation = {
     const win = new WebviewWindow(options.label, {
       url: options.url,
       title: options.title,
+      x: options.x,
+      y: options.y,
       width: options.width,
       height: options.height,
       decorations: options.decorations,
@@ -101,7 +103,7 @@ const tauriEvents: PlatformEvents = {
   },
   async listen(event, handler) {
     const { listen } = await import("@tauri-apps/api/event")
-    const unlisten = await listen(event, (e) => handler(e.payload))
+    const unlisten = await listen(event, (e) => handler(e.payload as any))
     return unlisten
   },
 }
@@ -144,7 +146,7 @@ const tauriMenu: PlatformMenu = {
 }
 
 export const tauriPlatform: Platform = {
-  invoke,
+  invoke: invoke as Platform["invoke"],
   window: tauriWindow,
   navigation: tauriNavigation,
   filesystem: tauriFilesystem,
