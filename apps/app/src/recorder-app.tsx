@@ -210,6 +210,7 @@ export function RecorderApp() {
         const windowId = payload.windowId
         setIsLoading(true)
         try {
+          closeCameraPreview()
           await platform.invoke("start_recording", {
             config: {
               display_id: null,
@@ -245,6 +246,7 @@ export function RecorderApp() {
       const { displayId, x, y, width, height } = payload
       setIsLoading(true)
       try {
+        closeCameraPreview()
         await platform.invoke("start_recording", {
           config: {
             display_id: displayId,
@@ -335,6 +337,7 @@ export function RecorderApp() {
 
   const startRecording = async () => {
     setIsLoading(true)
+    closeCameraPreview()
     try {
       await platform.invoke("start_recording", {
         config: {
@@ -391,6 +394,8 @@ export function RecorderApp() {
   }
 
   const handleClose = () => {
+    closeCameraPreview()
+    platform.invoke("stop_camera_prewarm").catch(() => {})
     platform.window.close()
   }
 
@@ -435,8 +440,18 @@ export function RecorderApp() {
   // Toggle handlers that auto-select default device
   const handleToggleCamera = (enabled: boolean) => {
     setCameraEnabled(enabled)
-    if (enabled && !selectedCamera && cameras.length > 0) {
-      setSelectedCamera(cameras[0].id)
+    if (enabled) {
+      const deviceId = selectedCamera || (cameras.length > 0 ? cameras[0].id : null)
+      if (!selectedCamera && cameras.length > 0) {
+        setSelectedCamera(cameras[0].id)
+      }
+      if (deviceId) {
+        openCameraPreview(deviceId)
+        platform.invoke("prewarm_camera", { deviceId }).catch(() => {})
+      }
+    } else {
+      closeCameraPreview()
+      platform.invoke("stop_camera_prewarm").catch(() => {})
     }
   }
 
@@ -446,6 +461,60 @@ export function RecorderApp() {
       setSelectedMic(mics[0].id)
     }
   }
+
+  const openCameraPreview = async (deviceId: string) => {
+    try {
+      // Find camera name to pass to preview (WebRTC uses different IDs than AVFoundation)
+      const camera = cameras.find((c) => c.id === deviceId)
+      const cameraName = camera?.name ?? ""
+
+      const monitor = await platform.monitor.getCurrent()
+      let x: number | undefined
+      let y: number | undefined
+      if (monitor) {
+        const factor = monitor.scaleFactor
+        const screenW = monitor.size.width / factor
+        const screenH = monitor.size.height / factor
+        const bubbleSize = 160
+        const margin = 20
+        const toolbarMargin = 130
+        x = Math.round(screenW - bubbleSize - margin)
+        y = Math.round(screenH - bubbleSize - toolbarMargin)
+      }
+      await platform.navigation.openWindow({
+        url: `/?cameraName=${encodeURIComponent(cameraName)}`,
+        label: "camera-preview",
+        width: 160,
+        height: 160,
+        x,
+        y,
+        decorations: false,
+        transparent: true,
+        alwaysOnTop: true,
+        resizable: false,
+        shadow: false,
+      })
+    } catch (e) {
+      // Window may already exist, ignore
+    }
+  }
+
+  const closeCameraPreview = async () => {
+    try {
+      await platform.navigation.closeWindow("camera-preview")
+    } catch (e) {
+      // Window may not exist, ignore
+    }
+  }
+
+  useEffect(() => {
+    if (cameraEnabled && selectedCamera) {
+      openCameraPreview(selectedCamera)
+      platform.invoke("prewarm_camera", { deviceId: selectedCamera }).catch(() => {})
+    } else if (!cameraEnabled) {
+      closeCameraPreview()
+    }
+  }, [selectedCamera]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shouldReduceMotion = useReducedMotion()
 

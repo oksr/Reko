@@ -136,6 +136,8 @@ pub fn run() {
             commands::sources::list_audio_inputs,
             commands::sources::list_cameras,
             commands::sources::list_windows,
+            commands::sources::prewarm_camera,
+            commands::sources::stop_camera_prewarm,
             commands::recording::start_recording,
             commands::recording::stop_recording,
             commands::recording::pause_recording,

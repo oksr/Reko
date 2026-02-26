@@ -13,6 +13,8 @@ extern "C" {
     fn ck_get_audio_levels(session_id: u64, out_json: *mut *const c_char) -> i32;
     fn ck_stop_recording(session_id: u64, out_result_json: *mut *const c_char) -> i32;
     fn ck_free_string(ptr: *mut c_char);
+    fn ck_prewarm_camera(device_id: *const c_char) -> i32;
+    fn ck_stop_camera_prewarm() -> i32;
     fn ck_check_microphone_permission() -> i32;
     fn ck_check_camera_permission() -> i32;
     fn ck_check_accessibility_permission() -> i32;
@@ -97,6 +99,25 @@ impl RekoEngine {
 
     pub fn stop_recording(session_id: u64) -> Result<String, String> {
         unsafe { call_json(|p| ck_stop_recording(session_id, p)) }
+    }
+
+    pub fn prewarm_camera(device_id: &str) -> Result<(), String> {
+        let c = CString::new(device_id).map_err(|e| e.to_string())?;
+        unsafe {
+            if ck_prewarm_camera(c.as_ptr()) != 0 {
+                return Err("Failed to prewarm camera".into());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn stop_camera_prewarm() -> Result<(), String> {
+        unsafe {
+            if ck_stop_camera_prewarm() != 0 {
+                return Err("Failed to stop camera prewarm".into());
+            }
+        }
+        Ok(())
     }
 
     pub fn check_microphone_permission() -> i32 {

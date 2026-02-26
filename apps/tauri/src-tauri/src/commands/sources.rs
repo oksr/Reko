@@ -54,6 +54,16 @@ pub async fn list_displays() -> Result<Vec<DisplayInfo>, String> {
 }
 
 #[tauri::command]
+pub async fn prewarm_camera(device_id: String) -> Result<(), String> {
+    RekoEngine::prewarm_camera(&device_id)
+}
+
+#[tauri::command]
+pub async fn stop_camera_prewarm() -> Result<(), String> {
+    RekoEngine::stop_camera_prewarm()
+}
+
+#[tauri::command]
 pub async fn list_audio_inputs() -> Result<Vec<AudioInputInfo>, String> {
     let json = RekoEngine::list_audio_inputs()?;
     serde_json::from_str(&json).map_err(|e| e.to_string())

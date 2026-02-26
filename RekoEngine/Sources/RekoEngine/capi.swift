@@ -7,6 +7,10 @@ private var activeSessions: [UInt64: RecordingPipeline] = [:]
 private var nextSessionId: UInt64 = 1
 private let sessionsLock = NSLock()
 
+private var prewarmedCamera: CameraCapture?
+private var prewarmedCameraDims: CameraCapture.CameraDimensions?
+private let prewarmLock = NSLock()
+
 @_cdecl("ck_get_version")
 public func ck_get_version() -> UnsafeMutablePointer<CChar>? {
     return strdup(RekoEngine.version)
@@ -142,6 +146,44 @@ public func ck_list_cameras(outJson: UnsafeMutablePointer<UnsafeMutablePointer<C
     return 0
 }
 
+@_cdecl("ck_prewarm_camera")
+public func ck_prewarm_camera(deviceId: UnsafePointer<CChar>) -> Int32 {
+    let id = String(cString: deviceId)
+
+    prewarmLock.lock()
+    // Stop any existing prewarm
+    prewarmedCamera?.stopCapture()
+    prewarmedCamera = nil
+    prewarmedCameraDims = nil
+    prewarmLock.unlock()
+
+    let camera = CameraCapture()
+    do {
+        let dims = try camera.startCapture(deviceId: id) { _ in
+            // No-op: frames discarded until recording starts
+        }
+        prewarmLock.lock()
+        prewarmedCamera = camera
+        prewarmedCameraDims = dims
+        prewarmLock.unlock()
+        return 0
+    } catch {
+        print("Camera prewarm error: \(error)")
+        return -1
+    }
+}
+
+@_cdecl("ck_stop_camera_prewarm")
+public func ck_stop_camera_prewarm() -> Int32 {
+    prewarmLock.lock()
+    let camera = prewarmedCamera
+    prewarmedCamera = nil
+    prewarmedCameraDims = nil
+    prewarmLock.unlock()
+    camera?.stopCapture()
+    return 0
+}
+
 @_cdecl("ck_start_recording")
 public func ck_start_recording(
     configJson: UnsafePointer<CChar>,
@@ -156,7 +198,19 @@ public func ck_start_recording(
         return -1
     }
 
-    let pipeline = RecordingPipeline(config: config)
+    // Extract pre-warmed camera (if any) so stop_prewarm won't kill it mid-recording
+    prewarmLock.lock()
+    let camera = prewarmedCamera
+    let cameraDims = prewarmedCameraDims
+    prewarmedCamera = nil
+    prewarmedCameraDims = nil
+    prewarmLock.unlock()
+
+    let pipeline = RecordingPipeline(
+        config: config,
+        prewarmedCamera: camera,
+        prewarmedCameraDims: cameraDims
+    )
 
     sessionsLock.lock()
     let sessionId = nextSessionId

@@ -10,6 +10,7 @@ public struct CameraInfo: Codable {
 public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private var session: AVCaptureSession?
     private var onVideoFrame: ((CMSampleBuffer) -> Void)?
+    private let callbackLock = NSLock()
 
     public struct CameraDimensions {
         public let width: Int
@@ -29,7 +30,9 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         deviceId: String,
         onVideoFrame: @escaping (CMSampleBuffer) -> Void
     ) throws -> CameraDimensions {
+        callbackLock.lock()
         self.onVideoFrame = onVideoFrame
+        callbackLock.unlock()
 
         let session = AVCaptureSession()
         session.sessionPreset = .high
@@ -69,6 +72,12 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         return CameraDimensions(width: Int(dims.width), height: Int(dims.height))
     }
 
+    public func setFrameCallback(_ callback: @escaping (CMSampleBuffer) -> Void) {
+        callbackLock.lock()
+        onVideoFrame = callback
+        callbackLock.unlock()
+    }
+
     public func stopCapture() {
         session?.stopRunning()
         session = nil
@@ -81,6 +90,9 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         didOutput sampleBuffer: CMSampleBuffer,
         from connection: AVCaptureConnection
     ) {
-        onVideoFrame?(sampleBuffer)
+        callbackLock.lock()
+        let callback = onVideoFrame
+        callbackLock.unlock()
+        callback?(sampleBuffer)
     }
 }
