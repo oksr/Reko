@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Reko"
 authors = ["you"]
 edition = "2021"
+license = "MIT"
 
 [lib]
 name = "reko_lib"
@@ -24,9 +25,13 @@ chrono = "0.4"
 dirs = "5"
 ureq = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSView", "NSColor", "NSApplication"] }
 objc2-foundation = "0.3"
 objc2-quartz-core = { version = "0.3", features = ["CALayer"] }
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-cli = "2.4.1"

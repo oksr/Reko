@@ -83,6 +83,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(RecordingState {
             active_session_id: Mutex::new(None),
             active_project_id: Mutex::new(None),

@@ -21,6 +21,7 @@
         "decorations": false,
         "transparent": true,
         "alwaysOnTop": true,
+        "acceptFirstMouse": true,
         "shadow": false,
         "visible": false
       }
@@ -52,7 +53,16 @@
     "resources": ["resources/wallpapers/*"],
     "macOS": {
       "minimumSystemVersion": "14.0",
-      "entitlements": "./Entitlements.plist"
+      "entitlements": "./Entitlements.plist",
+      "hardenedRuntime": true
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/oksr/reko/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNCNzgzNDdBRDY1RjE0NzQKUldSMEZGL1dlalI0TzlMZXZMWGY3MW4zRHRwSloxSjd2SmJVTTlXbFl5cER5ek5yRXNKSDBzSG0K"
     }
   }
 }
