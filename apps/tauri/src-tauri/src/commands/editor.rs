@@ -38,9 +38,10 @@ pub fn open_editor(
         tauri::WebviewUrl::App(url.into()),
     )
     .title(&title)
+    .decorations(true)
     .title_bar_style(TitleBarStyle::Overlay)
     .hidden_title(true)
-    .traffic_light_position(LogicalPosition::new(16.0, 18.0))
+    .traffic_light_position(LogicalPosition::new(14.0, 25.0))
     .inner_size(1400.0, 900.0)
     .center()
     .visible(false)
