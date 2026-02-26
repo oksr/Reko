@@ -4,6 +4,7 @@ import CoreMedia
 
 public final class AudioFileWriter {
     private var audioFile: AVAudioFile?
+    private let lock = NSLock()
 
     public init(outputURL: URL, sampleRate: Double, channels: UInt32) throws {
         if FileManager.default.fileExists(atPath: outputURL.path) {
@@ -29,8 +30,15 @@ public final class AudioFileWriter {
     }
 
     public func appendAudioSample(_ sampleBuffer: CMSampleBuffer) {
-        guard let audioFile = audioFile,
-              let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer),
+        // Capture audioFile reference under lock, then do work unlocked
+        lock.lock()
+        guard let audioFile = audioFile else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
+        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer),
               let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) else { return }
 
         let length = CMBlockBufferGetDataLength(blockBuffer)
@@ -81,6 +89,8 @@ public final class AudioFileWriter {
     }
 
     public func finish() {
+        lock.lock()
+        defer { lock.unlock() }
         audioFile = nil
     }
 }

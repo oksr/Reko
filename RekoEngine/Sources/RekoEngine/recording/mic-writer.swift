@@ -3,6 +3,7 @@ import AVFoundation
 
 public final class MicWriter {
     private var audioFile: AVAudioFile?
+    private let lock = NSLock()
 
     public init(outputURL: URL, format: AVAudioFormat) throws {
         if FileManager.default.fileExists(atPath: outputURL.path) {
@@ -17,10 +18,14 @@ public final class MicWriter {
     }
 
     public func write(buffer: AVAudioPCMBuffer) {
+        lock.lock()
+        defer { lock.unlock() }
         try? audioFile?.write(from: buffer)
     }
 
     public func finish() {
+        lock.lock()
+        defer { lock.unlock() }
         audioFile = nil
     }
 }

@@ -6,6 +6,7 @@ public final class VideoWriter {
     private let assetWriter: AVAssetWriter
     private let videoInput: AVAssetWriterInput
     private var isStarted = false
+    private let lock = NSLock()
 
     public init(outputURL: URL, width: Int, height: Int, fps: Int) throws {
         if FileManager.default.fileExists(atPath: outputURL.path) {
@@ -32,6 +33,8 @@ public final class VideoWriter {
     }
 
     public func appendVideoSample(_ sampleBuffer: CMSampleBuffer) {
+        lock.lock()
+        defer { lock.unlock() }
         // Defense-in-depth: skip buffers without pixel data (e.g. ScreenCaptureKit
         // status frames that slipped past the frame-status filter).
         guard CMSampleBufferGetImageBuffer(sampleBuffer) != nil else { return }
@@ -48,8 +51,14 @@ public final class VideoWriter {
     }
 
     public func finish() async {
-        guard isStarted else { return }
+        lock.lock()
+        guard isStarted else {
+            lock.unlock()
+            return
+        }
+        isStarted = false
         videoInput.markAsFinished()
+        lock.unlock()
         await assetWriter.finishWriting()
     }
 }

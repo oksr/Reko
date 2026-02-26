@@ -15,7 +15,8 @@ import { Timeline } from "@/components/editor/timeline"
 import { ExportButton } from "@/components/editor/export-button"
 import { Inspector } from "@/components/editor/inspector"
 import type { ProjectState } from "@/types"
-import type { EditorProject, WallpaperInfo } from "@/types/editor"
+import type { EditorProject, WallpaperInfo, ZoomEvent } from "@/types/editor"
+import { DEFAULT_AUTO_ZOOM_SETTINGS } from "@/types/editor"
 
 const DEFAULT_WALLPAPER_ID = "12-Dark-thumbnail"
 
@@ -169,6 +170,36 @@ function EditorContent() {
         }
 
         loadProject(editorProject)
+
+        // Auto-generate zoom events for all clips if mouse events exist
+        // and no clips already have zoom events (i.e. fresh recording)
+        if (editorProject.tracks.mouse_events) {
+          const state = useEditorStore.getState()
+          const seq = state.project?.sequence
+          const hasExistingZoom = seq?.clips.some((c) => c.zoomEvents && c.zoomEvents.length > 0)
+          if (seq && !hasExistingZoom) {
+            const settings = editorProject.autoZoomSettings ?? DEFAULT_AUTO_ZOOM_SETTINGS
+            try {
+              const generated = await platform.invoke<ZoomEvent[]>("generate_auto_zoom", {
+                projectId: editorProject.id,
+                zoomScale: settings.zoomScale,
+              })
+              if (generated.length > 0) {
+                const { setClipZoomEvents } = useEditorStore.getState()
+                seq.clips.forEach((clip, i) => {
+                  const clipEvents = generated
+                    .filter((e) => e.timeMs >= clip.sourceStart && e.timeMs < clip.sourceEnd)
+                    .map((e) => ({ ...e, timeMs: e.timeMs - clip.sourceStart }))
+                  if (clipEvents.length > 0) {
+                    setClipZoomEvents(i, clipEvents)
+                  }
+                })
+              }
+            } catch (e) {
+              console.error("Auto-zoom generation failed:", e)
+            }
+          }
+        }
       })
       .catch((e) => setError(String(e)))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

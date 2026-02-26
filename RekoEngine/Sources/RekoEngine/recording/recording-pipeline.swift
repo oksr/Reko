@@ -79,12 +79,21 @@ public final class RecordingPipeline {
     private var micLevel: Float = 0
     private var systemAudioLevel: Float = 0
     private let levelsLock = NSLock()
+    private let stateLock = NSLock()
     private let config: RecordingConfig
     private let outputDir: URL
+    private let prewarmedCamera: CameraCapture?
+    private let prewarmedCameraDims: CameraCapture.CameraDimensions?
 
-    public init(config: RecordingConfig) {
+    public init(
+        config: RecordingConfig,
+        prewarmedCamera: CameraCapture? = nil,
+        prewarmedCameraDims: CameraCapture.CameraDimensions? = nil
+    ) {
         self.config = config
         self.outputDir = URL(fileURLWithPath: config.outputDir)
+        self.prewarmedCamera = prewarmedCamera
+        self.prewarmedCameraDims = prewarmedCameraDims
     }
 
     public func start() async throws {
@@ -166,7 +175,13 @@ public final class RecordingPipeline {
                 format: format
             )
             try mic.start { [weak self] buffer, _ in
-                guard let self = self, self.isRecording, !self.isPaused else { return }
+                guard let self = self else { return }
+                self.stateLock.lock()
+                guard self.isRecording, !self.isPaused else {
+                    self.stateLock.unlock()
+                    return
+                }
+                self.stateLock.unlock()
                 writer.write(buffer: buffer)
                 let level = AudioLevelCalculator.peakLevel(from: buffer)
                 self.levelsLock.lock()
@@ -178,30 +193,65 @@ public final class RecordingPipeline {
         }
 
         if let cameraId = config.cameraId {
-            let camera = CameraCapture()
-            let dims = try camera.startCapture(deviceId: cameraId) { [weak self] sampleBuffer in
-                guard let self = self, self.isRecording, !self.isPaused else { return }
+            let cameraCallback: (CMSampleBuffer) -> Void = { [weak self] sampleBuffer in
+                guard let self = self else { return }
+                self.stateLock.lock()
+                guard self.isRecording, !self.isPaused else {
+                    self.stateLock.unlock()
+                    return
+                }
+                self.stateLock.unlock()
                 self.cameraWriter?.appendVideoSample(sampleBuffer)
             }
-            cameraWriter = try VideoWriter(
-                outputURL: outputDir.appendingPathComponent("camera.mov"),
-                width: dims.width, height: dims.height, fps: config.fps
-            )
-            cameraCapture = camera
+
+            if let prewarm = prewarmedCamera, let prewarmDims = prewarmedCameraDims {
+                // Reuse pre-warmed camera — redirect frames to writer
+                prewarm.setFrameCallback(cameraCallback)
+                cameraWriter = try VideoWriter(
+                    outputURL: outputDir.appendingPathComponent("camera.mov"),
+                    width: prewarmDims.width, height: prewarmDims.height, fps: config.fps
+                )
+                cameraCapture = prewarm
+            } else {
+                // Fallback: create new CameraCapture
+                let camera = CameraCapture()
+                let dims = try camera.startCapture(deviceId: cameraId, onVideoFrame: cameraCallback)
+                cameraWriter = try VideoWriter(
+                    outputURL: outputDir.appendingPathComponent("camera.mov"),
+                    width: dims.width, height: dims.height, fps: config.fps
+                )
+                cameraCapture = camera
+            }
         }
 
+        stateLock.lock()
         frameCount = 0
         startTime = mach_absolute_time()
-        mouseLogger?.resetStartTime()
         isRecording = true
+        stateLock.unlock()
+        mouseLogger?.resetStartTime()
 
         let videoHandler: (CMSampleBuffer) -> Void = { [weak self] sampleBuffer in
-            guard let self = self, self.isRecording, !self.isPaused else { return }
+            guard let self = self else { return }
+            self.stateLock.lock()
+            guard self.isRecording, !self.isPaused else {
+                self.stateLock.unlock()
+                return
+            }
+            self.stateLock.unlock()
             self.videoWriter?.appendVideoSample(sampleBuffer)
+            self.stateLock.lock()
             self.frameCount += 1
+            self.stateLock.unlock()
         }
         let audioHandler: (CMSampleBuffer) -> Void = { [weak self] sampleBuffer in
-            guard let self = self, self.isRecording, !self.isPaused else { return }
+            guard let self = self else { return }
+            self.stateLock.lock()
+            guard self.isRecording, !self.isPaused else {
+                self.stateLock.unlock()
+                return
+            }
+            self.stateLock.unlock()
             self.systemAudioWriter?.appendAudioSample(sampleBuffer)
             let level = AudioLevelCalculator.peakLevel(from: sampleBuffer)
             self.levelsLock.lock()
@@ -230,7 +280,13 @@ public final class RecordingPipeline {
     }
 
     public func stop() async throws -> RecordingResult {
+        stateLock.lock()
         isRecording = false
+        let snapshotFrameCount = frameCount
+        let snapshotStartTime = startTime
+        let snapshotTotalPaused = totalPausedNano
+        stateLock.unlock()
+
         try await screenCapture.stopCapture()
         await videoWriter?.finish()
         systemAudioWriter?.finish()
@@ -243,7 +299,10 @@ public final class RecordingPipeline {
 
         var timebaseInfo = mach_timebase_info_data_t()
         mach_timebase_info(&timebaseInfo)
-        let elapsed = mach_absolute_time() - startTime - totalPausedNano
+        let now = mach_absolute_time()
+        // Saturating subtraction to prevent UInt64 underflow
+        let rawElapsed = now >= snapshotStartTime ? now - snapshotStartTime : 0
+        let elapsed = rawElapsed >= snapshotTotalPaused ? rawElapsed - snapshotTotalPaused : 0
         let durationMs = elapsed * UInt64(timebaseInfo.numer) / UInt64(timebaseInfo.denom) / 1_000_000
 
         return RecordingResult(
@@ -253,21 +312,33 @@ public final class RecordingPipeline {
             cameraPath: cameraCapture != nil ? "camera.mov" : nil,
             mouseEventsPath: hasMouseLogger ? "mouse_events.jsonl" : nil,
             durationMs: durationMs,
-            frameCount: frameCount
+            frameCount: snapshotFrameCount
         )
     }
 
     public func pause() {
-        guard isRecording, !isPaused else { return }
+        stateLock.lock()
+        guard isRecording, !isPaused else {
+            stateLock.unlock()
+            return
+        }
         isPaused = true
         pauseStartNano = mach_absolute_time()
+        stateLock.unlock()
         mouseLogger?.pause()
     }
 
     public func resume() {
-        guard isRecording, isPaused else { return }
+        stateLock.lock()
+        guard isRecording, isPaused else {
+            stateLock.unlock()
+            return
+        }
         isPaused = false
-        totalPausedNano += mach_absolute_time() - pauseStartNano
+        let pauseStart = pauseStartNano
+        let now = mach_absolute_time()
+        totalPausedNano += now >= pauseStart ? now - pauseStart : 0
+        stateLock.unlock()
         mouseLogger?.resume()
     }
 
