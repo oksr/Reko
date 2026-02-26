@@ -136,7 +136,7 @@ export class WebGLCompositor {
     // Layer 1: Background
     this.renderBackground(effects)
 
-    // Layer 2: Screen with canvas-space zoom transform
+    // Layer 1: Screen with canvas-space zoom transform
     const baseScrRect = screenRect(
       this.canvasWidth, this.canvasHeight,
       screenWidth, screenHeight,
@@ -145,7 +145,24 @@ export class WebGLCompositor {
     const zoomedScrRect = applyZoomToRect(baseScrRect, zoom)
     this.renderScreen(effects, zoomedScrRect)
 
-    // Layer 3: Camera bubble (stays fixed in corner, independent of zoom)
+    // Layer 2: Cursor
+    if (effects.cursor.enabled && cursor) {
+      this.renderCursor(effects, zoomedScrRect, zoom.scale, cursor, cursorVelocity ?? null)
+    }
+
+    // Layer 3: Click ripple
+    if (effects.cursor.clickHighlight?.enabled && click) {
+      this.renderClick(effects, zoomedScrRect, zoom.scale, click)
+    }
+
+    // Layer 4: Motion blur post-process (only affects background, screen, cursor, click)
+    if (useMotionBlur && this.fbo && this.fboTexture) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+      gl.viewport(0, 0, this.canvasWidth, this.canvasHeight)
+      this.renderMotionBlur(motionBlur!)
+    }
+
+    // Layer 5: Camera bubble (rendered after motion blur so it stays crisp)
     if (effects.cameraBubble.visible && this.cameraTexture) {
       const camRect = cameraRect(
         this.canvasWidth, this.canvasHeight,
@@ -153,23 +170,6 @@ export class WebGLCompositor {
         effects.cameraBubble.position
       )
       this.renderCamera(effects, camRect)
-    }
-
-    // Layer 4: Cursor
-    if (effects.cursor.enabled && cursor) {
-      this.renderCursor(effects, zoomedScrRect, zoom.scale, cursor, cursorVelocity ?? null)
-    }
-
-    // Layer 5: Click ripple
-    if (effects.cursor.clickHighlight?.enabled && click) {
-      this.renderClick(effects, zoomedScrRect, zoom.scale, click)
-    }
-
-    // Layer 6: Motion blur post-process
-    if (useMotionBlur && this.fbo && this.fboTexture) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-      gl.viewport(0, 0, this.canvasWidth, this.canvasHeight)
-      this.renderMotionBlur(motionBlur!)
     }
 
     gl.bindVertexArray(null)
