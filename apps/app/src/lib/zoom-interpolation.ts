@@ -64,40 +64,33 @@ export function interpolateZoomEvents(
     if (timeMs < leadInStart || timeMs > leadOutEnd) continue
 
     let scale: number
-    let blend: number // how much of this event's position to use
 
     if (timeMs < holdStart) {
       // Lead-in phase
       const t = (timeMs - leadInStart) / TRANSITION_MS
       const eased = easeInOutSine(t)
       scale = 1.0 + (evt.scale - 1.0) * eased
-      blend = eased
     } else if (timeMs <= holdEnd) {
       // Hold phase
       scale = evt.scale
-      blend = 1.0
     } else {
       // Lead-out phase — scale eases back to 1.0
       const t = (timeMs - holdEnd) / TRANSITION_MS
       const eased = easeInOutSine(t)
       scale = evt.scale + (1.0 - evt.scale) * eased
-      // Cubic blend: keeps position locked near the target while still zoomed,
-      // only releasing toward center in the final moments near scale 1.0.
-      // Linear blend moves position too visibly mid-zoom; cubic keeps blend
-      // high (0.98 at 1.9x, 0.87 at 1.5x) so the viewport zooms out "in place".
-      const ratio = evt.scale > 1.0 ? (scale - 1.0) / (evt.scale - 1.0) : 1.0 - eased
-      blend = 1.0 - (1.0 - ratio) ** 3
     }
 
     // If this event has higher scale influence, it wins
     if (scale > bestScale) {
       bestScale = scale
-      // Use live cursor position as pan center so the viewport follows the cursor
-      // while zoomed (like Screen Studio). Falls back to the event's click position.
       const cx = cursor ? cursor.x : evt.x
       const cy = cursor ? cursor.y : evt.y
-      bestX = 0.5 + (cx - 0.5) * blend
-      bestY = 0.5 + (cy - 0.5) * blend
+      // Derive position directly from scale: px = cx - (cx - 0.5) / scale.
+      // This keeps the target point at its original screen position as the
+      // frame scales up around it — like pinch-to-zoom. No separate pan
+      // animation, so there's no "zoom to center then pan" artifact.
+      bestX = cx - (cx - 0.5) / scale
+      bestY = cy - (cy - 0.5) / scale
     }
   }
 

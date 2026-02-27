@@ -153,20 +153,33 @@ fn sessions_to_events(sessions: &[FocusSession], zoom_scale: f64) -> Vec<ZoomEve
         .collect()
 }
 
-// ── Pass 4: Drop overlapping events ──
+/// Minimum gap between consecutive zoom events. If two events are closer
+/// than this they get merged into a single longer zoom.
+const MERGE_GAP_MS: u64 = 2000;
 
-fn remove_overlapping(events: Vec<ZoomEvent>) -> Vec<ZoomEvent> {
+// ── Pass 4: Merge nearby / overlapping events ──
+
+fn merge_nearby(events: Vec<ZoomEvent>) -> Vec<ZoomEvent> {
     let mut result: Vec<ZoomEvent> = vec![];
     for event in events {
-        if let Some(prev) = result.last() {
+        if let Some(prev) = result.last_mut() {
             let prev_end = prev.time_ms + prev.duration_ms;
-            if event.time_ms < prev_end {
-                continue; // overlaps with previous — drop
+            let gap = event.time_ms.saturating_sub(prev_end);
+            if event.time_ms < prev_end || gap < MERGE_GAP_MS {
+                // Merge: extend prev to cover both, blend centers by duration weight
+                let new_end = (event.time_ms + event.duration_ms).max(prev_end);
+                let prev_weight = prev.duration_ms as f64;
+                let evt_weight = event.duration_ms as f64;
+                let total = prev_weight + evt_weight;
+                prev.x = (prev.x * prev_weight + event.x * evt_weight) / total;
+                prev.y = (prev.y * prev_weight + event.y * evt_weight) / total;
+                prev.duration_ms = new_end - prev.time_ms;
+                continue;
             }
         }
         result.push(event);
     }
-    // Re-number IDs after filtering
+    // Re-number IDs after merging
     for (i, event) in result.iter_mut().enumerate() {
         event.id = format!("auto-{}", i);
     }
@@ -182,7 +195,7 @@ pub fn generate_zoom_events(events: &[MouseEvent], zoom_scale: f64) -> Vec<ZoomE
     }
     let sessions = group_into_sessions(&clicks, zoom_scale);
     let zoom_events = sessions_to_events(&sessions, zoom_scale);
-    remove_overlapping(zoom_events)
+    merge_nearby(zoom_events)
 }
 
 #[cfg(test)]
@@ -314,13 +327,15 @@ mod tests {
 
     #[test]
     fn test_session_timeout_splits() {
-        // Gap > 3500ms → separate sessions even if spatially close
+        // Gap > 3500ms → separate sessions even if spatially close.
+        // But if the resulting zoom events are < 2s apart they get merged.
         let events = vec![
             make_click(1000, 0.5, 0.5),
-            make_click(5000, 0.52, 0.52), // 4000ms gap > 3500ms
+            make_click(5000, 0.52, 0.52), // 4000ms gap > 3500ms → 2 sessions
         ];
         let result = generate_zoom_events(&events, 2.0);
-        assert_eq!(result.len(), 2);
+        // Events are close on the timeline so they merge into 1
+        assert_eq!(result.len(), 1);
     }
 
     #[test]
@@ -378,18 +393,15 @@ mod tests {
         // Use wider spacing to see the difference:
         assert_eq!(result_4x.len(), 1);
 
-        // With wider spacing (no overlap possible):
+        // With wider spacing — events far enough apart to avoid merge (>2s gap):
         let events_wide = vec![
             make_click(1000, 0.5, 0.5),
-            make_click(5000, 0.7, 0.5), // 4s gap > timeout at 4x
+            make_click(8000, 0.7, 0.5), // 7s gap — well beyond merge threshold
         ];
         let result_2x_wide = generate_zoom_events(&events_wide, 2.0);
         let result_4x_wide = generate_zoom_events(&events_wide, 4.0);
 
-        // At 2x: timeout (4000 > 3500) → 2 sessions, but first ends at 3100,
-        // second starts at 4600 → no overlap → 2 events
         assert_eq!(result_2x_wide.len(), 2);
-        // At 4x: same → 2 events
         assert_eq!(result_4x_wide.len(), 2);
     }
 
@@ -472,9 +484,9 @@ mod tests {
             make_click(40248, 0.47, 0.93),   // same spot
         ];
         let result = generate_zoom_events(&events, 2.0);
-        // 15 clicks → 3 events: isolated, center cluster, right cluster
-        // Bottom click (39.3s) overlaps with right cluster end (39.7s) → dropped
-        assert_eq!(result.len(), 3);
+        // 15 clicks → sessions: isolated (1.7s), center cluster (15-22s), right cluster (26-37s), bottom (39-40s)
+        // Isolated + center cluster merge (gap < 2s), right cluster + bottom merge (gap < 2s)
+        assert_eq!(result.len(), 2);
     }
 
     // ── Lead-in at time zero ──
