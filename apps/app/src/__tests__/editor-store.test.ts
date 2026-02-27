@@ -50,6 +50,9 @@ const MOCK_PROJECT: EditorProject = {
     },
     cursor: {
       enabled: false,
+      icon: "hand-pointer",
+      highlightEnabled: false,
+      highlightSize: 80,
       type: "highlight",
       size: 40,
       color: "#ffcc00",

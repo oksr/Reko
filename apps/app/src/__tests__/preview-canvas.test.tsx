@@ -39,7 +39,11 @@ const MOCK_PROJECT: EditorProject = {
     cameraBubble: { visible: false, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff", shadow: false, shadowIntensity: 0 },
     frame: { borderRadius: 12, shadow: true, shadowIntensity: 0.5 },
     cursor: {
-      enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6,
+      enabled: false,
+      icon: "hand-pointer",
+      highlightEnabled: false,
+      highlightSize: 80,
+      type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6,
       clickHighlight: { enabled: true, color: "#ffffff", opacity: 0.5, size: 30 },
     },
   },

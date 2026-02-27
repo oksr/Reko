@@ -12,7 +12,7 @@ const MOCK_PROJECT: EditorProject = {
     background: { type: "solid", color: "#000", gradientFrom: "#000", gradientTo: "#111", gradientAngle: 135, padding: 8, presetId: null, imageUrl: null, imageBlur: 0, unsplashId: null, unsplashAuthor: null, wallpaperId: null },
     cameraBubble: { visible: false, position: "bottom-right", size: 15, shape: "circle", borderWidth: 3, borderColor: "#fff", shadow: false, shadowIntensity: 0 },
     frame: { borderRadius: 12, shadow: false, shadowIntensity: 0 },
-    cursor: { enabled: false, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6, clickHighlight: { enabled: false, color: "#ffffff", opacity: 0.5, size: 30 } },
+    cursor: { enabled: false, icon: "hand-pointer", highlightEnabled: false, highlightSize: 80, type: "highlight", size: 40, color: "#ffcc00", opacity: 0.6, clickHighlight: { enabled: false, color: "#ffffff", opacity: 0.5, size: 30 } },
   },
   sequence: {
     clips: [{ id: "clip-1", sourceStart: 0, sourceEnd: 10000, speed: 1, zoomEvents: [] }],
