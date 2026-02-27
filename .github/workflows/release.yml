@@ -67,6 +67,10 @@ jobs:
             -S apple-tool:,apple: \
             -s -k "" "$KEYCHAIN_PATH"
 
+          # Diagnostic: show available identities
+          echo "=== Available signing identities ==="
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
+
       - name: Build universal binary
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
