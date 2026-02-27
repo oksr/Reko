@@ -9,8 +9,6 @@ jobs:
   release:
     name: Build and Release
     runs-on: macos-latest
-    # Skip silently if signing secrets are not available (e.g. fork PRs)
-    if: ${{ secrets.APPLE_CERTIFICATE != '' }}
 
     steps:
       - name: Checkout
