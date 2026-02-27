@@ -133,7 +133,10 @@ public final class MouseLogger {
     /// timestamped relative to this moment. Call after video recording
     /// actually begins to synchronize mouse events with video frames.
     public func resetStartTime() {
+        lock.lock()
         startTime = Self.currentTimeMs()
+        lastMoveTimeMs = 0
+        lock.unlock()
     }
 
     public func pause() {
@@ -173,26 +176,22 @@ public final class MouseLogger {
 
     // Called from the C callback on the tap thread
     fileprivate func handleEvent(_ event: CGEvent) {
-        lock.lock()
-        let paused = _isPaused
-        let handle = fileHandle
-        lock.unlock()
-
-        guard !paused, let handle = handle else { return }
-
         let location = event.location
         let (nx, ny) = MouseLogEvent.normalize(
             mouseX: location.x, mouseY: location.y,
             screenWidth: screenWidth, screenHeight: screenHeight
         )
 
-        let timeMs = Self.currentTimeMs() - startTime
+        let now = Self.currentTimeMs()
+        let base = startTime
+        // Guard against underflow when resetStartTime() moves the origin forward
+        let timeMs = now >= base ? now - base : 0
 
         let eventType: String
         switch event.type {
         case .mouseMoved, .leftMouseDragged:
-            // Throttle move events
-            guard timeMs - lastMoveTimeMs >= moveThrottleMs else { return }
+            // Throttle move events (use >= comparison to avoid underflow)
+            guard timeMs >= lastMoveTimeMs &+ moveThrottleMs else { return }
             lastMoveTimeMs = timeMs
             eventType = "move"
         case .leftMouseDown:
@@ -207,9 +206,14 @@ public final class MouseLogger {
 
         let logEvent = MouseLogEvent(timeMs: timeMs, x: nx, y: ny, type: eventType)
         let line = logEvent.toJSON() + "\n"
-        if let data = line.data(using: .utf8) {
-            handle.write(data)
-        }
+        guard let data = line.data(using: .utf8) else { return }
+
+        // Hold the lock across the write so stop() cannot close the
+        // file handle while we are writing to it.
+        lock.lock()
+        defer { lock.unlock() }
+        guard !_isPaused, let handle = fileHandle else { return }
+        handle.write(data)
     }
 
     private static func currentTimeMs() -> UInt64 {
@@ -225,8 +229,8 @@ private func mouseEventCallback(
     event: CGEvent,
     userInfo: UnsafeMutableRawPointer?
 ) -> Unmanaged<CGEvent>? {
-    guard let userInfo = userInfo else { return Unmanaged.passRetained(event) }
+    guard let userInfo = userInfo else { return Unmanaged.passUnretained(event) }
     let logger = Unmanaged<MouseLogger>.fromOpaque(userInfo).takeUnretainedValue()
     logger.handleEvent(event)
-    return Unmanaged.passRetained(event)
+    return Unmanaged.passUnretained(event)
 }

@@ -430,6 +430,48 @@ export function RecorderApp() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Tray menu actions
+  const openWindowPickerRef = useRef(openWindowPicker)
+  openWindowPickerRef.current = openWindowPicker
+  const openAreaSelectionRef = useRef(openAreaSelection)
+  openAreaSelectionRef.current = openAreaSelection
+  const startRecordingRef = useRef(startRecording)
+  startRecordingRef.current = startRecording
+  const recentProjectsRef = useRef(recentProjects)
+  recentProjectsRef.current = recentProjects
+  const handleOpenEditorRef = useRef(handleOpenEditor)
+  handleOpenEditorRef.current = handleOpenEditor
+
+  useEffect(() => {
+    const unlistenPromise = platform.window.listen<string>("tray-action", (action) => {
+      const state = appStateRef.current
+      if (state !== "idle") return
+      switch (action) {
+        case "new-recording":
+          handleStartRef.current()
+          break
+        case "record-display":
+          setSourceType("display")
+          startRecordingRef.current()
+          break
+        case "record-window":
+          setSourceType("window")
+          openWindowPickerRef.current()
+          break
+        case "record-area":
+          setSourceType("area")
+          openAreaSelectionRef.current()
+          break
+        case "show-projects":
+          if (recentProjectsRef.current.length > 0) {
+            handleOpenEditorRef.current(recentProjectsRef.current[0].id)
+          }
+          break
+      }
+    })
+    return () => { unlistenPromise.then((fn) => fn()) }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Drag handler
   const handleDrag = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement

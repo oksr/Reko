@@ -9,6 +9,14 @@ function formatTime(ms: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`
 }
 
+function formatTimeMs(ms: number): string {
+  const s = Math.floor(ms / 1000)
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  const centis = Math.floor((ms % 1000) / 10)
+  return `${m}:${sec.toString().padStart(2, "0")}:${centis.toString().padStart(2, "0")}`
+}
+
 interface TimeRulerProps {
   ctx: TimelineContext
 }
@@ -101,7 +109,7 @@ export function TimeRuler({ ctx }: TimeRulerProps) {
         >
           {/* Tooltip */}
           <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] px-1.5 py-0.5 rounded shadow-md whitespace-nowrap">
-            {formatTime(hoverMs)}
+            {formatTimeMs(hoverMs)}
           </div>
           {/* Pin handle */}
           <div className="w-2.5 h-2.5 rounded-full bg-white/60 border border-white/80 mt-0.5" />

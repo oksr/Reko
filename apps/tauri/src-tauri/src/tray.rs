@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 pub struct TrayState {
@@ -120,13 +120,28 @@ pub fn setup(app: &mut tauri::App) -> tauri::Result<()> {
 
 fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     match event.id().as_ref() {
-        "tray:new-recording"
-        | "tray:record-display"
-        | "tray:record-window"
-        | "tray:record-area"
-        | "tray:show-settings"
-        | "tray:show-projects" => {
+        "tray:new-recording" => {
             show_recorder(app);
+            let _ = app.emit_to("recorder", "tray-action", "new-recording");
+        }
+        "tray:record-display" => {
+            show_recorder(app);
+            let _ = app.emit_to("recorder", "tray-action", "record-display");
+        }
+        "tray:record-window" => {
+            show_recorder(app);
+            let _ = app.emit_to("recorder", "tray-action", "record-window");
+        }
+        "tray:record-area" => {
+            show_recorder(app);
+            let _ = app.emit_to("recorder", "tray-action", "record-area");
+        }
+        "tray:show-settings" => {
+            show_recorder(app);
+        }
+        "tray:show-projects" => {
+            show_recorder(app);
+            let _ = app.emit_to("recorder", "tray-action", "show-projects");
         }
         "tray:show-in-dock" => {
             toggle_dock_visibility(app);
