@@ -53,8 +53,9 @@ describe("interpolateZoomEvents (event-based model)", () => {
   test("during hold phase returns full scale", () => {
     const result = interpolateZoomEvents([evt(1000, 1500, 0.3, 0.7, 2.0)], 1500)
     expect(result.scale).toBeCloseTo(2.0)
-    expect(result.x).toBeCloseTo(0.3)
-    expect(result.y).toBeCloseTo(0.7)
+    // Position is derived: px = cx - (cx - 0.5) / scale
+    expect(result.x).toBeCloseTo(0.3 - (0.3 - 0.5) / 2.0) // 0.4
+    expect(result.y).toBeCloseTo(0.7 - (0.7 - 0.5) / 2.0) // 0.6
   })
 
   test("after lead-out returns default", () => {
@@ -84,7 +85,8 @@ describe("interpolateZoomEvents (event-based model)", () => {
     ]
     const result = interpolateZoomEvents(events, 1800)
     expect(result.scale).toBeCloseTo(2.5)
-    expect(result.x).toBeCloseTo(0.7)
+    // Position derived: px = cx - (cx - 0.5) / scale
+    expect(result.x).toBeCloseTo(0.7 - (0.7 - 0.5) / 2.5) // 0.62
   })
 })
 

@@ -204,7 +204,7 @@ describe("editor store", () => {
     }
     useEditorStore.getState().loadProject(oldProject)
     const effects = useEditorStore.getState().project!.effects
-    expect(effects.cursor.enabled).toBe(false)
+    expect(effects.cursor.enabled).toBe(true)
     expect(effects.cursor.type).toBe("highlight")
   })
 })
