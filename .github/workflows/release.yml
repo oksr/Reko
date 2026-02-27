@@ -34,12 +34,25 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
+          targets: aarch64-apple-darwin
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/tauri/src-tauri
+          shared-key: reko-rust
+          save-always: true
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Cache Swift build
+        uses: actions/cache@v4
+        with:
+          path: RekoEngine/.build
+          key: swift-${{ runner.os }}-${{ hashFiles('RekoEngine/Package.swift', 'RekoEngine/Sources/**') }}
+          restore-keys: |
+            swift-${{ runner.os }}-
 
       - name: Import Apple Developer ID certificate
         env:
@@ -74,8 +87,9 @@ jobs:
           echo "=== Available signing identities ==="
           security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
-      - name: Build universal binary
+      - name: Build aarch64 binary
         env:
+          RUSTC_WRAPPER: sccache
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -83,12 +97,12 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          pnpm --filter @reko/tauri tauri:build --target universal-apple-darwin
+          pnpm --filter @reko/tauri tauri:build --target aarch64-apple-darwin
 
       - name: Find bundle artifacts
         id: artifacts
         run: |
-          DMG=$(find apps/tauri/src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          DMG=$(find apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           echo "Found DMG: $DMG"
 
@@ -100,7 +114,7 @@ jobs:
           prerelease: false
           files: |
             ${{ steps.artifacts.outputs.dmg }}
-            apps/tauri/src-tauri/target/universal-apple-darwin/release/bundle/macos/latest.json
+            apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/latest.json
 
       - name: Clean up keychain
         if: always()
