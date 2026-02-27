@@ -5,6 +5,9 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Build and Release
@@ -82,9 +85,12 @@ jobs:
         run: |
           pnpm --filter @reko/tauri tauri:build --target universal-apple-darwin
 
-      - name: Get version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Find bundle artifacts
+        id: artifacts
+        run: |
+          DMG=$(find apps/tauri/src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+          echo "Found DMG: $DMG"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -93,10 +99,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            apps/tauri/src-tauri/target/universal-apple-darwin/release/bundle/dmg/Reko_${{ steps.version.outputs.version }}_universal.dmg
+            ${{ steps.artifacts.outputs.dmg }}
             apps/tauri/src-tauri/target/universal-apple-darwin/release/bundle/macos/latest.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clean up keychain
         if: always()
