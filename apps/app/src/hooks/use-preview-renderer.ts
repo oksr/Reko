@@ -6,6 +6,8 @@ import { useMouseEvents } from "@/hooks/use-mouse-events"
 import { WebGLCompositor, type RenderParams } from "@/lib/webgl-compositor"
 import { screenRect } from "@/lib/webgl-compositor/layout"
 import { useAssetUrl } from "@/lib/asset-url"
+import { CURSOR_ICON_ASSETS } from "@/assets/cursors"
+import type { CursorIcon } from "@/types/editor"
 
 interface PreviewDimensions {
   width: number
@@ -230,6 +232,21 @@ export function usePreviewRenderer(
         .catch(() => {})
     }
   }, [effects?.background.type, effects?.background.imageUrl, effects?.background.imageBlur, renderFrame])
+
+  // Load cursor icon texture when cursor icon changes
+  useEffect(() => {
+    const compositor = compositorRef.current
+    if (!compositor || !effects?.cursor.icon) return
+
+    const iconUrl = CURSOR_ICON_ASSETS[effects.cursor.icon as CursorIcon]
+    if (!iconUrl) return
+
+    compositor.loadCursorIcon(iconUrl)
+      .then(() => {
+        renderFrame(useEditorStore.getState().currentTime)
+      })
+      .catch(() => {})
+  }, [effects?.cursor.icon, renderFrame])
 
   // Seek video elements when scrubbing (not playing) or hovering
   useEffect(() => {

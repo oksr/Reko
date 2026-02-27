@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 fn default_true() -> bool { true }
 fn default_one() -> f64 { 1.0 }
+fn default_cursor_icon() -> String { "filled-arrow".to_string() }
+fn default_highlight_size() -> f64 { 40.0 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ProjectState {
@@ -80,11 +82,17 @@ pub struct FrameConfig {
 #[serde(rename_all = "camelCase")]
 pub struct CursorConfig {
     pub enabled: bool,
+    #[serde(default = "default_cursor_icon")]
+    pub icon: String,
+    pub size: f64,
+    #[serde(default)]
+    pub highlight_enabled: bool,
     #[serde(rename = "type")]
-    pub cursor_type: String,      // "highlight" | "spotlight"
-    pub size: f64,                // px radius
-    pub color: String,            // hex
-    pub opacity: f64,             // 0-1
+    pub cursor_type: String,
+    #[serde(default = "default_highlight_size")]
+    pub highlight_size: f64,
+    pub color: String,
+    pub opacity: f64,
     #[serde(default)]
     pub click_highlight: Option<ClickHighlightConfig>,
 }
@@ -334,17 +342,32 @@ mod tests {
     fn test_cursor_config_serialization() {
         let config = CursorConfig {
             enabled: true,
+            icon: "filled-arrow".to_string(),
+            size: 32.0,
+            highlight_enabled: true,
             cursor_type: "highlight".to_string(),
-            size: 40.0,
+            highlight_size: 40.0,
             color: "#ffcc00".to_string(),
             opacity: 0.6,
             click_highlight: None,
         };
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("\"type\":\"highlight\""));
-        assert!(json.contains("\"opacity\":0.6"));
+        assert!(json.contains("\"icon\":\"filled-arrow\""));
+        assert!(json.contains("\"highlightEnabled\":true"));
+        assert!(json.contains("\"highlightSize\":40"));
         let parsed: CursorConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.cursor_type, "highlight");
+        assert_eq!(parsed.icon, "filled-arrow");
+        assert!(parsed.highlight_enabled);
+    }
+
+    #[test]
+    fn test_cursor_config_without_icon_defaults() {
+        let json = r##"{"enabled":true,"type":"highlight","size":40,"color":"#ffcc00","opacity":0.6}"##;
+        let parsed: CursorConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.icon, "filled-arrow");
+        assert!(!parsed.highlight_enabled);
+        assert_eq!(parsed.highlight_size, 40.0);
     }
 
     #[test]

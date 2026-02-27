@@ -9,6 +9,7 @@ import cameraBubbleFrag from "./shaders/camera-bubble.frag"
 import cursorFrag from "./shaders/cursor.frag"
 import clickRippleFrag from "./shaders/click-ripple.frag"
 import motionBlurFrag from "./shaders/motion-blur.frag"
+import cursorIconFrag from "./shaders/cursor-icon.frag"
 
 export interface RenderParams {
   effects: Effects
@@ -33,10 +34,13 @@ export class WebGLCompositor {
   private cursorProgram!: WebGLProgram
   private clickProgram!: WebGLProgram
   private motionBlurProgram!: WebGLProgram
+  private cursorIconProgram!: WebGLProgram
 
   private screenTexture: WebGLTexture | null = null
   private cameraTexture: WebGLTexture | null = null
   private bgImageTexture: WebGLTexture | null = null
+  private cursorIconTexture: WebGLTexture | null = null
+  private currentCursorIcon: string | null = null
 
   private fbo: WebGLFramebuffer | null = null
   private fboTexture: WebGLTexture | null = null
@@ -111,6 +115,23 @@ export class WebGLCompositor {
     }
   }
 
+  async loadCursorIcon(imageUrl: string): Promise<void> {
+    if (this.currentCursorIcon === imageUrl) return
+    try {
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error(`Failed to load cursor icon: ${imageUrl}`))
+        img.src = imageUrl
+      })
+      this.cursorIconTexture = this.uploadToTexture(this.cursorIconTexture, img)
+      this.currentCursorIcon = imageUrl
+    } catch (err) {
+      console.warn("[WebGLCompositor] Cursor icon load failed:", err)
+    }
+  }
+
   render(params: RenderParams): void {
     const gl = this.gl
     const { effects, screenWidth, screenHeight, zoom, cursor, click, motionBlur, cursorVelocity } = params
@@ -145,8 +166,24 @@ export class WebGLCompositor {
     const zoomedScrRect = applyZoomToRect(baseScrRect, zoom)
     this.renderScreen(effects, zoomedScrRect)
 
-    // Layer 2: Cursor
-    if (effects.cursor.enabled && cursor) {
+    // Layer 2: Cursor icon (custom cursor image)
+    if (effects.cursor.enabled && cursor && this.cursorIconTexture) {
+      // Click press animation: scale down to 0.8 then back to 1.0
+      let clickScale = 1.0
+      if (click) {
+        const p = click.progress
+        // Quick press down (0-0.15), then ease back up (0.15-0.5)
+        if (p < 0.15) {
+          clickScale = 1.0 - 0.2 * (p / 0.15)
+        } else if (p < 0.5) {
+          clickScale = 0.8 + 0.2 * ((p - 0.15) / 0.35)
+        }
+      }
+      this.renderCursorIcon(zoomedScrRect, zoom.scale, cursor, effects.cursor.size * clickScale)
+    }
+
+    // Layer 3: Cursor highlight/spotlight effect (independent of icon)
+    if (effects.cursor.highlightEnabled && cursor) {
       this.renderCursor(effects, zoomedScrRect, zoom.scale, cursor, cursorVelocity ?? null)
     }
 
@@ -188,6 +225,8 @@ export class WebGLCompositor {
     gl.deleteProgram(this.cursorProgram)
     gl.deleteProgram(this.clickProgram)
     gl.deleteProgram(this.motionBlurProgram)
+    gl.deleteProgram(this.cursorIconProgram)
+    if (this.cursorIconTexture) gl.deleteTexture(this.cursorIconTexture)
     if (this.screenTexture) gl.deleteTexture(this.screenTexture)
     if (this.cameraTexture) gl.deleteTexture(this.cameraTexture)
     if (this.bgImageTexture) gl.deleteTexture(this.bgImageTexture)
@@ -281,6 +320,34 @@ export class WebGLCompositor {
     gl.drawArrays(gl.TRIANGLES, 0, 3)
   }
 
+  private renderCursorIcon(
+    scrRect: NRect,
+    zoomScale: number,
+    cursor: { x: number; y: number },
+    cursorSizePx: number
+  ): void {
+    const gl = this.gl
+    if (!this.cursorIconTexture) return
+    gl.useProgram(this.cursorIconProgram)
+
+    // Position: cursor UV maps into the zoomed screen rect
+    const cx = scrRect.x + cursor.x * scrRect.w
+    const cy = scrRect.y + cursor.y * scrRect.h
+
+    // Size: convert pixel size to canvas UV space, per-axis
+    const sizeW = cursorSizePx * zoomScale / this.canvasWidth
+    const sizeH = cursorSizePx * zoomScale / this.canvasHeight
+
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, this.cursorIconTexture)
+    gl.uniform1i(this.u(this.cursorIconProgram, "u_cursorIcon"), 0)
+    gl.uniform1f(this.u(this.cursorIconProgram, "u_hasCursorIcon"), 1.0)
+    gl.uniform2f(this.u(this.cursorIconProgram, "u_cursorPos"), cx, cy)
+    gl.uniform2f(this.u(this.cursorIconProgram, "u_cursorSize"), sizeW, sizeH)
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+  }
+
   private renderCursor(
     effects: Effects,
     scrRect: NRect,
@@ -297,7 +364,7 @@ export class WebGLCompositor {
 
     gl.uniform1f(this.u(this.cursorProgram, "u_hasCursor"), 1.0)
     gl.uniform2f(this.u(this.cursorProgram, "u_cursorPos"), cx, cy)
-    gl.uniform1f(this.u(this.cursorProgram, "u_cursorRadius"), effects.cursor.size / this.canvasHeight * zoomScale)
+    gl.uniform1f(this.u(this.cursorProgram, "u_cursorRadius"), effects.cursor.highlightSize / this.canvasHeight * zoomScale)
     gl.uniform1f(this.u(this.cursorProgram, "u_isSpotlight"), effects.cursor.type === "spotlight" ? 1.0 : 0.0)
     gl.uniform1f(this.u(this.cursorProgram, "u_cursorOpacity"), effects.cursor.opacity)
     gl.uniform4fv(this.u(this.cursorProgram, "u_cursorColor"), hexToVec4(effects.cursor.color))
@@ -364,6 +431,7 @@ export class WebGLCompositor {
     this.cursorProgram = linkProgram(gl, vs, compileShader(gl, gl.FRAGMENT_SHADER, cursorFrag))
     this.clickProgram = linkProgram(gl, vs, compileShader(gl, gl.FRAGMENT_SHADER, clickRippleFrag))
     this.motionBlurProgram = linkProgram(gl, vs, compileShader(gl, gl.FRAGMENT_SHADER, motionBlurFrag))
+    this.cursorIconProgram = linkProgram(gl, vs, compileShader(gl, gl.FRAGMENT_SHADER, cursorIconFrag))
   }
 
   private initFBO(width: number, height: number): void {

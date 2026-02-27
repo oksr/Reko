@@ -146,12 +146,30 @@ export interface Sequence {
   overlays: Overlay[]
 }
 
+export type CursorIcon =
+  | "hand-pointer"
+  | "outline-arrow"
+  | "thick-arrow"
+  | "filled-arrow"
+  | "rounded-pointer"
+
+export const CURSOR_ICONS: { id: CursorIcon; label: string }[] = [
+  { id: "filled-arrow", label: "Default" },
+  { id: "outline-arrow", label: "Outline" },
+  { id: "thick-arrow", label: "Thick" },
+  { id: "rounded-pointer", label: "Rounded" },
+  { id: "hand-pointer", label: "Hand" },
+]
+
 export interface CursorConfig {
-  enabled: boolean
+  enabled: boolean           // show custom cursor icon
+  icon: CursorIcon
+  size: number               // cursor icon size in px (16-64)
+  highlightEnabled: boolean  // show highlight/spotlight effect (independent of icon)
   type: "highlight" | "spotlight"
-  size: number        // px radius (20-80)
-  color: string       // hex, used for highlight ring
-  opacity: number     // 0-1
+  highlightSize: number      // effect radius in px
+  color: string              // hex, used for highlight ring
+  opacity: number            // 0-1
   clickHighlight: ClickHighlightConfig
 }
 

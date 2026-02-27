@@ -9,6 +9,8 @@ import { Mp4Muxer } from "./muxer"
 import type { EditorProject, ExportConfig, ExportProgress, MouseEvent as MouseLogEvent } from "@/types/editor"
 import { sequenceTimeToSourceTime, getSequenceDuration } from "@/lib/sequence"
 import { interpolateZoomEvents } from "@/lib/zoom-interpolation"
+import { CURSOR_ICON_ASSETS } from "@/assets/cursors"
+import type { CursorIcon } from "@/types/editor"
 
 const MAX_FRAME_DELTA_MS = 100
 const SCALE_BLUR = 2
@@ -161,6 +163,14 @@ export class ExportPipeline {
           this.assetUrl(project.effects.background.imageUrl),
           project.effects.background.imageBlur ?? 0
         )
+      }
+
+      // Load cursor icon if cursor effects are enabled
+      if (project.effects.cursor.enabled && project.effects.cursor.icon) {
+        const iconUrl = CURSOR_ICON_ASSETS[project.effects.cursor.icon as CursorIcon]
+        if (iconUrl) {
+          await this.compositor.loadCursorIcon(iconUrl)
+        }
       }
 
       // 3. Compute sequence info

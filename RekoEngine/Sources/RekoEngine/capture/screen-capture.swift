@@ -184,7 +184,7 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
         config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
         config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.showsCursor = true
+        config.showsCursor = false
         config.capturesAudio = captureAudio
         if captureAudio {
             config.sampleRate = 48000
@@ -226,7 +226,7 @@ public final class ScreenCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         config.height = Int(window.frame.height) * 2
         config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(fps))
         config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.showsCursor = true
+        config.showsCursor = false
         config.capturesAudio = captureAudio
         if captureAudio {
             config.sampleRate = 48000
