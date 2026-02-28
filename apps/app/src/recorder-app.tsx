@@ -93,8 +93,8 @@ export function RecorderApp() {
     platform.navigation.openWindow({
       url: "/",
       label: "onboarding",
-      width: 500,
-      height: 400,
+      width: 540,
+      height: 520,
       resizable: false,
       decorations: false,
       transparent: false,

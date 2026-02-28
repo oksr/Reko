@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react"
 import { usePlatform } from "@/platform/PlatformContext"
-import { Monitor, Mic, Camera, MousePointerClick, Check, ChevronRight, SkipForward, Shield } from "lucide-react"
+import { Monitor, Mic, Camera, MousePointerClick, Check, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 
 type PermissionStatus = "not_determined" | "granted" | "denied"
 
-interface PermissionStep {
+interface PermissionItem {
   id: string
   kind: string
   title: string
@@ -15,7 +15,7 @@ interface PermissionStep {
   required: boolean
 }
 
-const STEPS: PermissionStep[] = [
+const PERMISSIONS: PermissionItem[] = [
   {
     id: "screen",
     kind: "screen",
@@ -52,77 +52,40 @@ const STEPS: PermissionStep[] = [
 
 export function OnboardingApp() {
   const platform = usePlatform()
-  const [currentStep, setCurrentStep] = useState(0)
   const [statuses, setStatuses] = useState<Record<string, PermissionStatus>>({})
-  const [mandatoryGranted, setMandatoryGranted] = useState(false)
 
-  const step = STEPS[currentStep]
-  const status = statuses[step?.kind] ?? "not_determined"
-  const isGranted = status === "granted"
-  const isLastStep = currentStep === STEPS.length - 1
+  const screenGranted = statuses["screen"] === "granted"
 
-  // Poll current step's permission status
+  // Poll all permission statuses
   useEffect(() => {
-    if (!step) return
     let cancelled = false
 
-    const check = async () => {
-      try {
-        const result = await platform.invoke<string>("check_permission", { kind: step.kind })
-        if (!cancelled) {
-          setStatuses((prev) => ({ ...prev, [step.kind]: result as PermissionStatus }))
+    const checkAll = async () => {
+      for (const perm of PERMISSIONS) {
+        try {
+          const result = await platform.invoke<string>("check_permission", { kind: perm.kind })
+          if (!cancelled) {
+            setStatuses((prev) => ({ ...prev, [perm.kind]: result as PermissionStatus }))
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
       }
     }
 
-    check()
-    const interval = setInterval(check, 2000)
+    checkAll()
+    const interval = setInterval(checkAll, 2000)
     return () => {
       cancelled = true
       clearInterval(interval)
     }
-  }, [step?.kind]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Track when mandatory permission is granted
-  useEffect(() => {
-    if (statuses["screen"] === "granted") {
-      setMandatoryGranted(true)
-    }
-  }, [statuses])
-
-  // Auto-advance when permission is granted
-  useEffect(() => {
-    if (isGranted && !isLastStep) {
-      const timer = setTimeout(() => setCurrentStep((s) => s + 1), 1000)
-      return () => clearTimeout(timer)
-    }
-  }, [isGranted, isLastStep])
-
-  const handleGrant = async () => {
-    // Camera and microphone can trigger a native permission prompt via requestAccess.
-    // Screen recording and accessibility require opening System Settings manually.
-    if (step.kind === "camera" || step.kind === "microphone") {
-      await platform.invoke("request_permission", { kind: step.kind }).catch(() => {})
+  const handleGrant = async (perm: PermissionItem) => {
+    if (perm.kind === "camera" || perm.kind === "microphone") {
+      await platform.invoke("request_permission", { kind: perm.kind }).catch(() => {})
     } else {
-      await platform.invoke("open_permission_settings", { kind: step.kind }).catch(() => {})
-    }
-  }
-
-  const handleSkip = () => {
-    if (isLastStep) {
-      finish()
-    } else {
-      setCurrentStep((s) => s + 1)
-    }
-  }
-
-  const handleContinue = () => {
-    if (isLastStep) {
-      finish()
-    } else {
-      setCurrentStep((s) => s + 1)
+      await platform.invoke("open_permission_settings", { kind: perm.kind }).catch(() => {})
     }
   }
 
@@ -131,95 +94,83 @@ export function OnboardingApp() {
     await platform.window.close()
   }, [platform])
 
-  const handleSkipAll = () => {
-    finish()
-  }
-
-  if (!step) return null
-
-  const Icon = step.icon
-
   return (
     <div className="flex h-screen flex-col bg-neutral-950 text-white" data-tauri-drag-region>
-      {/* Step indicator */}
-      <div className="flex items-center justify-center gap-2 pt-8">
-        {STEPS.map((s, i) => (
-          <div
-            key={s.id}
-            className={`h-1.5 w-8 rounded-full transition-colors ${
-              i < currentStep
-                ? "bg-white/40"
-                : i === currentStep
-                  ? "bg-white"
-                  : "bg-white/15"
-            }`}
-          />
-        ))}
+      {/* Header */}
+      <div className="px-10 pt-10 pb-2" data-tauri-drag-region>
+        <h1 className="text-lg font-semibold">Permissions</h1>
+        <p className="mt-1 text-sm text-white/40">
+          Reko needs a few permissions to record your screen.
+        </p>
       </div>
 
-      {/* Content */}
-      <div className="flex flex-1 flex-col items-center justify-center gap-5 px-12">
-        {/* Icon */}
-        <div className={`flex h-16 w-16 items-center justify-center rounded-2xl ${
-          isGranted ? "bg-emerald-500/15" : "bg-white/10"
-        }`}>
-          {isGranted ? (
-            <Check className="h-8 w-8 text-emerald-400" />
-          ) : (
-            <Icon className="h-8 w-8 text-white/80" />
-          )}
-        </div>
+      {/* Permission rows */}
+      <div className="flex flex-1 flex-col justify-center gap-2 px-10">
+        {PERMISSIONS.map((perm) => {
+          const Icon = perm.icon
+          const granted = statuses[perm.kind] === "granted"
 
-        {/* Title + badge */}
-        <div className="flex items-center gap-2">
-          <h1 className="text-lg font-semibold">{step.title}</h1>
-          <Badge variant={step.required ? "destructive" : "secondary"} className="text-[10px]">
-            {step.required ? "Required" : "Optional"}
-          </Badge>
-        </div>
+          return (
+            <div
+              key={perm.id}
+              className="flex items-center gap-4 rounded-xl bg-white/[0.04] px-4 py-3.5"
+            >
+              {/* Icon */}
+              <div
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                  granted ? "bg-emerald-500/15" : "bg-white/[0.06]"
+                }`}
+              >
+                {granted ? (
+                  <Check className="h-5 w-5 text-emerald-400" />
+                ) : (
+                  <Icon className="h-5 w-5 text-white/50" />
+                )}
+              </div>
 
-        {/* Description */}
-        <p className="text-center text-sm text-white/50">{step.description}</p>
+              {/* Text */}
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-medium">{perm.title}</span>
+                  <Badge
+                    variant={perm.required ? "destructive" : "secondary"}
+                    className="px-1.5 py-0 text-[10px] leading-4"
+                  >
+                    {perm.required ? "Required" : "Optional"}
+                  </Badge>
+                </div>
+                <span className="text-[12px] text-white/35">{perm.description}</span>
+              </div>
 
-        {/* Status / Action */}
-        {isGranted ? (
-          <p className="text-sm font-medium text-emerald-400">Permission granted</p>
-        ) : (
-          <Button onClick={handleGrant} variant="secondary" size="sm">
-            <Shield className="mr-2 h-4 w-4" />
-            Open System Settings
-          </Button>
-        )}
+              {/* Action */}
+              {granted ? (
+                <span className="shrink-0 text-[12px] font-medium text-emerald-400">Granted</span>
+              ) : (
+                <Button
+                  onClick={() => handleGrant(perm)}
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0 gap-1.5 text-[12px]"
+                >
+                  <Shield className="h-3.5 w-3.5" />
+                  Open System Settings
+                </Button>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-8 pb-8">
-        <div>
-          {!step.required && (
-            <Button variant="ghost" size="sm" onClick={handleSkip} className="text-white/40">
-              Skip
-            </Button>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          {mandatoryGranted && !isLastStep && (
-            <Button variant="ghost" size="sm" onClick={handleSkipAll} className="text-white/40">
-              <SkipForward className="mr-1.5 h-3.5 w-3.5" />
-              Skip all & finish
-            </Button>
-          )}
-          {isGranted && (
-            <Button size="sm" onClick={handleContinue}>
-              {isLastStep ? "Finish" : "Continue"}
-              {!isLastStep && <ChevronRight className="ml-1.5 h-3.5 w-3.5" />}
-            </Button>
-          )}
-          {isLastStep && !isGranted && !step.required && (
-            <Button size="sm" onClick={handleSkip}>
-              Finish
-            </Button>
-          )}
-        </div>
+      <div className="flex items-center justify-end px-10 pb-8">
+        <Button
+          size="sm"
+          onClick={finish}
+          disabled={!screenGranted}
+          className="px-5"
+        >
+          {screenGranted ? "Get Started" : "Grant Screen Recording to continue"}
+        </Button>
       </div>
     </div>
   )
