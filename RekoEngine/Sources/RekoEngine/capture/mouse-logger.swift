@@ -11,8 +11,15 @@ public struct MouseLogEvent {
     public let y: Double     // 0-1 normalized
     public let type: String  // "move", "click", "rightClick", "scroll"
 
+    public let cursor: String?  // nil or "arrow" = default arrow; "pointer" = hand; "ibeam" = text
+
     public func toJSON() -> String {
-        return "{\"timeMs\":\(timeMs),\"x\":\(String(format: "%.4f", x)),\"y\":\(String(format: "%.4f", y)),\"type\":\"\(type)\"}"
+        var json = "{\"timeMs\":\(timeMs),\"x\":\(String(format: "%.4f", x)),\"y\":\(String(format: "%.4f", y)),\"type\":\"\(type)\""
+        if let cursor = cursor, cursor != "arrow" {
+            json += ",\"cursor\":\"\(cursor)\""
+        }
+        json += "}"
+        return json
     }
 
     public static func normalize(
@@ -49,6 +56,11 @@ public final class MouseLogger {
     // Throttle: skip move events if less than 16ms apart (~60fps)
     private var lastMoveTimeMs: UInt64 = 0
     private let moveThrottleMs: UInt64 = 16
+
+    // Cursor type detection: throttle AX queries to ~15fps (every 66ms)
+    private var lastCursorCheckMs: UInt64 = 0
+    private let cursorCheckThrottleMs: UInt64 = 66
+    private var cachedCursorType: String?
 
     // Cached timebase info (avoid syscall per event)
     private static let timebaseInfo: mach_timebase_info_data_t = {
@@ -135,6 +147,66 @@ public final class MouseLogger {
         lock.unlock()
     }
 
+    // Cached system-wide AX element (never changes, safe to reuse).
+    private static let systemWideElement: AXUIElement = {
+        let el = AXUIElementCreateSystemWide()
+        // Cap IPC timeout to 100ms so a hung target app can't block the main thread.
+        AXUIElementSetMessagingTimeout(el, 0.1)
+        return el
+    }()
+
+    /// Infer cursor type from the Accessibility element under the given screen point.
+    /// Uses AXUIElement to query the role of the UI element at the cursor position,
+    /// since NSCursor.currentSystem returns nil on modern macOS.
+    /// The point must be in CG screen coordinates (top-left origin).
+    private static func cursorTypeFromAccessibility(at point: CGPoint) -> String? {
+        var elementRef: AXUIElement?
+        let result = AXUIElementCopyElementAtPosition(systemWideElement, Float(point.x), Float(point.y), &elementRef)
+        guard result == .success, let element = elementRef else { return nil }
+
+        var roleRef: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef)
+        guard let role = roleRef as? String else { return nil }
+
+        switch role {
+        case "AXLink", "AXButton", "AXMenuButton", "AXPopUpButton",
+             "AXCheckBox", "AXRadioButton", "AXMenuItem":
+            return "pointer"
+        case "AXTextField", "AXTextArea", "AXComboBox", "AXSearchField":
+            return "ibeam"
+        default:
+            // Walk up to 3 parent levels to detect nested elements inside links/buttons
+            // (e.g. AXStaticText > AXGroup > AXLink in web content).
+            if role == "AXStaticText" || role == "AXGroup" || role == "AXImage" {
+                var current = element
+                for _ in 0..<3 {
+                    var parentRef: CFTypeRef?
+                    AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parentRef)
+                    guard let parent = parentRef,
+                          CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+                    let parentElement = parent as! AXUIElement  // safe: verified by CFGetTypeID above
+                    var parentRoleRef: CFTypeRef?
+                    AXUIElementCopyAttributeValue(parentElement, kAXRoleAttribute as CFString, &parentRoleRef)
+                    if let parentRole = parentRoleRef as? String {
+                        switch parentRole {
+                        case "AXLink", "AXButton", "AXMenuButton", "AXPopUpButton":
+                            return "pointer"
+                        case "AXTextField", "AXTextArea":
+                            return "ibeam"
+                        default:
+                            break
+                        }
+                    }
+                    current = parentElement
+                }
+            }
+            return nil
+        }
+    }
+
+    /// Called on the main thread by NSEvent monitors (both global and local).
+    /// `lastMoveTimeMs`, `lastCursorCheckMs`, and `cachedCursorType` are safe
+    /// to access without the lock because delivery is always on the main run loop.
     private func handleNSEvent(_ event: NSEvent) {
         // NSEvent gives mouse location in screen coordinates (bottom-left origin).
         // Use CGEvent location for top-left origin consistency with our coordinate system.
@@ -170,7 +242,16 @@ public final class MouseLogger {
             return
         }
 
-        let logEvent = MouseLogEvent(timeMs: timeMs, x: nx, y: ny, type: eventType)
+        // Infer cursor type from the Accessibility element under the mouse.
+        // Throttled to ~15fps to avoid expensive AX queries on every move event.
+        if timeMs >= lastCursorCheckMs &+ cursorCheckThrottleMs || eventType != "move" {
+            let screenPoint = CGPoint(x: location.x, y: finalY)
+            cachedCursorType = Self.cursorTypeFromAccessibility(at: screenPoint)
+            lastCursorCheckMs = timeMs
+        }
+        let cursorType = cachedCursorType
+
+        let logEvent = MouseLogEvent(timeMs: timeMs, x: nx, y: ny, type: eventType, cursor: cursorType)
         let line = logEvent.toJSON() + "\n"
         guard let data = line.data(using: .utf8) else { return }
 

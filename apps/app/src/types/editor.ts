@@ -83,11 +83,14 @@ export interface FrameConfig {
   shadowIntensity: number // 0-1
 }
 
+export type SystemCursorType = "arrow" | "pointer" | "ibeam"
+
 export interface MouseEvent {
   timeMs: number
   x: number           // normalized 0-1 (fraction of screen width)
   y: number           // normalized 0-1 (fraction of screen height)
   type: "move" | "click" | "rightClick" | "scroll"
+  cursor?: SystemCursorType  // system cursor type at this position (defaults to "arrow")
 }
 
 export interface ZoomEvent {

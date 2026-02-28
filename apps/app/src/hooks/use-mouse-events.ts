@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useEditorStore } from "@/stores/editor-store"
 import { useAssetUrl } from "@/lib/asset-url"
-import type { MouseEvent as MouseLogEvent } from "@/types/editor"
+import type { MouseEvent as MouseLogEvent, SystemCursorType } from "@/types/editor"
 
 /**
  * Loads mouse_events.jsonl and provides the cursor position at the current time.
@@ -40,7 +40,7 @@ export function useMouseEvents() {
 
   // Binary search for cursor position at current time
   const getCursorAt = useCallback(
-    (timeMs: number): { x: number; y: number } | null => {
+    (timeMs: number): { x: number; y: number; cursor?: SystemCursorType } | null => {
       if (events.length === 0) return null
 
       // Binary search for the last event at or before timeMs
@@ -56,7 +56,8 @@ export function useMouseEvents() {
       }
 
       if (events[lo].timeMs > timeMs) return null
-      return { x: events[lo].x, y: events[lo].y }
+      const evt = events[lo]
+      return { x: evt.x, y: evt.y, cursor: evt.cursor }
     },
     [events]
   )

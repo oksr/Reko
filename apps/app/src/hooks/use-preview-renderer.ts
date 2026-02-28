@@ -6,7 +6,7 @@ import { useMouseEvents } from "@/hooks/use-mouse-events"
 import { WebGLCompositor, type RenderParams } from "@/lib/webgl-compositor"
 import { screenRect } from "@/lib/webgl-compositor/layout"
 import { useAssetUrl } from "@/lib/asset-url"
-import { CURSOR_ICON_ASSETS } from "@/assets/cursors"
+import { CURSOR_ICON_ASSETS, SYSTEM_CURSOR_ASSETS } from "@/assets/cursors"
 import type { CursorIcon } from "@/types/editor"
 
 interface PreviewDimensions {
@@ -207,6 +207,7 @@ export function usePreviewRenderer(
         screenHeight: screenVideo.videoHeight || 1080,
         zoom,
         cursor: cursorPos,
+        cursorType: cursorPos?.cursor,
         click: clickParam,
         motionBlur: motionBlurParam,
         cursorVelocity,
@@ -247,6 +248,26 @@ export function usePreviewRenderer(
       })
       .catch(() => {})
   }, [effects?.cursor.icon, renderFrame])
+
+  // Pre-load system cursor textures (pointer, ibeam) when compositor is ready
+  useEffect(() => {
+    const compositor = compositorRef.current
+    if (!compositor) return
+
+    const urls: Partial<Record<string, string>> = {}
+    const loads: Promise<void>[] = []
+    for (const [type, url] of Object.entries(SYSTEM_CURSOR_ASSETS)) {
+      if (url) {
+        urls[type] = url
+        loads.push(compositor.loadSystemCursorIcon(url))
+      }
+    }
+    compositor.setSystemCursorUrls(urls)
+
+    Promise.all(loads).then(() => {
+      renderFrame(useEditorStore.getState().currentTime)
+    }).catch(() => {})
+  }, [dims, renderFrame]) // dims changes when compositor is (re-)created
 
   // Seek video elements when scrubbing (not playing) or hovering
   useEffect(() => {

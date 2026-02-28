@@ -1,6 +1,6 @@
 import { compileShader, linkProgram, getUniform } from "./shader-utils"
 import { screenRect, cameraRect, applyZoomToRect, type NRect } from "./layout"
-import type { Effects } from "@/types/editor"
+import type { Effects, SystemCursorType } from "@/types/editor"
 
 import quadVert from "./shaders/quad.vert"
 import backgroundFrag from "./shaders/background.frag"
@@ -17,6 +17,7 @@ export interface RenderParams {
   screenHeight: number
   zoom: { x: number; y: number; scale: number }
   cursor?: { x: number; y: number } | null
+  cursorType?: SystemCursorType | null
   click?: { x: number; y: number; progress: number } | null
   motionBlur?: { dx: number; dy: number; intensity: number } | null
   cursorVelocity?: { dx: number; dy: number } | null
@@ -41,6 +42,10 @@ export class WebGLCompositor {
   private bgImageTexture: WebGLTexture | null = null
   private cursorIconTexture: WebGLTexture | null = null
   private currentCursorIcon: string | null = null
+  /** Pre-loaded textures for system cursor types (pointer, ibeam). Keyed by asset URL. */
+  private systemCursorTextures = new Map<string, WebGLTexture>()
+  /** Maps SystemCursorType → asset URL for texture lookup during render. */
+  private activeCursorTypeUrls: Partial<Record<string, string>> = {}
 
   private fbo: WebGLFramebuffer | null = null
   private fboTexture: WebGLTexture | null = null
@@ -132,9 +137,32 @@ export class WebGLCompositor {
     }
   }
 
+  /** Pre-load a system cursor icon (pointer, ibeam) into the texture cache. */
+  async loadSystemCursorIcon(imageUrl: string): Promise<void> {
+    if (this.systemCursorTextures.has(imageUrl)) return
+    try {
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error(`Failed to load system cursor: ${imageUrl}`))
+        img.src = imageUrl
+      })
+      const tex = this.uploadToTexture(null, img)
+      this.systemCursorTextures.set(imageUrl, tex)
+    } catch (err) {
+      console.warn("[WebGLCompositor] System cursor icon load failed:", err)
+    }
+  }
+
+  /** Set the mapping from SystemCursorType to asset URL for texture lookup during render. */
+  setSystemCursorUrls(urls: Partial<Record<string, string>>): void {
+    this.activeCursorTypeUrls = urls
+  }
+
   render(params: RenderParams): void {
     const gl = this.gl
-    const { effects, screenWidth, screenHeight, zoom, cursor, click, motionBlur, cursorVelocity } = params
+    const { effects, screenWidth, screenHeight, zoom, cursor, cursorType, click, motionBlur, cursorVelocity } = params
 
     const useMotionBlur = motionBlur != null && (
       Math.abs(motionBlur.dx) > 0.0005 ||
@@ -167,19 +195,30 @@ export class WebGLCompositor {
     this.renderScreen(effects, zoomedScrRect)
 
     // Layer 2: Cursor icon (custom cursor image)
-    if (effects.cursor.enabled && cursor && this.cursorIconTexture) {
-      // Click press animation: scale down to 0.8 then back to 1.0
-      let clickScale = 1.0
-      if (click) {
-        const p = click.progress
-        // Quick press down (0-0.15), then ease back up (0.15-0.5)
-        if (p < 0.15) {
-          clickScale = 1.0 - 0.2 * (p / 0.15)
-        } else if (p < 0.5) {
-          clickScale = 0.8 + 0.2 * ((p - 0.15) / 0.35)
-        }
+    if (effects.cursor.enabled && cursor) {
+      // Resolve which texture to use: system cursor type overrides use the
+      // pre-loaded systemCursorTextures map; "arrow"/undefined uses user's chosen icon.
+      let activeTexture = this.cursorIconTexture
+      const ct = cursorType
+      const sysUrl = ct ? this.activeCursorTypeUrls[ct] : undefined
+      if (ct && ct !== "arrow" && sysUrl) {
+        activeTexture = this.systemCursorTextures.get(sysUrl) ?? this.cursorIconTexture
       }
-      this.renderCursorIcon(zoomedScrRect, zoom.scale, cursor, effects.cursor.size * clickScale)
+
+      if (activeTexture) {
+        // Click press animation: scale down to 0.8 then back to 1.0
+        let clickScale = 1.0
+        if (click) {
+          const p = click.progress
+          // Quick press down (0-0.15), then ease back up (0.15-0.5)
+          if (p < 0.15) {
+            clickScale = 1.0 - 0.2 * (p / 0.15)
+          } else if (p < 0.5) {
+            clickScale = 0.8 + 0.2 * ((p - 0.15) / 0.35)
+          }
+        }
+        this.renderCursorIcon(zoomedScrRect, zoom.scale, cursor, effects.cursor.size * clickScale, activeTexture)
+      }
     }
 
     // Layer 3: Cursor highlight/spotlight effect (independent of icon)
@@ -227,6 +266,8 @@ export class WebGLCompositor {
     gl.deleteProgram(this.motionBlurProgram)
     gl.deleteProgram(this.cursorIconProgram)
     if (this.cursorIconTexture) gl.deleteTexture(this.cursorIconTexture)
+    for (const tex of this.systemCursorTextures.values()) gl.deleteTexture(tex)
+    this.systemCursorTextures.clear()
     if (this.screenTexture) gl.deleteTexture(this.screenTexture)
     if (this.cameraTexture) gl.deleteTexture(this.cameraTexture)
     if (this.bgImageTexture) gl.deleteTexture(this.bgImageTexture)
@@ -324,10 +365,12 @@ export class WebGLCompositor {
     scrRect: NRect,
     zoomScale: number,
     cursor: { x: number; y: number },
-    cursorSizePx: number
+    cursorSizePx: number,
+    texture?: WebGLTexture
   ): void {
     const gl = this.gl
-    if (!this.cursorIconTexture) return
+    const tex = texture ?? this.cursorIconTexture
+    if (!tex) return
     gl.useProgram(this.cursorIconProgram)
 
     // Position: cursor UV maps into the zoomed screen rect
@@ -339,7 +382,7 @@ export class WebGLCompositor {
     const sizeH = cursorSizePx * zoomScale / this.canvasHeight
 
     gl.activeTexture(gl.TEXTURE0)
-    gl.bindTexture(gl.TEXTURE_2D, this.cursorIconTexture)
+    gl.bindTexture(gl.TEXTURE_2D, tex)
     gl.uniform1i(this.u(this.cursorIconProgram, "u_cursorIcon"), 0)
     gl.uniform1f(this.u(this.cursorIconProgram, "u_hasCursorIcon"), 1.0)
     gl.uniform2f(this.u(this.cursorIconProgram, "u_cursorPos"), cx, cy)

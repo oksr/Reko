@@ -9,8 +9,8 @@ import { Mp4Muxer } from "./muxer"
 import type { EditorProject, ExportConfig, ExportProgress, MouseEvent as MouseLogEvent } from "@/types/editor"
 import { sequenceTimeToSourceTime, getSequenceDuration } from "@/lib/sequence"
 import { interpolateZoomEvents } from "@/lib/zoom-interpolation"
-import { CURSOR_ICON_ASSETS } from "@/assets/cursors"
-import type { CursorIcon } from "@/types/editor"
+import { CURSOR_ICON_ASSETS, SYSTEM_CURSOR_ASSETS } from "@/assets/cursors"
+import type { CursorIcon, SystemCursorType } from "@/types/editor"
 
 const MAX_FRAME_DELTA_MS = 100
 const SCALE_BLUR = 2
@@ -39,7 +39,7 @@ async function loadMouseEvents(url: string): Promise<MouseLogEvent[]> {
 }
 
 /** Binary search for cursor position at a given time. */
-function getCursorAt(events: MouseLogEvent[], timeMs: number): { x: number; y: number } | null {
+function getCursorAt(events: MouseLogEvent[], timeMs: number): { x: number; y: number; cursor?: SystemCursorType } | null {
   if (events.length === 0) return null
   let lo = 0
   let hi = events.length - 1
@@ -49,7 +49,8 @@ function getCursorAt(events: MouseLogEvent[], timeMs: number): { x: number; y: n
     else hi = mid - 1
   }
   if (events[lo].timeMs > timeMs) return null
-  return { x: events[lo].x, y: events[lo].y }
+  const evt = events[lo]
+  return { x: evt.x, y: evt.y, cursor: evt.cursor }
 }
 
 /** Find click events in a time range. */
@@ -171,6 +172,15 @@ export class ExportPipeline {
         if (iconUrl) {
           await this.compositor.loadCursorIcon(iconUrl)
         }
+        // Pre-load system cursor textures (pointer, ibeam)
+        const urls: Partial<Record<string, string>> = {}
+        for (const [type, url] of Object.entries(SYSTEM_CURSOR_ASSETS)) {
+          if (url) {
+            urls[type] = url
+            await this.compositor.loadSystemCursorIcon(url)
+          }
+        }
+        this.compositor.setSystemCursorUrls(urls)
       }
 
       // 3. Compute sequence info
@@ -309,6 +319,7 @@ export class ExportPipeline {
           screenHeight: videoHeight,
           zoom,
           cursor: cursorPos,
+          cursorType: cursorPos?.cursor,
           click: clickParam,
           motionBlur: motionBlurParam,
           cursorVelocity,
