@@ -83,7 +83,17 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin({
+            let mut updater = tauri_plugin_updater::Builder::new();
+            if let Some(token) = option_env!("UPDATER_GITHUB_TOKEN") {
+                updater = updater
+                    .header("Authorization", format!("token {token}"))
+                    .expect("failed to set updater auth header")
+                    .header("Accept", "application/octet-stream")
+                    .expect("failed to set updater accept header");
+            }
+            updater.build()
+        })
         .plugin(tauri_plugin_process::init())
         .manage(RecordingState {
             active_session_id: Mutex::new(None),
