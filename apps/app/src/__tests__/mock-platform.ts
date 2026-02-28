@@ -21,6 +21,7 @@ export function createMockPlatform(overrides?: Partial<Platform>): Platform {
     navigation: {
       openWindow: vi.fn().mockResolvedValue(undefined),
       closeWindow: vi.fn().mockResolvedValue(undefined),
+      showWindow: vi.fn().mockResolvedValue(undefined),
     },
     filesystem: {
       assetUrl: vi.fn().mockImplementation((p: string) => `/__asset__${p}`),

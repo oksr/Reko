@@ -81,6 +81,10 @@ const tauriNavigation: PlatformNavigation = {
     const win = await WebviewWindow.getByLabel(label)
     await win?.close()
   },
+  async showWindow(label: string) {
+    const win = await WebviewWindow.getByLabel(label)
+    await win?.show()
+  },
 }
 
 const tauriFilesystem: PlatformFilesystem = {

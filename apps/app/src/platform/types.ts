@@ -65,6 +65,8 @@ export interface PlatformNavigation {
   openWindow(options: WindowOptions): Promise<void>
   /** Close a specific window by label */
   closeWindow(label: string): Promise<void>
+  /** Show a specific window by label */
+  showWindow(label: string): Promise<void>
 }
 
 export interface PlatformFilesystem {

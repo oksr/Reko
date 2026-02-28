@@ -105,13 +105,18 @@ export function RecorderApp() {
       decorations: false,
       transparent: false,
       title: "Reko — Setup",
+    }).catch(() => {
+      // If onboarding window fails to open, show recorder directly
+      windowHiddenRef.current = false
+      platform.window.show().catch(() => {})
+      handlePermissionGranted()
     })
 
-    // Listen for focus to detect when onboarding is done
+    // When onboarding finishes, it calls showWindow("recorder") which makes us
+    // visible again. Listen for the resulting focus event to initialize.
     const unlistenPromise = platform.window.listen("tauri://focus", async () => {
       if (localStorage.getItem("onboarding_completed") === "true") {
         windowHiddenRef.current = false
-        await platform.window.show()
         handlePermissionGranted()
       }
     })

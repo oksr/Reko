@@ -122,12 +122,8 @@ export function OnboardingApp() {
 
   const finish = useCallback(async () => {
     localStorage.setItem("onboarding_completed", "true")
-    try {
-      await platform.navigation.closeWindow("onboarding")
-      // Close this window; the recorder window handles showing itself on focus
-    } catch {
-      // ignore
-    }
+    // Show the recorder window (it was hidden while onboarding ran)
+    await platform.navigation.showWindow("recorder").catch(() => {})
     await platform.window.close()
   }, [platform])
 
