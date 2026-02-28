@@ -117,28 +117,6 @@ jobs:
           echo "Found tar.gz: $TARGZ"
           echo "Found sig: $SIG"
 
-      - name: Generate latest.json
-        id: latest
-        run: |
-          VERSION=$(jq -r '.version' apps/tauri/src-tauri/tauri.conf.json)
-          SIG=$(cat "${{ steps.artifacts.outputs.sig }}")
-          TARGZ_NAME=$(basename "${{ steps.artifacts.outputs.targz }}")
-          cat > latest.json <<ENDJSON
-          {
-            "version": "$VERSION",
-            "notes": "Reko v$VERSION",
-            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "$SIG",
-                "url": "$TARGZ_NAME"
-              }
-            }
-          }
-          ENDJSON
-          echo "Generated latest.json:"
-          cat latest.json
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -149,7 +127,36 @@ jobs:
             ${{ steps.artifacts.outputs.dmg }}
             ${{ steps.artifacts.outputs.targz }}
             ${{ steps.artifacts.outputs.sig }}
-            latest.json
+
+      - name: Update latest.json gist
+        env:
+          GH_TOKEN: ${{ secrets.UPDATER_GITHUB_TOKEN }}
+        run: |
+          VERSION=$(jq -r '.version' apps/tauri/src-tauri/tauri.conf.json)
+          SIG=$(cat "${{ steps.artifacts.outputs.sig }}")
+
+          # Get the tar.gz asset API URL from the release we just created
+          TARGZ_API_URL=$(gh api "repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" \
+            --jq '.assets[] | select(.name == "Reko.app.tar.gz") | .url')
+
+          cat > /tmp/latest.json <<ENDJSON
+          {
+            "version": "$VERSION",
+            "notes": "Reko v$VERSION",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "$SIG",
+                "url": "$TARGZ_API_URL"
+              }
+            }
+          }
+          ENDJSON
+
+          echo "Generated latest.json:"
+          cat /tmp/latest.json
+
+          gh gist edit ed665656d5ca925260a017665a9e912e -f latest.json /tmp/latest.json
 
       - name: Clean up keychain
         if: always()
