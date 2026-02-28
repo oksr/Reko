@@ -111,6 +111,7 @@ export function RecorderApp() {
     const unlistenPromise = platform.window.listen("tauri://focus", async () => {
       if (localStorage.getItem("onboarding_completed") === "true") {
         windowHiddenRef.current = false
+        await platform.window.show()
         handlePermissionGranted()
       }
     })
