@@ -17,6 +17,8 @@ extern "C" {
     fn ck_stop_camera_prewarm() -> i32;
     fn ck_check_microphone_permission() -> i32;
     fn ck_check_camera_permission() -> i32;
+    fn ck_request_microphone_permission() -> i32;
+    fn ck_request_camera_permission() -> i32;
     fn ck_check_accessibility_permission() -> i32;
     fn ck_check_screen_recording_permission() -> i32;
 }
@@ -126,6 +128,14 @@ impl RekoEngine {
 
     pub fn check_camera_permission() -> i32 {
         unsafe { ck_check_camera_permission() }
+    }
+
+    pub fn request_microphone_permission() -> i32 {
+        unsafe { ck_request_microphone_permission() }
+    }
+
+    pub fn request_camera_permission() -> i32 {
+        unsafe { ck_request_camera_permission() }
     }
 
     pub fn check_accessibility_permission() -> i32 {

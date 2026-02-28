@@ -7,7 +7,7 @@
     "beforeDevCommand": "pnpm --filter @reko/tauri dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "pnpm --filter @reko/app build && pnpm --filter @reko/tauri build",
-    "frontendDist": "../../app/dist"
+    "frontendDist": "../dist"
   },
   "app": {
     "macOSPrivateApi": true,

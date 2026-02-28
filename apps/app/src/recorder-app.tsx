@@ -54,8 +54,6 @@ export function RecorderApp() {
   // Recording state
   const [isPaused, setIsPaused] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const windowHiddenRef = useRef(false)
-
   // Source type
   const [sourceType, setSourceType] = useState<SourceType>("display")
 
@@ -87,14 +85,10 @@ export function RecorderApp() {
       .catch(() => {})
   }, [platform])
 
-  // First-launch onboarding: open onboarding window and hide recorder
+  // First-launch onboarding: open onboarding window on top of recorder
   useEffect(() => {
     const completed = localStorage.getItem("onboarding_completed")
     if (completed === "true") return
-
-    // Hide recorder and open onboarding window
-    windowHiddenRef.current = true
-    platform.window.hide().catch(() => {})
 
     platform.navigation.openWindow({
       url: "/",
@@ -106,23 +100,9 @@ export function RecorderApp() {
       transparent: false,
       title: "Reko — Setup",
     }).catch(() => {
-      // If onboarding window fails to open, show recorder directly
-      windowHiddenRef.current = false
-      platform.window.show().catch(() => {})
-      handlePermissionGranted()
+      // If onboarding window fails to open, proceed without it
     })
-
-    // When onboarding finishes, it calls showWindow("recorder") which makes us
-    // visible again. Listen for the resulting focus event to initialize.
-    const unlistenPromise = platform.window.listen("tauri://focus", async () => {
-      if (localStorage.getItem("onboarding_completed") === "true") {
-        windowHiddenRef.current = false
-        handlePermissionGranted()
-      }
-    })
-
-    return () => { unlistenPromise.then((fn) => fn()) }
-  }, [handlePermissionGranted]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Position window at bottom-center on mount
   useEffect(() => {
@@ -142,9 +122,7 @@ export function RecorderApp() {
       } catch (e) {
         console.error("Failed to position window:", e)
       }
-      if (!windowHiddenRef.current) {
-        await platform.window.show().catch(() => {})
-      }
+      await platform.window.show().catch(() => {})
     }
     init()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

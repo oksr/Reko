@@ -75,7 +75,10 @@ const tauriNavigation: PlatformNavigation = {
       shadow: options.shadow,
       visible: options.visible,
     })
-    await win.once("tauri://created", () => {})
+    await new Promise<void>((resolve, reject) => {
+      win.once("tauri://created", () => resolve())
+      win.once("tauri://error", (e) => reject(new Error(String(e.payload))))
+    })
   },
   async closeWindow(label: string) {
     const win = await WebviewWindow.getByLabel(label)

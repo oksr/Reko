@@ -156,6 +156,7 @@ pub fn run() {
             commands::editor::copy_background_image,
             get_home_dir,
             commands::permissions::check_permission,
+            commands::permissions::request_permission,
             commands::permissions::open_permission_settings,
         ])
         .run(tauri::generate_context!())

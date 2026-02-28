@@ -43,6 +43,30 @@ public func ck_check_camera_permission() -> Int32 {
     }
 }
 
+@_cdecl("ck_request_microphone_permission")
+public func ck_request_microphone_permission() -> Int32 {
+    let semaphore = DispatchSemaphore(value: 0)
+    var granted = false
+    AVCaptureDevice.requestAccess(for: .audio) { result in
+        granted = result
+        semaphore.signal()
+    }
+    semaphore.wait()
+    return granted ? 1 : 2
+}
+
+@_cdecl("ck_request_camera_permission")
+public func ck_request_camera_permission() -> Int32 {
+    let semaphore = DispatchSemaphore(value: 0)
+    var granted = false
+    AVCaptureDevice.requestAccess(for: .video) { result in
+        granted = result
+        semaphore.signal()
+    }
+    semaphore.wait()
+    return granted ? 1 : 2
+}
+
 @_cdecl("ck_check_accessibility_permission")
 public func ck_check_accessibility_permission() -> Int32 {
     return AXIsProcessTrusted() ? 1 : 0

@@ -101,7 +101,13 @@ export function OnboardingApp() {
   }, [isGranted, isLastStep])
 
   const handleGrant = async () => {
-    await platform.invoke("open_permission_settings", { kind: step.kind }).catch(() => {})
+    // Camera and microphone can trigger a native permission prompt via requestAccess.
+    // Screen recording and accessibility require opening System Settings manually.
+    if (step.kind === "camera" || step.kind === "microphone") {
+      await platform.invoke("request_permission", { kind: step.kind }).catch(() => {})
+    } else {
+      await platform.invoke("open_permission_settings", { kind: step.kind }).catch(() => {})
+    }
   }
 
   const handleSkip = () => {
@@ -122,8 +128,6 @@ export function OnboardingApp() {
 
   const finish = useCallback(async () => {
     localStorage.setItem("onboarding_completed", "true")
-    // Show the recorder window (it was hidden while onboarding ran)
-    await platform.navigation.showWindow("recorder").catch(() => {})
     await platform.window.close()
   }, [platform])
 

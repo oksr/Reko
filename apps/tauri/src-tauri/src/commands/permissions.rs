@@ -18,6 +18,20 @@ pub async fn check_permission(kind: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+pub async fn request_permission(kind: String) -> Result<String, String> {
+    let status = match kind.as_str() {
+        "microphone" => RekoEngine::request_microphone_permission(),
+        "camera" => RekoEngine::request_camera_permission(),
+        _ => return Err(format!("Cannot request permission for: {}", kind)),
+    };
+    let label = match status {
+        1 => "granted",
+        _ => "denied",
+    };
+    Ok(label.to_string())
+}
+
+#[tauri::command]
 pub fn open_permission_settings(kind: String) -> Result<(), String> {
     let url = match kind.as_str() {
         "screen" => "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
