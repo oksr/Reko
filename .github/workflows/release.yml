@@ -102,9 +102,19 @@ jobs:
       - name: Find bundle artifacts
         id: artifacts
         run: |
-          DMG=$(find apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg -name "*.dmg" | head -1)
+          BUNDLE_DIR=apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle
+          DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" | head -1)
+          TARGZ=$(find "$BUNDLE_DIR/macos" -name "*.tar.gz" ! -name "*.sig" | head -1)
+          SIG=$(find "$BUNDLE_DIR/macos" -name "*.tar.gz.sig" | head -1)
+          LATEST="$BUNDLE_DIR/macos/latest.json"
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+          echo "targz=$TARGZ" >> "$GITHUB_OUTPUT"
+          echo "sig=$SIG" >> "$GITHUB_OUTPUT"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
           echo "Found DMG: $DMG"
+          echo "Found tar.gz: $TARGZ"
+          echo "Found sig: $SIG"
+          echo "Found latest.json: $(test -f "$LATEST" && echo 'YES' || echo 'NOT FOUND')"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -114,7 +124,9 @@ jobs:
           prerelease: false
           files: |
             ${{ steps.artifacts.outputs.dmg }}
-            apps/tauri/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/latest.json
+            ${{ steps.artifacts.outputs.targz }}
+            ${{ steps.artifacts.outputs.sig }}
+            ${{ steps.artifacts.outputs.latest }}
 
       - name: Clean up keychain
         if: always()

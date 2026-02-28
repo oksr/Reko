@@ -20,6 +20,7 @@
     "core:webview:allow-create-webview-window",
     "global-shortcut:default",
     "notification:default",
-    "updater:default"
+    "updater:default",
+    "process:default"
   ]
 }
