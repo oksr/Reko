@@ -88,9 +88,7 @@ pub fn run() {
             if let Some(token) = option_env!("UPDATER_GITHUB_TOKEN") {
                 updater = updater
                     .header("Authorization", format!("token {token}"))
-                    .expect("failed to set updater auth header")
-                    .header("Accept", "application/octet-stream")
-                    .expect("failed to set updater accept header");
+                    .expect("failed to set updater auth header");
             }
             updater.build()
         })
