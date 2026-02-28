@@ -43,9 +43,6 @@ jobs:
           shared-key: reko-rust
           save-always: true
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.7
-
       - name: Cache Swift build
         uses: actions/cache@v4
         with:
@@ -89,7 +86,6 @@ jobs:
 
       - name: Build aarch64 binary
         env:
-          RUSTC_WRAPPER: sccache
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
@@ -106,15 +102,34 @@ jobs:
           DMG=$(find "$BUNDLE_DIR/dmg" -name "*.dmg" | head -1)
           TARGZ=$(find "$BUNDLE_DIR/macos" -name "*.tar.gz" ! -name "*.sig" | head -1)
           SIG=$(find "$BUNDLE_DIR/macos" -name "*.tar.gz.sig" | head -1)
-          LATEST="$BUNDLE_DIR/macos/latest.json"
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           echo "targz=$TARGZ" >> "$GITHUB_OUTPUT"
           echo "sig=$SIG" >> "$GITHUB_OUTPUT"
-          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
           echo "Found DMG: $DMG"
           echo "Found tar.gz: $TARGZ"
           echo "Found sig: $SIG"
-          echo "Found latest.json: $(test -f "$LATEST" && echo 'YES' || echo 'NOT FOUND')"
+
+      - name: Generate latest.json
+        id: latest
+        run: |
+          VERSION=$(jq -r '.version' apps/tauri/src-tauri/tauri.conf.json)
+          SIG=$(cat "${{ steps.artifacts.outputs.sig }}")
+          TARGZ_NAME=$(basename "${{ steps.artifacts.outputs.targz }}")
+          cat > latest.json <<ENDJSON
+          {
+            "version": "$VERSION",
+            "notes": "Reko v$VERSION",
+            "pub_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "$SIG",
+                "url": "$TARGZ_NAME"
+              }
+            }
+          }
+          ENDJSON
+          echo "Generated latest.json:"
+          cat latest.json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -126,7 +141,7 @@ jobs:
             ${{ steps.artifacts.outputs.dmg }}
             ${{ steps.artifacts.outputs.targz }}
             ${{ steps.artifacts.outputs.sig }}
-            ${{ steps.artifacts.outputs.latest }}
+            latest.json
 
       - name: Clean up keychain
         if: always()
