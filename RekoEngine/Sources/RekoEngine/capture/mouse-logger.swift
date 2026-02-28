@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import ApplicationServices
+import AppKit
 
 // MARK: - Mouse Log Event
 
@@ -26,16 +27,17 @@ public struct MouseLogEvent {
 
 // MARK: - Mouse Logger
 
-/// Logs mouse events to a JSONL file using CGEvent tap.
-/// Requires Accessibility permission (Input Monitoring on macOS 14+).
-/// Creates the event tap and its run loop on a dedicated thread — the tap's
-/// CFMachPort must be created on the same thread whose CFRunLoop pumps it,
-/// and Tauri's main thread doesn't pump CFRunLoop at all.
+/// Logs mouse events to a JSONL file using NSEvent global monitors.
+/// Requires Accessibility permission.
+///
+/// Uses NSEvent.addGlobalMonitorForEvents (for events in other apps) and
+/// NSEvent.addLocalMonitorForEvents (for events in our own app) instead
+/// of CGEvent taps. NSEvent monitors are more reliable in production
+/// builds — CGEvent taps can be permanently invalidated by macOS after
+/// certain user interactions.
 public final class MouseLogger {
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    private var tapRunLoop: CFRunLoop?
-    private var tapThread: Thread?
+    private var globalMonitor: Any?
+    private var localMonitor: Any?
     private var fileHandle: FileHandle?
     private let outputURL: URL
     private let screenWidth: Int
@@ -73,60 +75,26 @@ public final class MouseLogger {
 
         startTime = Self.currentTimeMs()
 
-        // Use a semaphore so start() blocks until the tap thread reports success/failure.
-        let semaphore = DispatchSemaphore(value: 0)
-        var tapOK = false
+        let eventMask: NSEvent.EventTypeMask = [
+            .mouseMoved,
+            .leftMouseDown,
+            .rightMouseDown,
+            .leftMouseDragged,
+            .scrollWheel,
+        ]
 
-        let thread = Thread { [self] in
-            let eventMask: CGEventMask = (
-                (1 << CGEventType.mouseMoved.rawValue) |
-                (1 << CGEventType.leftMouseDown.rawValue) |
-                (1 << CGEventType.rightMouseDown.rawValue) |
-                (1 << CGEventType.leftMouseDragged.rawValue) |
-                (1 << CGEventType.scrollWheel.rawValue)
-            )
-
-            guard let tap = CGEvent.tapCreate(
-                tap: .cgSessionEventTap,
-                place: .headInsertEventTap,
-                options: .listenOnly,
-                eventsOfInterest: eventMask,
-                callback: mouseEventCallback,
-                userInfo: Unmanaged.passUnretained(self).toOpaque()
-            ) else {
-                print("MouseLogger: CGEvent.tapCreate failed on tap thread")
-                semaphore.signal()
-                return
-            }
-
-            self.eventTap = tap
-            let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-            self.runLoopSource = source
-
-            let rl = CFRunLoopGetCurrent()!
-            self.tapRunLoop = rl
-            CFRunLoopAddSource(rl, source, .commonModes)
-            CGEvent.tapEnable(tap: tap, enable: true)
-
-            tapOK = true
-            semaphore.signal()
-
-            // Run forever until stop() calls CFRunLoopStop
-            CFRunLoopRun()
-        }
-        thread.name = "MouseLogger-EventTap"
-        thread.qualityOfService = .userInteractive
-        tapThread = thread
-        thread.start()
-
-        // Wait for the tap thread to finish setup (up to 2 seconds)
-        let result = semaphore.wait(timeout: .now() + 2)
-        if result == .timedOut {
-            print("MouseLogger: Tap thread timed out during setup")
-            return false
+        // Global monitor: receives events directed at other applications
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: eventMask) { [weak self] event in
+            self?.handleNSEvent(event)
         }
 
-        return tapOK
+        // Local monitor: receives events directed at our own application
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: eventMask) { [weak self] event in
+            self?.handleNSEvent(event)
+            return event
+        }
+
+        return globalMonitor != nil
     }
 
     /// Reset the logger's time origin so that subsequent events are
@@ -152,21 +120,14 @@ public final class MouseLogger {
     }
 
     public func stop() {
-        // Disable the tap first — prevents new callbacks from firing
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
+        if let monitor = globalMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMonitor = nil
         }
-        // Stop the run loop so the tap thread exits
-        if let rl = tapRunLoop {
-            if let source = runLoopSource {
-                CFRunLoopRemoveSource(rl, source, .commonModes)
-            }
-            CFRunLoopStop(rl)
+        if let monitor = localMonitor {
+            NSEvent.removeMonitor(monitor)
+            localMonitor = nil
         }
-        tapRunLoop = nil
-        tapThread = nil
-        eventTap = nil
-        runLoopSource = nil
 
         lock.lock()
         fileHandle?.closeFile()
@@ -174,23 +135,28 @@ public final class MouseLogger {
         lock.unlock()
     }
 
-    // Called from the C callback on the tap thread
-    fileprivate func handleEvent(_ event: CGEvent) {
-        let location = event.location
+    private func handleNSEvent(_ event: NSEvent) {
+        // NSEvent gives mouse location in screen coordinates (bottom-left origin).
+        // Use CGEvent location for top-left origin consistency with our coordinate system.
+        let cgEvent = event.cgEvent
+        let location = cgEvent?.location ?? NSEvent.mouseLocation
+        // NSEvent.mouseLocation uses bottom-left origin; flip Y if using fallback
+        let useFlippedY = cgEvent == nil
+        let screenH = CGFloat(screenHeight)
+        let finalY = useFlippedY ? (screenH - location.y) : location.y
+
         let (nx, ny) = MouseLogEvent.normalize(
-            mouseX: location.x, mouseY: location.y,
+            mouseX: location.x, mouseY: finalY,
             screenWidth: screenWidth, screenHeight: screenHeight
         )
 
         let now = Self.currentTimeMs()
         let base = startTime
-        // Guard against underflow when resetStartTime() moves the origin forward
         let timeMs = now >= base ? now - base : 0
 
         let eventType: String
         switch event.type {
         case .mouseMoved, .leftMouseDragged:
-            // Throttle move events (use >= comparison to avoid underflow)
             guard timeMs >= lastMoveTimeMs &+ moveThrottleMs else { return }
             lastMoveTimeMs = timeMs
             eventType = "move"
@@ -208,8 +174,6 @@ public final class MouseLogger {
         let line = logEvent.toJSON() + "\n"
         guard let data = line.data(using: .utf8) else { return }
 
-        // Hold the lock across the write so stop() cannot close the
-        // file handle while we are writing to it.
         lock.lock()
         defer { lock.unlock() }
         guard !_isPaused, let handle = fileHandle else { return }
@@ -220,17 +184,4 @@ public final class MouseLogger {
         let info = timebaseInfo
         return mach_absolute_time() * UInt64(info.numer) / UInt64(info.denom) / 1_000_000
     }
-}
-
-// C-compatible callback for CGEvent tap
-private func mouseEventCallback(
-    proxy: CGEventTapProxy,
-    type: CGEventType,
-    event: CGEvent,
-    userInfo: UnsafeMutableRawPointer?
-) -> Unmanaged<CGEvent>? {
-    guard let userInfo = userInfo else { return Unmanaged.passUnretained(event) }
-    let logger = Unmanaged<MouseLogger>.fromOpaque(userInfo).takeUnretainedValue()
-    logger.handleEvent(event)
-    return Unmanaged.passUnretained(event)
 }
