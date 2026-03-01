@@ -30,6 +30,7 @@ RekoEngine/.build/
 
 # Claude Code local settings
 .claude/settings.local.json
+.claude/skills/
 
 # Editor directories and files
 .vscode/*
@@ -41,3 +42,5 @@ RekoEngine/.build/
 *.njsproj
 *.sln
 *.sw?
+
+.agent/
