@@ -61,7 +61,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://gist.githubusercontent.com/oksr/ed665656d5ca925260a017665a9e912e/raw/latest.json"
+        "https://github.com/oksr/reko/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY4NzNEMUVBMjAxRTgwMEIKUldRTGdCNGc2dEZ6K0JDZWpJaG8zRXJRQzdaeE1TZ3VIQzhIWi9UK05mWDkyMHdqODF6NjZZWDgK"
     }
