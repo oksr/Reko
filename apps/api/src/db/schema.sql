@@ -1,7 +1,15 @@
 -- Reko Shared Videos Database Schema (Cloudflare D1 / SQLite)
+--
+-- Privacy notes:
+--   - owner_token is hashed before storage (SHA-256) — raw token only returned once at creation
+--   - viewer IPs are hashed (SHA-256, truncated to 16 hex chars) — no raw IPs stored
+--   - no user_agent stored — it's a browser fingerprinting vector
+--   - referrer stored as domain-only (stripped of path/query) to prevent leaking private URLs
+--   - country derived from Cloudflare's cf-ipcountry header (aggregate-level, not identifying)
 
 CREATE TABLE IF NOT EXISTS videos (
-  id TEXT PRIMARY KEY,                    -- nanoid, used in share URL
+  id TEXT PRIMARY KEY,                    -- nanoid, used in share URL (unguessable)
+  owner_token_hash TEXT NOT NULL,         -- SHA-256 of the owner token (never stored raw)
   project_id TEXT NOT NULL,               -- local project ID from the desktop app
   title TEXT NOT NULL,
   thumbnail_key TEXT,                     -- R2 object key for thumbnail
@@ -27,12 +35,11 @@ CREATE TABLE IF NOT EXISTS videos (
 CREATE TABLE IF NOT EXISTS view_events (
   id TEXT PRIMARY KEY,
   video_id TEXT NOT NULL REFERENCES videos(id) ON DELETE CASCADE,
-  viewer_hash TEXT NOT NULL,              -- hashed IP for privacy
-  user_agent TEXT,
+  viewer_hash TEXT NOT NULL,              -- SHA-256 of IP, truncated (not reversible)
   watch_time_ms INTEGER NOT NULL DEFAULT 0,
   completion_percent REAL NOT NULL DEFAULT 0,
-  referrer TEXT,
-  country TEXT,
+  referrer_domain TEXT,                   -- domain only, no path/query
+  country TEXT,                           -- from cf-ipcountry (aggregate-level)
   created_at INTEGER NOT NULL
 );
 

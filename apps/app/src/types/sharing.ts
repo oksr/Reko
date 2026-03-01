@@ -33,12 +33,11 @@ export interface ShareAnalytics {
 export interface ViewEvent {
   id: string
   videoId: string
-  viewerIp: string // hashed for privacy
-  userAgent: string
+  viewerHash: string // SHA-256 truncated hash of IP (not reversible)
   watchTimeMs: number
   completionPercent: number
-  referrer: string | null
-  country: string | null
+  referrerDomain: string | null // domain only, path/query stripped for privacy
+  country: string | null // from Cloudflare cf-ipcountry (aggregate-level)
   timestamp: number
 }
 
@@ -65,6 +64,7 @@ export interface CreateShareRequest {
 
 export interface CreateShareResponse {
   videoId: string
+  ownerToken: string // returned ONCE — must be stored securely by the desktop app
   uploadUrl: string // presigned PUT URL to R2
   shareUrl: string // e.g. "https://share.reko.video/abc123"
 }

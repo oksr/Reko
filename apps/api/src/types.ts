@@ -9,6 +9,7 @@ export interface Env {
 
 export interface VideoRow {
   id: string
+  owner_token_hash: string
   project_id: string
   title: string
   thumbnail_key: string | null
@@ -31,10 +32,9 @@ export interface ViewEventRow {
   id: string
   video_id: string
   viewer_hash: string
-  user_agent: string | null
   watch_time_ms: number
   completion_percent: number
-  referrer: string | null
+  referrer_domain: string | null
   country: string | null
   created_at: number
 }
@@ -65,6 +65,7 @@ export interface CreateVideoRequest {
 
 export interface CreateVideoResponse {
   videoId: string
+  ownerToken: string // returned ONCE at creation — client must store securely
   uploadUrl: string
   shareUrl: string
 }

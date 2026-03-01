@@ -13,6 +13,10 @@ const API_BASE_URL =
 /**
  * API client for the Reko sharing service.
  * Used by the desktop app to upload and manage shared videos.
+ *
+ * Owner-authenticated operations (delete, analytics, finalize) require
+ * the ownerToken that was returned at video creation time. The token
+ * is sent as a Bearer token in the Authorization header.
  */
 export class ShareApiClient {
   private baseUrl: string
@@ -23,6 +27,8 @@ export class ShareApiClient {
 
   /**
    * Step 1: Create a video record and get an upload URL.
+   * The response includes an ownerToken that must be stored securely —
+   * it is never returned again and is required for all management operations.
    */
   async createShare(
     request: CreateShareRequest
@@ -91,15 +97,20 @@ export class ShareApiClient {
 
   /**
    * Step 3: Finalize the share after upload completes.
+   * Requires ownerToken for authorization.
    */
   async finalizeShare(
-    request: FinalizeShareRequest
+    request: FinalizeShareRequest,
+    ownerToken: string
   ): Promise<FinalizeShareResponse> {
     const res = await fetch(
       `${this.baseUrl}/api/videos/${request.videoId}/finalize`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${ownerToken}`,
+        },
         body: JSON.stringify({
           thumbnailData: request.thumbnailData,
         }),
@@ -117,7 +128,7 @@ export class ShareApiClient {
   }
 
   /**
-   * Get video metadata (for the owner dashboard).
+   * Get video metadata (public — for the player page).
    */
   async getVideo(videoId: string): Promise<SharedVideo> {
     const res = await fetch(`${this.baseUrl}/api/videos/${videoId}`)
@@ -131,10 +142,12 @@ export class ShareApiClient {
 
   /**
    * Delete a shared video.
+   * Requires ownerToken — only the creator can delete.
    */
-  async deleteVideo(videoId: string): Promise<void> {
+  async deleteVideo(videoId: string, ownerToken: string): Promise<void> {
     const res = await fetch(`${this.baseUrl}/api/videos/${videoId}`, {
       method: "DELETE",
+      headers: { "Authorization": `Bearer ${ownerToken}` },
     })
 
     if (!res.ok) {
@@ -144,10 +157,14 @@ export class ShareApiClient {
 
   /**
    * Get analytics for a video.
+   * Requires ownerToken — only the creator can view detailed analytics.
    */
-  async getAnalytics(videoId: string): Promise<unknown> {
+  async getAnalytics(videoId: string, ownerToken: string): Promise<unknown> {
     const res = await fetch(
-      `${this.baseUrl}/api/videos/${videoId}/analytics`
+      `${this.baseUrl}/api/videos/${videoId}/analytics`,
+      {
+        headers: { "Authorization": `Bearer ${ownerToken}` },
+      }
     )
 
     if (!res.ok) {

@@ -1,11 +1,16 @@
 import { Hono } from "hono"
 import type { Env, VideoRow, VideoMetadata } from "../types"
+import { requireOwner } from "../middleware/auth"
 
 const video = new Hono<{ Bindings: Env }>()
 
 /**
  * GET /api/videos/:id
  * Returns video metadata for the player page.
+ * Public endpoint — no auth required.
+ *
+ * Returns the same 404 for "doesn't exist", "deleted", and "expired"
+ * to prevent ID enumeration.
  */
 video.get("/:id", async (c) => {
   const videoId = c.req.param("id")
@@ -16,13 +21,13 @@ video.get("/:id", async (c) => {
     .bind(videoId)
     .first<VideoRow>()
 
+  // Uniform 404 for missing, deleted, or expired — prevents probing
   if (!row) {
-    return c.json({ error: "Video not found" }, 404)
+    return c.json({ error: "Not found" }, 404)
   }
 
-  // Check expiration
   if (row.expires_at && row.expires_at < Date.now()) {
-    return c.json({ error: "Video has expired" }, 410)
+    return c.json({ error: "Not found" }, 404)
   }
 
   const metadata: VideoMetadata = {
@@ -53,6 +58,7 @@ video.get("/:id", async (c) => {
 /**
  * GET /api/videos/:id/stream
  * Streams the video file from R2. Supports range requests.
+ * Public endpoint — anyone with the link can watch.
  */
 video.get("/:id/stream", async (c) => {
   const videoId = c.req.param("id")
@@ -64,7 +70,7 @@ video.get("/:id/stream", async (c) => {
     .first<{ video_key: string }>()
 
   if (!row) {
-    return c.json({ error: "Video not found" }, 404)
+    return c.json({ error: "Not found" }, 404)
   }
 
   const rangeHeader = c.req.header("range")
@@ -73,7 +79,7 @@ video.get("/:id/stream", async (c) => {
   })
 
   if (!object) {
-    return c.json({ error: "Video file not found" }, 404)
+    return c.json({ error: "Not found" }, 404)
   }
 
   const headers = new Headers()
@@ -97,7 +103,7 @@ video.get("/:id/stream", async (c) => {
 
 /**
  * GET /api/videos/:id/thumbnail
- * Serves the thumbnail image from R2.
+ * Serves the thumbnail image from R2. Public endpoint.
  */
 video.get("/:id/thumbnail", async (c) => {
   const videoId = c.req.param("id")
@@ -109,12 +115,12 @@ video.get("/:id/thumbnail", async (c) => {
     .first<{ thumbnail_key: string | null }>()
 
   if (!row?.thumbnail_key) {
-    return c.json({ error: "Thumbnail not found" }, 404)
+    return c.json({ error: "Not found" }, 404)
   }
 
   const object = await c.env.VIDEOS_BUCKET.get(row.thumbnail_key)
   if (!object) {
-    return c.json({ error: "Thumbnail file not found" }, 404)
+    return c.json({ error: "Not found" }, 404)
   }
 
   return new Response(object.body, {
@@ -128,24 +134,19 @@ video.get("/:id/thumbnail", async (c) => {
 /**
  * DELETE /api/videos/:id
  * Deletes a shared video and its associated files.
+ * Requires owner token in Authorization header.
+ * Returns 404 for both "not found" and "unauthorized" (prevents probing).
  */
 video.delete("/:id", async (c) => {
   const videoId = c.req.param("id")
 
-  const row = await c.env.DB.prepare(
-    "SELECT video_key, thumbnail_key FROM videos WHERE id = ?"
-  )
-    .bind(videoId)
-    .first<{ video_key: string; thumbnail_key: string | null }>()
-
-  if (!row) {
-    return c.json({ error: "Video not found" }, 404)
-  }
+  const owner = await requireOwner(c, videoId)
+  if (!owner) return c.res // 404 already sent by requireOwner
 
   // Delete from R2
-  await c.env.VIDEOS_BUCKET.delete(row.video_key)
-  if (row.thumbnail_key) {
-    await c.env.VIDEOS_BUCKET.delete(row.thumbnail_key)
+  await c.env.VIDEOS_BUCKET.delete(owner.video_key)
+  if (owner.thumbnail_key) {
+    await c.env.VIDEOS_BUCKET.delete(owner.thumbnail_key)
   }
 
   // Delete from D1 (cascades to view_events and comments)

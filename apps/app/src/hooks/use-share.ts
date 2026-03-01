@@ -14,6 +14,7 @@ interface UseShareOptions {
 interface ShareResult {
   shareUrl: string
   videoId: string
+  ownerToken: string // stored locally for management operations
 }
 
 export function useShare() {
@@ -49,8 +50,8 @@ export function useShare() {
       })
 
       try {
-        // Step 1: Create video record and get upload URL
-        const { videoId, uploadUrl, shareUrl } = await shareApi.createShare({
+        // Step 1: Create video record and get upload URL + ownerToken
+        const { videoId, ownerToken, uploadUrl, shareUrl } = await shareApi.createShare({
           title: options.title,
           fileSizeBytes: videoData.byteLength,
           durationMs: options.durationMs,
@@ -61,7 +62,7 @@ export function useShare() {
         // Step 2: Upload video data with progress tracking
         await shareApi.uploadVideo(uploadUrl, videoData, setUploadProgress)
 
-        // Step 3: Finalize
+        // Step 3: Finalize (requires ownerToken)
         setUploadProgress({
           phase: "finalizing",
           bytesUploaded: videoData.byteLength,
@@ -69,7 +70,7 @@ export function useShare() {
           percentage: 100,
         })
 
-        await shareApi.finalizeShare({ videoId })
+        await shareApi.finalizeShare({ videoId }, ownerToken)
 
         // Done
         setUploadProgress({
@@ -79,8 +80,9 @@ export function useShare() {
           percentage: 100,
         })
 
-        setShareResult({ shareUrl, videoId })
-        return { shareUrl, videoId }
+        const result = { shareUrl, videoId, ownerToken }
+        setShareResult(result)
+        return result
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Share failed"

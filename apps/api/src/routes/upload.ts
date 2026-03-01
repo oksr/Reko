@@ -1,29 +1,36 @@
 import { Hono } from "hono"
 import { nanoid } from "nanoid"
 import type { Env, CreateVideoRequest, CreateVideoResponse } from "../types"
+import { hashToken } from "../lib/crypto"
 
 const upload = new Hono<{ Bindings: Env }>()
 
 /**
  * POST /api/videos
- * Creates a video record and returns a presigned upload URL.
- * The client uploads the file directly to R2 via the presigned URL.
+ * Creates a video record and returns:
+ *   - uploadUrl: presigned PUT URL to R2
+ *   - ownerToken: secret token for managing this video (returned ONCE, never stored raw)
+ *
+ * The ownerToken is hashed before storage. The raw token is only returned in this response.
+ * The desktop app must store it securely (in the project JSON).
  */
 upload.post("/", async (c) => {
   const body = await c.req.json<CreateVideoRequest>()
 
   const videoId = nanoid(12)
+  const ownerToken = nanoid(32) // high-entropy secret
+  const ownerTokenHash = await hashToken(ownerToken)
   const videoKey = `videos/${videoId}/video.mp4`
   const now = Date.now()
 
-  // Insert pending video record
   await c.env.DB.prepare(
-    `INSERT INTO videos (id, project_id, title, video_key, duration_ms, file_size_bytes, status, created_at, allow_comments, allow_download, show_badge, password_hash)
-     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
+    `INSERT INTO videos (id, owner_token_hash, project_id, title, video_key, duration_ms, file_size_bytes, status, created_at, allow_comments, allow_download, show_badge, password_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`
   )
     .bind(
       videoId,
-      "", // project_id set on finalize
+      ownerTokenHash,
+      "",
       body.title,
       videoKey,
       body.durationMs,
@@ -32,12 +39,10 @@ upload.post("/", async (c) => {
       body.settings.allowComments ? 1 : 0,
       body.settings.allowDownload ? 1 : 0,
       body.settings.showBadge ? 1 : 0,
-      null // password_hash
+      null
     )
     .run()
 
-  // Generate a presigned URL for direct upload to R2
-  // R2 multipart upload for large files
   const uploadUrl = await generatePresignedPutUrl(
     c.env.VIDEOS_BUCKET,
     videoKey,
@@ -47,6 +52,7 @@ upload.post("/", async (c) => {
 
   const response: CreateVideoResponse = {
     videoId,
+    ownerToken, // returned ONCE — client must persist this
     uploadUrl,
     shareUrl: `${c.env.SHARE_BASE_URL}/${videoId}`,
   }
@@ -57,29 +63,37 @@ upload.post("/", async (c) => {
 /**
  * POST /api/videos/:id/finalize
  * Called after upload completes. Marks the video as ready.
- * Optionally accepts a thumbnail.
+ * Requires owner token in Authorization header.
  */
 upload.post("/:id/finalize", async (c) => {
   const videoId = c.req.param("id")
 
-  // Verify the video exists and is pending
+  // Verify owner token
+  const authHeader = c.req.header("authorization")
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
+  if (!token) {
+    return c.json({ error: "Not found" }, 404)
+  }
+
+  const tokenHash = await hashToken(token)
+
   const video = await c.env.DB.prepare(
-    "SELECT id, video_key FROM videos WHERE id = ? AND status = 'pending'"
+    "SELECT id, video_key, owner_token_hash FROM videos WHERE id = ? AND status = 'pending'"
   )
     .bind(videoId)
-    .first()
+    .first<{ id: string; video_key: string; owner_token_hash: string }>()
 
-  if (!video) {
-    return c.json({ error: "Video not found or already finalized" }, 404)
+  if (!video || video.owner_token_hash !== tokenHash) {
+    return c.json({ error: "Not found" }, 404)
   }
 
   // Verify the file exists in R2
-  const object = await c.env.VIDEOS_BUCKET.head(video.video_key as string)
+  const object = await c.env.VIDEOS_BUCKET.head(video.video_key)
   if (!object) {
     return c.json({ error: "Video file not uploaded yet" }, 400)
   }
 
-  // Handle optional thumbnail upload
+  // Handle optional thumbnail
   let thumbnailKey: string | null = null
   const body = await c.req.json().catch(() => ({}))
 
@@ -93,7 +107,6 @@ upload.post("/:id/finalize", async (c) => {
     })
   }
 
-  // Mark as ready
   await c.env.DB.prepare(
     "UPDATE videos SET status = 'ready', thumbnail_key = ? WHERE id = ?"
   )
@@ -108,12 +121,6 @@ upload.post("/:id/finalize", async (c) => {
   })
 })
 
-/**
- * Generate a presigned PUT URL for R2.
- * R2 supports presigned URLs via the S3-compatible API.
- * In production, use the S3 client with R2 credentials.
- * For now, we use direct R2 put and return an API endpoint.
- */
 async function generatePresignedPutUrl(
   _bucket: R2Bucket,
   key: string,
@@ -122,7 +129,6 @@ async function generatePresignedPutUrl(
 ): Promise<string> {
   // In production, generate a presigned S3-compatible URL.
   // For the initial implementation, uploads go through the Worker.
-  // The client will PUT to /api/videos/upload/:key
   return `/api/videos/upload/${encodeURIComponent(key)}`
 }
 
