@@ -1,0 +1,20 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+:root {
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Inter Variable", system-ui, -apple-system, sans-serif;
+  background: #0a0a0a;
+  color: #fafafa;
+  -webkit-font-smoothing: antialiased;
+}
