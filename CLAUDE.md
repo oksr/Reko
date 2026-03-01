@@ -17,7 +17,7 @@ Reko is a macOS screen recording and video editing app built with Tauri v2. It r
 
 Three-layer stack:
 
-1. **Swift framework** (`RekoEngine/`) — native macOS capture and export engine using ScreenCaptureKit, AVFoundation, Metal, VideoToolbox, CoreMedia, CoreVideo, CoreGraphics, and CoreAudio. Compiled as a static library and linked into the Rust binary via `build.rs`. Exposes a C API (`capi.swift` with `@_cdecl` functions prefixed `ck_`). Key subsystems: `capture/` (screen, mic, camera, mouse logger), `recording/` (video/audio writers, pipeline), `export/` (Metal compositor, audio mixer, video decoder, pipeline).
+1. **Swift framework** (`RekoEngine/`) — native macOS capture and export engine using ScreenCaptureKit, AVFoundation, VideoToolbox, CoreMedia, CoreVideo, CoreGraphics, and CoreAudio. Compiled as a static library and linked into the Rust binary via `build.rs`. Exposes a C API (`capi.swift` with `@_cdecl` functions prefixed `ck_`). Key subsystems: `capture/` (screen, mic, camera, mouse logger), `recording/` (video/audio writers, pipeline), `export/` (compositor, audio mixer, video decoder, pipeline).
 
 2. **Rust/Tauri backend** (`apps/tauri/src-tauri/`) — thin orchestration layer. `swift_ffi.rs` wraps the C API calls. Tauri commands in `apps/tauri/src-tauri/src/commands/` (editor, export, permissions, recording, sources) are the IPC surface. `autozoom.rs` generates zoom keyframes from mouse click events. Tauri plugins: opener, global-shortcut, notification, dialog. Project data is stored as JSON in `~/Library/Application Support/com.reko.app/projects/{id}/project.json` with raw media in a `raw/` subdirectory.
 
