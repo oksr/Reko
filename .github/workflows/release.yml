@@ -128,9 +128,7 @@ jobs:
             ${{ steps.artifacts.outputs.targz }}
             ${{ steps.artifacts.outputs.sig }}
 
-      - name: Update latest.json gist
-        env:
-          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+      - name: Generate latest.json
         run: |
           VERSION=$(jq -r '.version' apps/tauri/src-tauri/tauri.conf.json)
           SIG=$(cat "${{ steps.artifacts.outputs.sig }}")
@@ -156,7 +154,10 @@ jobs:
           echo "Generated latest.json:"
           cat /tmp/latest.json
 
-          gh gist edit ed665656d5ca925260a017665a9e912e -f latest.json /tmp/latest.json
+      - name: Update gist
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: gh gist edit ed665656d5ca925260a017665a9e912e -f latest.json /tmp/latest.json
 
       - name: Clean up keychain
         if: always()
