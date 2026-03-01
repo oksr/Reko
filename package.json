@@ -1,5 +1,6 @@
 {
   "name": "reko-workspace",
+  "version": "0.1.21",
   "private": true,
   "scripts": {
     "dev": "pnpm --filter @reko/tauri dev",
@@ -10,7 +11,8 @@
     "tauri:dev": "pnpm --filter @reko/tauri tauri:dev",
     "tauri:build": "pnpm --filter @reko/tauri tauri:build",
     "website:dev": "pnpm --filter @reko/website dev",
-    "website:build": "pnpm --filter @reko/website build"
+    "website:build": "pnpm --filter @reko/website build",
+    "release": "./scripts/release.sh"
   },
   "engines": {
     "node": ">=20",

@@ -51,13 +51,6 @@ jobs:
           restore-keys: |
             swift-${{ runner.os }}-
 
-      - name: Set version from git tag
-        run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "Setting version to $VERSION"
-          jq --arg v "$VERSION" '.version = $v' apps/tauri/src-tauri/tauri.conf.json > tmp.json
-          mv tmp.json apps/tauri/src-tauri/tauri.conf.json
-
       - name: Import Apple Developer ID certificate
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
