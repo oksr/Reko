@@ -167,6 +167,9 @@ pub fn run() {
             commands::permissions::check_permission,
             commands::permissions::request_permission,
             commands::permissions::open_permission_settings,
+            commands::unsplash::unsplash_search_photos,
+            commands::unsplash::unsplash_get_topic_photos,
+            commands::unsplash::unsplash_track_download,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

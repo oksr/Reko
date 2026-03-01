@@ -29,7 +29,7 @@ export function UnsplashBackgroundSection() {
   useEffect(() => {
     if (!activeTopic || query) return
     let cancelled = false
-    getTopicPhotos(activeTopic, 1, 9).then((results) => {
+    getTopicPhotos(platform.invoke, activeTopic, 1, 9).then((results) => {
       if (cancelled) return
       setPhotos(results)
       setHasMore(results.length === 9)
@@ -38,12 +38,12 @@ export function UnsplashBackgroundSection() {
     }).catch(() => { if (!cancelled) setLoading(false) })
     setLoading(true)
     return () => { cancelled = true }
-  }, [activeTopic, query])
+  }, [activeTopic, query, platform.invoke])
 
   const loadTopicPhotos = async (slug: string, p: number, reset: boolean) => {
     setLoading(true)
     try {
-      const results = await getTopicPhotos(slug, p, 9)
+      const results = await getTopicPhotos(platform.invoke, slug, p, 9)
       setPhotos(reset ? results : (prev) => [...prev, ...results])
       setHasMore(results.length === 9)
       setPage(p)
@@ -58,7 +58,7 @@ export function UnsplashBackgroundSection() {
     if (!q.trim()) return
     setLoading(true)
     try {
-      const { photos: results, totalPages } = await searchPhotos(q, p, 9)
+      const { photos: results, totalPages } = await searchPhotos(platform.invoke, q, p, 9)
       setPhotos(reset ? results : (prev) => [...prev, ...results])
       setHasMore(p < totalPages)
       setPage(p)
@@ -112,7 +112,7 @@ export function UnsplashBackgroundSection() {
       })
 
       // Track download per Unsplash API guidelines
-      trackDownload(photo.links.download_location).catch(() => {})
+      trackDownload(platform.invoke, photo.links.download_location).catch(() => {})
 
       setBackground({
         type: "image",

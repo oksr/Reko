@@ -23,6 +23,14 @@ apps/tauri/src-tauri/gen/
 # Swift build artifacts
 RekoEngine/.build/
 
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Claude Code local settings
+.claude/settings.local.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -56,6 +56,7 @@ jobs:
       - name: Build Rust (no bundle)
         env:
           RUSTC_WRAPPER: sccache
+          UNSPLASH_ACCESS_KEY: ${{ secrets.UNSPLASH_ACCESS_KEY }}
         run: cargo build --manifest-path apps/tauri/src-tauri/Cargo.toml
 
       - name: Run Rust tests

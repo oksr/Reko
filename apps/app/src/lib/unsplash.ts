@@ -1,7 +1,3 @@
-// TODO: Move API key to backend proxy before production
-const UNSPLASH_ACCESS_KEY = "YQ4bs5vObpt9BrM99cYQAAg05p5WL3xndiL9q-JuBE4"
-const BASE_URL = "https://api.unsplash.com"
-
 export interface UnsplashPhoto {
   id: string
   urls: {
@@ -29,9 +25,7 @@ interface UnsplashSearchResponse {
   results: UnsplashPhoto[]
 }
 
-const headers = {
-  Authorization: `Client-ID ${UNSPLASH_ACCESS_KEY}`,
-}
+type InvokeFn = <T>(command: string, args?: Record<string, unknown>) => Promise<T>
 
 export const UNSPLASH_TOPICS = [
   { slug: "wallpapers", label: "Wallpapers" },
@@ -43,37 +37,35 @@ export const UNSPLASH_TOPICS = [
 ] as const
 
 export async function searchPhotos(
+  invoke: InvokeFn,
   query: string,
   page = 1,
   perPage = 20,
 ): Promise<{ photos: UnsplashPhoto[]; totalPages: number }> {
-  const params = new URLSearchParams({
+  const data = await invoke<UnsplashSearchResponse>("unsplash_search_photos", {
     query,
-    page: String(page),
-    per_page: String(perPage),
-    orientation: "landscape",
+    page,
+    perPage,
   })
-  const res = await fetch(`${BASE_URL}/search/photos?${params}`, { headers })
-  if (!res.ok) throw new Error(`Unsplash search failed: ${res.status}`)
-  const data: UnsplashSearchResponse = await res.json()
   return { photos: data.results, totalPages: data.total_pages }
 }
 
 export async function getTopicPhotos(
+  invoke: InvokeFn,
   topicSlug: string,
   page = 1,
   perPage = 20,
 ): Promise<UnsplashPhoto[]> {
-  const params = new URLSearchParams({
-    page: String(page),
-    per_page: String(perPage),
-    orientation: "landscape",
+  return invoke<UnsplashPhoto[]>("unsplash_get_topic_photos", {
+    topicSlug,
+    page,
+    perPage,
   })
-  const res = await fetch(`${BASE_URL}/topics/${topicSlug}/photos?${params}`, { headers })
-  if (!res.ok) throw new Error(`Unsplash topic fetch failed: ${res.status}`)
-  return res.json()
 }
 
-export async function trackDownload(downloadLocationUrl: string): Promise<void> {
-  await fetch(`${downloadLocationUrl}?client_id=${UNSPLASH_ACCESS_KEY}`)
+export async function trackDownload(
+  invoke: InvokeFn,
+  downloadLocationUrl: string,
+): Promise<void> {
+  await invoke("unsplash_track_download", { downloadLocationUrl })
 }
