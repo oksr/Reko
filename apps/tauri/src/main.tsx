@@ -12,22 +12,18 @@ function UpdateBanner() {
     <div
       style={{
         position: "fixed",
-        bottom: 16,
-        right: 16,
+        inset: 0,
         zIndex: 9999,
         display: "flex",
         alignItems: "center",
+        justifyContent: "center",
         gap: 10,
-        padding: "8px 14px",
-        borderRadius: 10,
-        background: "rgba(20,20,20,0.85)",
+        background: "rgba(20,20,20,0.95)",
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
-        border: "1px solid rgba(255,255,255,0.12)",
         color: "#fff",
         fontSize: 13,
         fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
-        boxShadow: "0 4px 24px rgba(0,0,0,0.4)",
       }}
     >
       <span style={{ opacity: 0.85 }}>

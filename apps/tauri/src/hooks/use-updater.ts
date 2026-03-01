@@ -9,6 +9,7 @@ export function useUpdater() {
   const [installing, setInstalling] = useState(false)
 
   useEffect(() => {
+    if (import.meta.env.DEV) return
     check().then(setUpdate).catch(console.error)
   }, [])
 
