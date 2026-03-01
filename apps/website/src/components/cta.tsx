@@ -2,8 +2,10 @@ import { motion, useReducedMotion } from "motion/react"
 import { Section } from "@/components/layout/section"
 import { Button } from "@/components/ui/button"
 import AppleIcon from "@/components/icons/apple"
+import { useDownloadModal } from "@/components/download-modal"
 
 export function CTA() {
+  const { openDownloadModal } = useDownloadModal()
   const prefersReducedMotion = useReducedMotion()
 
   return (
@@ -32,12 +34,12 @@ export function CTA() {
           Download Reko for free and start recording in seconds.
           No account required.
         </p>
-        <Button size="lg">
+        <Button size="lg" onClick={openDownloadModal}>
          <AppleIcon size={17} />
           Download for macOS
         </Button>
         <p className="mt-4 text-xs text-muted-foreground">
-          macOS 14.0 or later &middot; Apple Silicon & Intel
+          macOS 14.0 or later &middot; Apple Silicon
         </p>
       </motion.div>
     </Section>

@@ -5,14 +5,16 @@ import { LogoWithText } from "@/assets/logo"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import AppleIcon from "@/components/icons/apple"
+import { useDownloadModal } from "@/components/download-modal"
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
   { label: "How It Works", href: "#how-it-works" },
-  { label: "Pricing", href: "#pricing" },
+  { label: "Early Access", href: "#pricing" },
 ]
 
 export function Nav() {
+  const { openDownloadModal } = useDownloadModal()
   const [scrolled, setScrolled] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
@@ -50,7 +52,7 @@ export function Nav() {
               key={link.href}
               href={link.href}
               onMouseEnter={() => setHoveredLink(link.href)}
-              className="relative px-4 py-2 text-sm transition-colors rounded-lg"
+              className="relative px-4 py-2 text-sm transition-[color] duration-150 ease rounded-lg"
             >
               {hoveredLink === link.href && (
                 <motion.span
@@ -75,7 +77,7 @@ export function Nav() {
 
         {/* Desktop CTA */}
         <div className="hidden md:block">
-          <Button size="default">
+          <Button size="default" onClick={openDownloadModal}>
             <AppleIcon size={18} />
             Download for Mac
           </Button>
@@ -83,9 +85,10 @@ export function Nav() {
 
         {/* Mobile toggle */}
         <button
-          className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors"
+          className="md:hidden p-2.5 -mr-2 text-muted-foreground hover:text-foreground transition-[color] duration-150 ease"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle navigation"
+          aria-expanded={mobileOpen}
         >
           {mobileOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
@@ -107,13 +110,13 @@ export function Nav() {
                   key={link.href}
                   href={link.href}
                   onClick={() => setMobileOpen(false)}
-                  className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted/30"
+                  className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground transition-[color,background-color] duration-150 ease rounded-lg hover:bg-muted/30"
                 >
                   {link.label}
                 </a>
               ))}
               <div className="pt-3 border-t border-border mt-2">
-                <Button className="w-full">
+                <Button className="w-full" onClick={() => { setMobileOpen(false); openDownloadModal() }}>
                   <AppleIcon size={15} />
                   Download for Mac
                 </Button>

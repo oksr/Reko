@@ -64,6 +64,21 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
+  /* Prevent iOS zoom on input focus */
+  input, textarea, select {
+    font-size: 16px;
+  }
+
+  /* Prevent double-tap zoom on interactive elements */
+  button, a, input {
+    touch-action: manipulation;
+  }
+
+  /* Scroll margin for anchor links behind fixed header */
+  [id] {
+    scroll-margin-top: 5rem;
+  }
+
   ::selection {
     background-color: oklch(0.704 0.191 22.216 / 30%);
     color: white;

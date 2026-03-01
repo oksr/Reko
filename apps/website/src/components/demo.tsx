@@ -33,7 +33,7 @@ export function Demo() {
               })}
           className="text-3xl md:text-4xl font-bold tracking-tight"
         >
-          A professional editor, built in
+          A professional editor, built right in
         </motion.h2>
       </div>
 

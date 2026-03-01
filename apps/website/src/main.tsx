@@ -5,21 +5,21 @@ import "./index.css"
 import { Nav } from "@/components/layout/nav"
 import { Hero } from "@/components/hero"
 import { Features } from "@/components/features"
-import { Demo } from "@/components/demo"
 import { HowItWorks } from "@/components/how-it-works"
 import { Pricing } from "@/components/pricing"
 import { Testimonials } from "@/components/testimonials"
 import { CTA } from "@/components/cta"
 import { Footer } from "@/components/layout/footer"
+import { DownloadModalProvider } from "@/components/download-modal"
 
 function App() {
   return (
+    <DownloadModalProvider>
     <div className="noise-overlay">
       <Nav />
       <main>
         <Hero />
         <Features />
-        <Demo />
         <HowItWorks />
         <Pricing />
         <Testimonials />
@@ -27,6 +27,7 @@ function App() {
       </main>
       <Footer />
     </div>
+    </DownloadModalProvider>
   )
 }
 

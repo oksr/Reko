@@ -15,7 +15,7 @@ const STEPS = [
     number: "02",
     title: "Edit",
     description:
-      "Trim, split, and arrange clips on a multi-track timeline. Add zoom keyframes, transitions, and cursor effects.",
+      "Trim, split, and arrange clips on a timeline. Add zoom keyframes, transitions, and cursor effects.",
     icon: Film,
     iconFill: false,
   },
@@ -23,7 +23,7 @@ const STEPS = [
     number: "03",
     title: "Export",
     description:
-      "Choose resolution, frame rate, and quality. Metal-accelerated encoding delivers your final video in seconds.",
+      "Choose resolution, frame rate, and quality. GPU-accelerated rendering delivers your final video fast.",
     icon: Download,
     iconFill: false,
   },

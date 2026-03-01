@@ -24,7 +24,7 @@ const FEATURES = [
     icon: Film,
     title: "Timeline Editor",
     description:
-      "A Premiere-style NLE with multi-track clips, trimming, splitting, and precise frame-level control.",
+      "A timeline editor with clip trimming, splitting, and precise frame-level control.",
     span: "md:col-span-1",
   },
   {
@@ -45,7 +45,7 @@ const FEATURES = [
     icon: Camera,
     title: "Camera Overlay",
     description:
-      "Embed your webcam as a picture-in-picture overlay. Resize and reposition freely.",
+      "Embed your webcam as a picture-in-picture bubble. Resize and choose your preferred corner.",
     span: "md:col-span-1",
   },
   {
@@ -66,7 +66,7 @@ const FEATURES = [
     icon: Zap,
     title: "Native Performance",
     description:
-      "Built with Swift and Metal for blazing-fast rendering. Hardware-accelerated export on Apple Silicon.",
+      "Built for macOS with GPU-accelerated export. Recording powered by ScreenCaptureKit on Apple Silicon.",
     span: "md:col-span-2",
   },
 ]
@@ -114,7 +114,7 @@ export function Features() {
               })}
           className="mt-4 text-muted-foreground text-lg max-w-xl mx-auto"
         >
-          From recording to final export, Reko handles every step with native macOS performance.
+          From recording to final export, Reko handles every step in one app.
         </motion.p>
       </div>
 
@@ -135,12 +135,12 @@ export function Features() {
                   },
                 })}
             className={cn(
-              "group relative rounded-xl border border-border bg-card/50 p-6 transition-colors hover:bg-card/80",
+              "group relative rounded-xl border border-border bg-card/50 p-6 transition-[background-color] duration-200 ease hover:bg-card/80",
               feature.span
             )}
           >
             {/* Hover glow */}
-            <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-[radial-gradient(ellipse_at_50%_0%,_rgba(239,68,68,0.04)_0%,_transparent_60%)]" />
+            <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-[opacity] duration-500 pointer-events-none bg-[radial-gradient(ellipse_at_50%_0%,_rgba(239,68,68,0.04)_0%,_transparent_60%)]" />
 
             <div className="relative">
               <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-muted/50 mb-4">

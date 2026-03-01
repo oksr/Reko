@@ -18,7 +18,7 @@ const TESTIMONIALS = [
   },
   {
     quote:
-      "The Metal-accelerated export is insane. A 10-minute 4K video exports in under 30 seconds on my M2 MacBook.",
+      "The export is seriously fast. GPU-accelerated rendering makes 4K videos a breeze on my M2 MacBook.",
     name: "Aiko Tanaka",
     title: "Content Creator",
     initials: "AT",
