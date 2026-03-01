@@ -28,9 +28,9 @@ RekoEngine/.build/
 .env.*
 !.env.example
 
-# Claude Code local settings
-.claude/settings.local.json
-.claude/skills/
+# Claude Code
+.claude/
+apps/website/.claude/
 
 # Editor directories and files
 .vscode/*
