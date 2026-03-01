@@ -131,8 +131,15 @@ pub fn run() {
             }
             Ok(())
         })
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Destroyed = event {
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                // Hide the recorder window instead of closing it so the app stays alive
+                if window.label() == "recorder" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            tauri::WindowEvent::Destroyed => {
                 if window.label().starts_with("editor-") {
                     if let Some(recorder) = window.app_handle().get_webview_window("recorder") {
                         let _ = recorder.show();
@@ -140,6 +147,7 @@ pub fn run() {
                     }
                 }
             }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             get_engine_version,
