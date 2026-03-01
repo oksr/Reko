@@ -77,7 +77,7 @@ reko/
 │   ├── app/          # React UI (platform-agnostic, zero Tauri imports)
 │   ├── tauri/        # Tauri v2 shell + Rust backend
 │   └── website/      # Marketing site
-└── RekoEngine/       # Swift framework (ScreenCaptureKit, Metal, AVFoundation)
+└── RekoEngine/       # Swift framework (ScreenCaptureKit, AVFoundation, VideoToolbox)
 ```
 
 ## Contributing
