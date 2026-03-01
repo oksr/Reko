@@ -129,6 +129,8 @@ jobs:
             ${{ steps.artifacts.outputs.sig }}
 
       - name: Generate latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(jq -r '.version' apps/tauri/src-tauri/tauri.conf.json)
           SIG=$(cat "${{ steps.artifacts.outputs.sig }}")
