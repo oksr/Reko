@@ -178,6 +178,15 @@ pub fn run() {
             commands::permissions::request_permission,
             commands::permissions::open_permission_settings,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Reopen { .. } = event {
+                // Re-show the recorder when the user clicks the dock icon
+                if let Some(recorder) = app.get_webview_window("recorder") {
+                    let _ = recorder.show();
+                    let _ = recorder.set_focus();
+                }
+            }
+        });
 }
