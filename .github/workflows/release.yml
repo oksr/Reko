@@ -130,7 +130,7 @@ jobs:
 
       - name: Update latest.json gist
         env:
-          GH_TOKEN: ${{ secrets.UPDATER_GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
         run: |
           VERSION=$(jq -r '.version' apps/tauri/src-tauri/tauri.conf.json)
           SIG=$(cat "${{ steps.artifacts.outputs.sig }}")
