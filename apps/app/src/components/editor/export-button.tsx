@@ -1,17 +1,19 @@
 import { useState, useEffect } from "react"
 import { usePlatform } from "@/platform/PlatformContext"
 import { Button } from "@/components/ui/button"
-import { Download, X, Check, FolderOpen } from "lucide-react"
+import { Download, X, Check, FolderOpen, Link, Copy, ExternalLink, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/stores/editor-store"
 import { sanitizeProject } from "@/hooks/use-auto-save"
 import { useExport } from "@/hooks/use-export"
+import { useShare } from "@/hooks/use-share"
 import {
     BITRATE_MAP,
     type ExportResolution,
     type ExportQuality,
     type ExportConfig,
 } from "@/types/editor"
+import { DEFAULT_SHARE_SETTINGS } from "@/types/sharing"
 
 function PillGroup<T extends string>({
     options,
@@ -73,10 +75,19 @@ export function ExportButton() {
     const [outputPath, setOutputPath] = useState("")
     const [result, setResult] = useState<string | null>(null)
     const [localError, setLocalError] = useState<string | null>(null)
+    const [linkCopied, setLinkCopied] = useState(false)
 
     const { progress, error: exportError, startExport, cancelExport } = useExport()
+    const {
+        uploadProgress,
+        shareResult,
+        error: shareError,
+        isUploading,
+        startShare,
+        reset: resetShare,
+    } = useShare()
 
-    const error = localError || exportError
+    const error = localError || exportError || shareError
 
     const exporting =
         progress !== null &&
@@ -88,10 +99,6 @@ export function ExportButton() {
 
         if (progress.phase === "done") {
             setResult(outputPath)
-            setTimeout(() => {
-                setResult(null)
-                setShowPanel(false)
-            }, 5000)
         }
     }, [progress?.phase, outputPath])
 
@@ -109,6 +116,7 @@ export function ExportButton() {
     const handleExport = async () => {
         setLocalError(null)
         setResult(null)
+        resetShare()
 
         try {
             await platform.invoke("save_project_state", {
@@ -132,12 +140,45 @@ export function ExportButton() {
         cancelExport()
     }
 
+    const handleShare = async () => {
+        if (!result || !project) return
+
+        try {
+            // Read the exported file from disk
+            const fileData = await platform.invoke<number[]>("read_file_bytes", {
+                path: result,
+            })
+            const videoData = new Uint8Array(fileData).buffer
+
+            await startShare(videoData, {
+                title: project.name,
+                durationMs: project.timeline.out_point - project.timeline.in_point,
+            }, DEFAULT_SHARE_SETTINGS)
+        } catch (e) {
+            console.error("[share] Share error:", e)
+            setLocalError(String(e))
+        }
+    }
+
+    const handleCopyLink = async () => {
+        if (!shareResult) return
+        await navigator.clipboard.writeText(shareResult.shareUrl)
+        setLinkCopied(true)
+        setTimeout(() => setLinkCopied(false), 2000)
+    }
+
     const handleChooseDestination = async () => {
         const chosen = await platform.filesystem.saveDialog({
             defaultPath: outputPath,
             filters: [{ name: "MP4 Video", extensions: ["mp4"] }],
         })
         if (chosen) setOutputPath(chosen)
+    }
+
+    const handleClose = () => {
+        setShowPanel(false)
+        setResult(null)
+        resetShare()
     }
 
     // Truncated display path — show last two segments
@@ -150,21 +191,129 @@ export function ExportButton() {
         : "..."
 
     const renderPanelContent = () => {
-        // Completion state
-        if (result) {
+        // Share link result
+        if (shareResult) {
             return (
-                <div className="flex flex-col items-center justify-center py-6 gap-2">
-                    <div className="w-10 h-10 rounded-full bg-green-500/15 flex items-center justify-center">
-                        <Check className="w-5 h-5 text-green-400" />
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col items-center justify-center py-4 gap-2">
+                        <div className="w-10 h-10 rounded-full bg-blue-500/15 flex items-center justify-center">
+                            <Link className="w-5 h-5 text-blue-400" />
+                        </div>
+                        <span className="text-sm text-blue-400 font-medium">
+                            Link ready!
+                        </span>
                     </div>
-                    <span className="text-sm text-green-400 font-medium">
-                        Saved!
-                    </span>
+
+                    {/* Share URL */}
+                    <div className="flex items-center gap-2 bg-white/5 rounded-lg px-3 py-2">
+                        <span className="flex-1 text-xs text-white/70 truncate min-w-0">
+                            {shareResult.shareUrl}
+                        </span>
+                        <button
+                            onClick={handleCopyLink}
+                            className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+                        >
+                            {linkCopied ? (
+                                <Check className="w-3.5 h-3.5 text-green-400" />
+                            ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                            )}
+                        </button>
+                    </div>
+
+                    <div className="flex gap-2">
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="flex-1 text-muted-foreground hover:text-white"
+                            onClick={handleCopyLink}
+                        >
+                            <Copy className="w-4 h-4 mr-1.5" />
+                            {linkCopied ? "Copied!" : "Copy Link"}
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="flex-1 text-muted-foreground hover:text-white"
+                            asChild
+                        >
+                            <a
+                                href={shareResult.shareUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                <ExternalLink className="w-4 h-4 mr-1.5" />
+                                Open
+                            </a>
+                        </Button>
+                    </div>
                 </div>
             )
         }
 
-        // Progress state
+        // Upload progress
+        if (isUploading && uploadProgress) {
+            const pct = uploadProgress.percentage
+            const phaseLabel =
+                uploadProgress.phase === "finalizing"
+                    ? "Finalizing..."
+                    : `Uploading ${pct}%`
+
+            return (
+                <div className="flex flex-col gap-3">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>{phaseLabel}</span>
+                        <span>
+                            {formatBytes(uploadProgress.bytesUploaded)} /{" "}
+                            {formatBytes(uploadProgress.totalBytes)}
+                        </span>
+                    </div>
+                    <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                        <div
+                            className="h-full bg-blue-500 rounded-full transition-all duration-200"
+                            style={{ width: `${pct}%` }}
+                        />
+                    </div>
+                </div>
+            )
+        }
+
+        // Completion state — show save confirmation + share option
+        if (result) {
+            return (
+                <div className="flex flex-col gap-3">
+                    <div className="flex flex-col items-center justify-center py-4 gap-2">
+                        <div className="w-10 h-10 rounded-full bg-green-500/15 flex items-center justify-center">
+                            <Check className="w-5 h-5 text-green-400" />
+                        </div>
+                        <span className="text-sm text-green-400 font-medium">
+                            Saved!
+                        </span>
+                    </div>
+
+                    <div className="flex gap-2">
+                        <Button
+                            size="sm"
+                            className="flex-1"
+                            onClick={handleShare}
+                        >
+                            <Link className="w-4 h-4 mr-1.5" />
+                            Share Link
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-white"
+                            onClick={handleClose}
+                        >
+                            Done
+                        </Button>
+                    </div>
+                </div>
+            )
+        }
+
+        // Export progress state
         if (exporting) {
             const pct = progress ? Math.round(progress.percentage) : 0
             const eta = progress?.estimatedRemainingMs
@@ -276,4 +425,11 @@ export function ExportButton() {
             )}
         </div>
     )
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }

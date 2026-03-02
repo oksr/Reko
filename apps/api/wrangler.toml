@@ -1,0 +1,17 @@
+name = "reko-api"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+
+[vars]
+SHARE_BASE_URL = "https://share.reko.video"
+
+# R2 bucket for video storage
+[[r2_buckets]]
+binding = "VIDEOS_BUCKET"
+bucket_name = "reko-videos"
+
+# D1 database for metadata, analytics, comments
+[[d1_databases]]
+binding = "DB"
+database_name = "reko-db"
+database_id = "placeholder-replace-after-creation"
