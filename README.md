@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nicepkg/reko/releases"><img src="https://img.shields.io/badge/macOS-Download-black?logo=apple&logoColor=white" alt="Download for macOS" /></a>
+  <a href="https://github.com/oksr/reko/releases"><img src="https://img.shields.io/badge/macOS-Download-black?logo=apple&logoColor=white" alt="Download for macOS" /></a>
   <a href="#license"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License" /></a>
 </p>
 
@@ -46,7 +46,7 @@ Reko is a three-layer native stack — no compromises:
 
 ```bash
 # Clone the repo
-git clone https://github.com/nicepkg/reko.git
+git clone https://github.com/oksr/reko.git
 cd reko
 
 # Install dependencies
