@@ -141,7 +141,7 @@ video.delete("/:id", async (c) => {
   const videoId = c.req.param("id")
 
   const owner = await requireOwner(c, videoId)
-  if (!owner) return c.res // 404 already sent by requireOwner
+  if (!owner) return c.json({ error: "Not found" }, 404)
 
   // Delete from R2
   await c.env.VIDEOS_BUCKET.delete(owner.video_key)

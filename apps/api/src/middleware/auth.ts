@@ -4,10 +4,12 @@ import { hashToken } from "../lib/crypto"
 
 /**
  * Verify the owner token from the Authorization header against the stored hash.
- * Returns the video row if authorized, or sends a 404 and returns null.
+ * Returns the video row if authorized, or null if unauthorized.
  *
  * Uses constant 404 response (not 401/403) to avoid revealing whether a video exists —
  * this prevents ID enumeration by unauthenticated callers.
+ *
+ * Callers should return `c.json({ error: "Not found" }, 404)` when this returns null.
  */
 export async function requireOwner(
   c: Context<{ Bindings: Env }>,
@@ -19,8 +21,6 @@ export async function requireOwner(
     : null
 
   if (!token) {
-    c.status(404)
-    c.body(JSON.stringify({ error: "Not found" }))
     return null
   }
 
@@ -33,10 +33,8 @@ export async function requireOwner(
     .first<{ video_key: string; thumbnail_key: string | null; owner_token_hash: string }>()
 
   // Constant-response: whether the video doesn't exist or the token is wrong,
-  // always return 404 to prevent probing.
+  // always return null to prevent probing.
   if (!row || row.owner_token_hash !== tokenHash) {
-    c.status(404)
-    c.body(JSON.stringify({ error: "Not found" }))
     return null
   }
 

@@ -144,6 +144,8 @@ pub async fn stop_recording(
         effects: None,
         sequence: None,
         auto_zoom_settings: None,
+        share_video_id: None,
+        share_owner_token: None,
     };
 
     project::save_project(&project)?;

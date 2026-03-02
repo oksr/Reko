@@ -1,6 +1,7 @@
 import { Hono } from "hono"
 import { nanoid } from "nanoid"
 import type { Env, CommentRow, AddCommentRequest } from "../types"
+import { requireOwner } from "../middleware/auth"
 
 const comments = new Hono<{ Bindings: Env }>()
 
@@ -109,11 +110,15 @@ comments.post("/:id/comments", async (c) => {
 
 /**
  * DELETE /api/videos/:id/comments/:commentId
- * Delete a comment. In production, requires auth.
+ * Delete a comment. Requires owner token.
  */
 comments.delete("/:id/comments/:commentId", async (c) => {
   const videoId = c.req.param("id")
   const commentId = c.req.param("commentId")
+
+  // Owner-only: verify token
+  const owner = await requireOwner(c, videoId)
+  if (!owner) return c.json({ error: "Not found" }, 404)
 
   const result = await c.env.DB.prepare(
     "DELETE FROM comments WHERE id = ? AND video_id = ?"

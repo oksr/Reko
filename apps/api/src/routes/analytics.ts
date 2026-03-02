@@ -21,6 +21,28 @@ analytics.post("/:id/views", async (c) => {
   const videoId = c.req.param("id")
   const body = await c.req.json<TrackViewRequest>()
 
+  // Validate inputs
+  if (typeof body.watchTimeMs !== "number" || body.watchTimeMs < 0) {
+    return c.json({ error: "watchTimeMs must be a non-negative number" }, 400)
+  }
+  if (typeof body.completionPercent !== "number" || body.completionPercent < 0 || body.completionPercent > 100) {
+    return c.json({ error: "completionPercent must be between 0 and 100" }, 400)
+  }
+
+  // Verify video exists and cap watchTimeMs at 110% of video duration
+  const video = await c.env.DB.prepare(
+    "SELECT duration_ms FROM videos WHERE id = ? AND status = 'ready'"
+  )
+    .bind(videoId)
+    .first<{ duration_ms: number }>()
+
+  if (!video) {
+    return c.json({ error: "Not found" }, 404)
+  }
+
+  const watchTimeMs = Math.min(body.watchTimeMs, video.duration_ms * 1.1)
+  const completionPercent = Math.min(body.completionPercent, 100)
+
   const ip = c.req.header("cf-connecting-ip") || "unknown"
   const viewerHash = await hashShort(ip)
   const referrerDomain = extractDomain(body.referrer)
@@ -36,8 +58,8 @@ analytics.post("/:id/views", async (c) => {
       eventId,
       videoId,
       viewerHash,
-      body.watchTimeMs,
-      body.completionPercent,
+      watchTimeMs,
+      completionPercent,
       referrerDomain,
       c.req.header("cf-ipcountry") || null,
       now
@@ -60,7 +82,7 @@ analytics.post("/:id/views", async (c) => {
       total_watch_time_ms = total_watch_time_ms + ?
     WHERE id = ?`
   )
-    .bind(isUnique ? 1 : 0, body.watchTimeMs, videoId)
+    .bind(isUnique ? 1 : 0, watchTimeMs, videoId)
     .run()
 
   return c.json({ ok: true })
@@ -77,7 +99,7 @@ analytics.get("/:id/analytics", async (c) => {
 
   // Owner-only: verify token
   const owner = await requireOwner(c, videoId)
-  if (!owner) return c.res
+  if (!owner) return c.json({ error: "Not found" }, 404)
 
   const video = await c.env.DB.prepare(
     "SELECT view_count, unique_viewer_count, total_watch_time_ms FROM videos WHERE id = ?"

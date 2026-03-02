@@ -68,4 +68,6 @@ export interface ProjectState {
     out_point: number
   }
   effects?: Effects
+  shareVideoId?: string | null
+  shareOwnerToken?: string | null
 }

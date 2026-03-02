@@ -17,6 +17,24 @@ const upload = new Hono<{ Bindings: Env }>()
 upload.post("/", async (c) => {
   const body = await c.req.json<CreateVideoRequest>()
 
+  // Input validation
+  const MAX_TITLE_LENGTH = 200
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024 // 5GB
+  const ALLOWED_CONTENT_TYPES = ["video/mp4", "video/quicktime", "video/webm"]
+
+  if (!body.title?.trim() || body.title.trim().length > MAX_TITLE_LENGTH) {
+    return c.json({ error: "Title must be between 1 and 200 characters" }, 400)
+  }
+  if (typeof body.fileSizeBytes !== "number" || body.fileSizeBytes <= 0 || body.fileSizeBytes > MAX_FILE_SIZE) {
+    return c.json({ error: "File size must be between 1 byte and 5GB" }, 400)
+  }
+  if (typeof body.durationMs !== "number" || body.durationMs <= 0) {
+    return c.json({ error: "Duration must be positive" }, 400)
+  }
+  if (!ALLOWED_CONTENT_TYPES.includes(body.contentType)) {
+    return c.json({ error: `Content type must be one of: ${ALLOWED_CONTENT_TYPES.join(", ")}` }, 400)
+  }
+
   const videoId = nanoid(12)
   const ownerToken = nanoid(32) // high-entropy secret
   const ownerTokenHash = await hashToken(ownerToken)
@@ -98,6 +116,10 @@ upload.post("/:id/finalize", async (c) => {
   const body = await c.req.json().catch(() => ({}))
 
   if (body.thumbnailData) {
+    // Reject base64 payloads that would decode to >500KB (~700KB base64)
+    if (body.thumbnailData.length > 700_000) {
+      return c.json({ error: "Thumbnail too large (max ~500KB)" }, 400)
+    }
     thumbnailKey = `videos/${videoId}/thumbnail.jpg`
     const thumbnailBytes = Uint8Array.from(atob(body.thumbnailData), (c) =>
       c.charCodeAt(0)
@@ -139,6 +161,23 @@ async function generatePresignedPutUrl(
 upload.put("/upload/*", async (c) => {
   const key = c.req.path.replace("/api/videos/upload/", "")
   const decodedKey = decodeURIComponent(key)
+
+  // Validate the key matches the expected pattern and corresponds to a pending video
+  const keyMatch = decodedKey.match(/^videos\/([^/]+)\/video\.mp4$/)
+  if (!keyMatch) {
+    return c.json({ error: "Invalid upload key" }, 400)
+  }
+
+  const videoId = keyMatch[1]
+  const video = await c.env.DB.prepare(
+    "SELECT id FROM videos WHERE id = ? AND status = 'pending'"
+  )
+    .bind(videoId)
+    .first()
+
+  if (!video) {
+    return c.json({ error: "Not found" }, 404)
+  }
 
   const body = c.req.raw.body
   if (!body) {

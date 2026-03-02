@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import { usePlatform } from "@/platform/PlatformContext"
 import { Button } from "@/components/ui/button"
-import { Download, X, Check, FolderOpen, Link, Copy, ExternalLink, Loader2 } from "lucide-react"
+import { Download, X, Check, FolderOpen, Link, Copy, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEditorStore } from "@/stores/editor-store"
 import { sanitizeProject } from "@/hooks/use-auto-save"
@@ -150,10 +150,19 @@ export function ExportButton() {
             })
             const videoData = new Uint8Array(fileData).buffer
 
-            await startShare(videoData, {
+            const shareData = await startShare(videoData, {
                 title: project.name,
                 durationMs: project.timeline.out_point - project.timeline.in_point,
             }, DEFAULT_SHARE_SETTINGS)
+
+            // Persist videoId and ownerToken in project state (triggers auto-save)
+            if (shareData) {
+                useEditorStore.setState((s) => ({
+                    project: s.project
+                        ? { ...s.project, shareVideoId: shareData.videoId, shareOwnerToken: shareData.ownerToken }
+                        : s.project,
+                }))
+            }
         } catch (e) {
             console.error("[share] Share error:", e)
             setLocalError(String(e))

@@ -12,7 +12,8 @@ export function useVideoAnalytics(
 ) {
   const watchStartRef = useRef<number | null>(null)
   const totalWatchTimeRef = useRef(0)
-  const hasSentRef = useRef(false)
+  const lastSentWatchTimeRef = useRef(0)
+  const hasSentFinalRef = useRef(false)
 
   useEffect(() => {
     const video = videoRef.current
@@ -29,20 +30,25 @@ export function useVideoAnalytics(
       }
     }
 
-    const sendAnalytics = () => {
-      if (hasSentRef.current) return
-
-      // Include current play session if still playing
+    const getCurrentTotal = () => {
       let totalMs = totalWatchTimeRef.current
       if (watchStartRef.current) {
         totalMs += Date.now() - watchStartRef.current
       }
+      return totalMs
+    }
 
-      if (totalMs > 1000) {
-        // Only track views > 1 second
+    const sendFinalAnalytics = () => {
+      if (hasSentFinalRef.current) return
+
+      const totalMs = getCurrentTotal()
+      const delta = totalMs - lastSentWatchTimeRef.current
+
+      if (delta > 1000) {
         const completion = durationMs > 0 ? Math.min(totalMs / durationMs, 1) : 0
-        trackView(videoId, totalMs, completion * 100)
-        hasSentRef.current = true
+        trackView(videoId, delta, completion * 100)
+        lastSentWatchTimeRef.current = totalMs
+        hasSentFinalRef.current = true
       }
     }
 
@@ -50,16 +56,20 @@ export function useVideoAnalytics(
     video.addEventListener("pause", onPause)
 
     // Send on page unload
-    const onBeforeUnload = () => sendAnalytics()
+    const onBeforeUnload = () => sendFinalAnalytics()
     window.addEventListener("beforeunload", onBeforeUnload)
 
-    // Also send periodically (every 30s) for long videos
+    // Send delta periodically (every 30s) for long videos
     const interval = setInterval(() => {
-      if (!video.paused && totalWatchTimeRef.current > 0) {
-        // Reset and send periodically for long sessions
-        const totalMs = totalWatchTimeRef.current + (watchStartRef.current ? Date.now() - watchStartRef.current : 0)
-        const completion = durationMs > 0 ? Math.min(totalMs / durationMs, 1) : 0
-        trackView(videoId, totalMs, completion * 100)
+      if (!video.paused) {
+        const totalMs = getCurrentTotal()
+        const delta = totalMs - lastSentWatchTimeRef.current
+
+        if (delta > 1000) {
+          const completion = durationMs > 0 ? Math.min(totalMs / durationMs, 1) : 0
+          trackView(videoId, delta, completion * 100)
+          lastSentWatchTimeRef.current = totalMs
+        }
       }
     }, 30_000)
 
@@ -68,7 +78,7 @@ export function useVideoAnalytics(
       video.removeEventListener("pause", onPause)
       window.removeEventListener("beforeunload", onBeforeUnload)
       clearInterval(interval)
-      sendAnalytics()
+      sendFinalAnalytics()
     }
   }, [videoId, durationMs]) // eslint-disable-line react-hooks/exhaustive-deps
 }
