@@ -39,6 +39,9 @@ function createEnv(dbOpts: { firstResponses?: unknown[] } = {}) {
     DB: createMockDB(dbOpts),
     VIDEOS_BUCKET: createMockR2(),
     SHARE_BASE_URL: "https://share.reko.app",
+    R2_ACCESS_KEY_ID: "test-key-id",
+    R2_SECRET_ACCESS_KEY: "test-secret-key",
+    R2_ACCOUNT_ID: "test-account-id",
   }
 }
 
@@ -126,40 +129,6 @@ describe("POST /api/videos — input validation", () => {
     expect(data.videoId).toBeTruthy()
     expect(data.ownerToken).toBeTruthy()
     expect(data.uploadUrl).toBeTruthy()
-  })
-})
-
-describe("PUT /api/videos/upload/* — upload proxy auth", () => {
-  it("rejects invalid key format", async () => {
-    const env = createEnv()
-    const req = new Request("http://localhost/api/videos/upload/some-random-key", {
-      method: "PUT",
-      body: new ArrayBuffer(10),
-    })
-    const res = await appFetch(req, env)
-    expect(res.status).toBe(400)
-    const data = await res.json()
-    expect(data.error).toMatch(/invalid/i)
-  })
-
-  it("rejects upload for non-pending video", async () => {
-    const env = createEnv({ firstResponses: [null] })
-    const req = new Request(
-      "http://localhost/api/videos/upload/videos%2Fabc123%2Fvideo.mp4",
-      { method: "PUT", body: new ArrayBuffer(10) }
-    )
-    const res = await appFetch(req, env)
-    expect(res.status).toBe(404)
-  })
-
-  it("accepts upload for pending video", async () => {
-    const env = createEnv({ firstResponses: [{ id: "abc123" }] })
-    const req = new Request(
-      "http://localhost/api/videos/upload/videos%2Fabc123%2Fvideo.mp4",
-      { method: "PUT", body: new ArrayBuffer(10) }
-    )
-    const res = await appFetch(req, env)
-    expect(res.status).toBe(200)
   })
 })
 

@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react"
-import { shareApi } from "@/lib/share-api"
+import { usePlatform } from "@/platform/PlatformContext"
 import {
   DEFAULT_SHARE_SETTINGS,
   type ShareSettings,
@@ -18,6 +18,7 @@ interface ShareResult {
 }
 
 export function useShare() {
+  const platform = usePlatform()
   const [uploadProgress, setUploadProgress] =
     useState<ShareUploadProgress | null>(null)
   const [shareResult, setShareResult] = useState<ShareResult | null>(null)
@@ -51,7 +52,7 @@ export function useShare() {
 
       try {
         // Step 1: Create video record and get upload URL + ownerToken
-        const { videoId, ownerToken, uploadUrl, shareUrl } = await shareApi.createShare({
+        const { videoId, ownerToken, uploadUrl, shareUrl } = await platform.share.createShare({
           title: options.title,
           fileSizeBytes: videoData.byteLength,
           durationMs: options.durationMs,
@@ -60,7 +61,7 @@ export function useShare() {
         })
 
         // Step 2: Upload video data with progress tracking
-        await shareApi.uploadVideo(uploadUrl, videoData, setUploadProgress)
+        await platform.share.uploadVideo(uploadUrl, videoData, setUploadProgress)
 
         // Step 3: Finalize (requires ownerToken)
         setUploadProgress({
@@ -70,7 +71,7 @@ export function useShare() {
           percentage: 100,
         })
 
-        await shareApi.finalizeShare({ videoId }, ownerToken)
+        await platform.share.finalizeShare({ videoId }, ownerToken)
 
         // Done
         setUploadProgress({
@@ -96,7 +97,7 @@ export function useShare() {
         throw err
       }
     },
-    []
+    [platform]
   )
 
   const reset = useCallback(() => {

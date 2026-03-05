@@ -1,5 +1,22 @@
 // ─── Shareable Video Links ───────────────────────────────────────────────────
-// Types shared between the desktop app, backend API, and video player page.
+// Re-export canonical wire types from @reko/types
+export type {
+  VideoSettings,
+  VideoAnalytics,
+  VideoMetadata,
+  VideoComment,
+  CreateVideoRequest,
+  CreateVideoResponse,
+} from "@reko/types"
+
+// Backward-compat aliases for existing code that uses the old names
+import type { VideoSettings, VideoAnalytics, CreateVideoRequest, CreateVideoResponse } from "@reko/types"
+export type ShareSettings = VideoSettings
+export type ShareAnalytics = VideoAnalytics
+export type CreateShareRequest = CreateVideoRequest
+export type CreateShareResponse = CreateVideoResponse
+
+// ─── App-internal Types ─────────────────────────────────────────────────────
 
 /** A video that has been uploaded and shared via a public link. */
 export interface SharedVideo {
@@ -12,21 +29,8 @@ export interface SharedVideo {
   fileSizeBytes: number
   createdAt: number // epoch ms
   expiresAt: number | null // epoch ms, null = never
-  settings: ShareSettings
-  analytics: ShareAnalytics
-}
-
-export interface ShareSettings {
-  allowComments: boolean
-  allowDownload: boolean
-  showBadge: boolean // "Made with Reko" watermark
-  passwordProtected: boolean
-}
-
-export interface ShareAnalytics {
-  views: number
-  uniqueViewers: number
-  totalWatchTimeMs: number
+  settings: VideoSettings
+  analytics: VideoAnalytics
 }
 
 /** Detailed analytics for the video owner dashboard. */
@@ -39,34 +43,6 @@ export interface ViewEvent {
   referrerDomain: string | null // domain only, path/query stripped for privacy
   country: string | null // from Cloudflare cf-ipcountry (aggregate-level)
   timestamp: number
-}
-
-/** Comment on a shared video. */
-export interface VideoComment {
-  id: string
-  videoId: string
-  authorName: string
-  content: string
-  timestampMs: number | null // optional video timestamp for time-linked comments
-  createdAt: number
-}
-
-// ─── API Request/Response Types ─────────────────────────────────────────────
-
-/** Request to create a new share link. Returns a presigned upload URL. */
-export interface CreateShareRequest {
-  title: string
-  fileSizeBytes: number
-  durationMs: number
-  contentType: string // "video/mp4"
-  settings: ShareSettings
-}
-
-export interface CreateShareResponse {
-  videoId: string
-  ownerToken: string // returned ONCE — must be stored securely by the desktop app
-  uploadUrl: string // presigned PUT URL to R2
-  shareUrl: string // e.g. "https://share.reko.video/abc123"
 }
 
 /** Called after upload completes to finalize the share. */

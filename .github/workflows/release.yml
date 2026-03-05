@@ -122,6 +122,8 @@ jobs:
           VERSION=$(jq -r '.version' apps/tauri/src-tauri/tauri.conf.json)
           SIG=$(cat "${{ steps.artifacts.outputs.sig }}")
           TARGZ_NAME=$(basename "${{ steps.artifacts.outputs.targz }}")
+          REPO="${{ github.repository }}"
+          TAG="${{ github.ref_name }}"
           cat > latest.json <<ENDJSON
           {
             "version": "$VERSION",
@@ -130,7 +132,7 @@ jobs:
             "platforms": {
               "darwin-aarch64": {
                 "signature": "$SIG",
-                "url": "$TARGZ_NAME"
+                "url": "https://github.com/${REPO}/releases/download/${TAG}/${TARGZ_NAME}"
               }
             }
           }

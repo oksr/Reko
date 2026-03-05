@@ -16,11 +16,13 @@ import type {
   PlatformShortcuts,
   PlatformMonitor,
   PlatformMenu,
+  PlatformShare,
   WindowOptions,
   SaveDialogOptions,
   OpenDialogOptions,
   MenuItemDef,
 } from "@app/platform/types"
+import { ShareApiClient } from "@app/lib/share-api"
 
 const tauriWindow: PlatformWindow = {
   getLabel() {
@@ -152,6 +154,17 @@ const tauriMenu: PlatformMenu = {
   },
 }
 
+const shareClient = new ShareApiClient()
+
+const tauriShare: PlatformShare = {
+  createShare: (request) => shareClient.createShare(request),
+  uploadVideo: (uploadUrl, videoData, onProgress) => shareClient.uploadVideo(uploadUrl, videoData, onProgress),
+  finalizeShare: (request, ownerToken) => shareClient.finalizeShare(request, ownerToken),
+  getVideo: (videoId) => shareClient.getVideo(videoId),
+  deleteVideo: (videoId, ownerToken) => shareClient.deleteVideo(videoId, ownerToken),
+  getAnalytics: (videoId, ownerToken) => shareClient.getAnalytics(videoId, ownerToken),
+}
+
 export const tauriPlatform: Platform = {
   invoke: invoke as Platform["invoke"],
   window: tauriWindow,
@@ -161,5 +174,6 @@ export const tauriPlatform: Platform = {
   shortcuts: tauriShortcuts,
   monitor: tauriMonitor,
   menu: tauriMenu,
+  share: tauriShare,
   isTauri: true,
 }

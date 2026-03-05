@@ -13,7 +13,8 @@ import { hashToken } from "../lib/crypto"
  */
 export async function requireOwner(
   c: Context<{ Bindings: Env }>,
-  videoId: string
+  videoId: string,
+  opts?: { status?: string }
 ): Promise<{ video_key: string; thumbnail_key: string | null } | null> {
   const authHeader = c.req.header("authorization")
   const token = authHeader?.startsWith("Bearer ")
@@ -26,10 +27,16 @@ export async function requireOwner(
 
   const tokenHash = await hashToken(token)
 
-  const row = await c.env.DB.prepare(
-    "SELECT video_key, thumbnail_key, owner_token_hash FROM videos WHERE id = ?"
-  )
-    .bind(videoId)
+  let query = "SELECT video_key, thumbnail_key, owner_token_hash FROM videos WHERE id = ?"
+  const binds: string[] = [videoId]
+
+  if (opts?.status) {
+    query += " AND status = ?"
+    binds.push(opts.status)
+  }
+
+  const row = await c.env.DB.prepare(query)
+    .bind(...binds)
     .first<{ video_key: string; thumbnail_key: string | null; owner_token_hash: string }>()
 
   // Constant-response: whether the video doesn't exist or the token is wrong,

@@ -25,7 +25,7 @@ export function VideoPlayer({
   const [volume, setVolume] = useState(1)
   const [isMuted, setIsMuted] = useState(false)
   const [showControls, setShowControls] = useState(true)
-  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useVideoAnalytics(videoId, videoRef, durationMs)
 
@@ -193,13 +193,13 @@ export function VideoPlayer({
 
         <div className="flex items-center gap-3">
           {/* Play/pause */}
-          <button onClick={togglePlay} className="text-white hover:text-blue-400 transition-colors">
+          <button onClick={togglePlay} aria-label={isPlaying ? "Pause" : "Play"} className="text-white hover:text-blue-400 transition-colors">
             {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" fill="currentColor" />}
           </button>
 
           {/* Volume */}
           <div className="flex items-center gap-1.5 group/vol">
-            <button onClick={toggleMute} className="text-white hover:text-blue-400 transition-colors">
+            <button onClick={toggleMute} aria-label={isMuted || volume === 0 ? "Unmute" : "Mute"} className="text-white hover:text-blue-400 transition-colors">
               {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
             </button>
             <input
@@ -226,6 +226,7 @@ export function VideoPlayer({
               href={videoUrl}
               download={`${title}.mp4`}
               className="text-white/70 hover:text-white transition-colors"
+              aria-label="Download video"
               onClick={(e) => e.stopPropagation()}
             >
               <Download className="w-5 h-5" />
@@ -233,7 +234,7 @@ export function VideoPlayer({
           )}
 
           {/* Fullscreen */}
-          <button onClick={toggleFullscreen} className="text-white/70 hover:text-white transition-colors">
+          <button onClick={toggleFullscreen} aria-label="Toggle fullscreen" className="text-white/70 hover:text-white transition-colors">
             <Maximize className="w-5 h-5" />
           </button>
         </div>

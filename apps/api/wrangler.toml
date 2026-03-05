@@ -4,6 +4,8 @@ compatibility_date = "2025-12-01"
 
 [vars]
 SHARE_BASE_URL = "https://share.reko.video"
+R2_ACCOUNT_ID = ""  # Set via wrangler secret put or .dev.vars for local
+ENVIRONMENT = "production"
 
 # R2 bucket for video storage
 [[r2_buckets]]

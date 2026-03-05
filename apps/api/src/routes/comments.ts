@@ -31,7 +31,7 @@ comments.get("/:id/comments", async (c) => {
     `SELECT id, author_name, content, timestamp_ms, created_at
      FROM comments
      WHERE video_id = ?
-     ORDER BY created_at ASC`
+     ORDER BY created_at ASC LIMIT 200`
   )
     .bind(videoId)
     .all<CommentRow>()

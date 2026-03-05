@@ -44,3 +44,6 @@ apps/website/.claude/
 *.sw?
 
 .agent/
+
+docs/plans/roadmap.md
+tasks.md

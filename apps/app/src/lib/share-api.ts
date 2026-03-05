@@ -175,5 +175,4 @@ export class ShareApiClient {
   }
 }
 
-/** Singleton API client instance */
-export const shareApi = new ShareApiClient()
+// No singleton — instantiated by TauriPlatform and accessed via usePlatform().share

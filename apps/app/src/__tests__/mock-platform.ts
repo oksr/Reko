@@ -42,6 +42,22 @@ export function createMockPlatform(overrides?: Partial<Platform>): Platform {
     menu: {
       showDropdown: vi.fn().mockResolvedValue(undefined),
     },
+    share: {
+      createShare: vi.fn().mockResolvedValue({
+        videoId: "test-video-id",
+        ownerToken: "test-owner-token",
+        uploadUrl: "https://example.com/upload",
+        shareUrl: "https://share.reko.video/test-video-id",
+      }),
+      uploadVideo: vi.fn().mockResolvedValue(undefined),
+      finalizeShare: vi.fn().mockResolvedValue({
+        shareUrl: "https://share.reko.video/test-video-id",
+        thumbnailUrl: null,
+      }),
+      getVideo: vi.fn().mockResolvedValue(null),
+      deleteVideo: vi.fn().mockResolvedValue(undefined),
+      getAnalytics: vi.fn().mockResolvedValue(null),
+    },
     ...overrides,
   }
 }

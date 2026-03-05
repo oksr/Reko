@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { MessageCircle, Send, Clock } from "lucide-react"
-import { fetchComments, postComment, type Comment } from "@/lib/api"
+import { fetchComments, postComment, type VideoComment } from "@/lib/api"
 
 interface CommentsSectionProps {
   videoId: string
@@ -8,7 +8,7 @@ interface CommentsSectionProps {
 }
 
 export function CommentsSection({ videoId, enabled }: CommentsSectionProps) {
-  const [comments, setComments] = useState<Comment[]>([])
+  const [comments, setComments] = useState<VideoComment[]>([])
   const [authorName, setAuthorName] = useState("")
   const [content, setContent] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -16,7 +16,7 @@ export function CommentsSection({ videoId, enabled }: CommentsSectionProps) {
 
   useEffect(() => {
     if (!enabled) return
-    fetchComments(videoId).then(setComments)
+    fetchComments(videoId).then(setComments).catch(() => {})
   }, [videoId, enabled])
 
   if (!enabled) return null
@@ -49,6 +49,7 @@ export function CommentsSection({ videoId, enabled }: CommentsSectionProps) {
     <div className="mt-6">
       <button
         onClick={() => setShowComments((v) => !v)}
+        aria-label="Toggle comments"
         className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors mb-4"
       >
         <MessageCircle className="w-4 h-4" />
@@ -111,6 +112,7 @@ export function CommentsSection({ videoId, enabled }: CommentsSectionProps) {
               <button
                 type="submit"
                 disabled={!authorName.trim() || !content.trim() || isSubmitting}
+                aria-label="Post comment"
                 className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-white/10 disabled:text-white/30 rounded-lg text-sm text-white transition-colors"
               >
                 <Send className="w-4 h-4" />

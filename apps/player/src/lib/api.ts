@@ -1,32 +1,8 @@
+import type { VideoMetadata, VideoComment } from "@reko/types"
+
 const API_BASE = import.meta.env.VITE_API_URL || ""
 
-export interface VideoMetadata {
-  id: string
-  title: string
-  thumbnailUrl: string | null
-  videoUrl: string
-  durationMs: number
-  createdAt: number
-  settings: {
-    allowComments: boolean
-    allowDownload: boolean
-    showBadge: boolean
-    passwordProtected: boolean
-  }
-  analytics: {
-    views: number
-    uniqueViewers: number
-    totalWatchTimeMs: number
-  }
-}
-
-export interface Comment {
-  id: string
-  authorName: string
-  content: string
-  timestampMs: number | null
-  createdAt: number
-}
+export type { VideoMetadata, VideoComment }
 
 export async function fetchVideo(videoId: string): Promise<VideoMetadata> {
   const res = await fetch(`${API_BASE}/api/videos/${videoId}`)
@@ -38,7 +14,7 @@ export async function fetchVideo(videoId: string): Promise<VideoMetadata> {
   return res.json()
 }
 
-export async function fetchComments(videoId: string): Promise<Comment[]> {
+export async function fetchComments(videoId: string): Promise<VideoComment[]> {
   const res = await fetch(`${API_BASE}/api/videos/${videoId}/comments`)
   if (!res.ok) return []
   return res.json()
@@ -49,7 +25,7 @@ export async function postComment(
   authorName: string,
   content: string,
   timestampMs?: number
-): Promise<Comment> {
+): Promise<VideoComment> {
   const res = await fetch(`${API_BASE}/api/videos/${videoId}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

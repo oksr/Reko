@@ -1,8 +1,24 @@
+// Re-export shared wire types
+export type {
+  VideoSettings,
+  VideoAnalytics,
+  VideoMetadata,
+  VideoComment,
+  CreateVideoRequest,
+  CreateVideoResponse,
+  AddCommentRequest,
+  TrackViewRequest,
+} from "@reko/types"
+
 // Cloudflare Worker environment bindings
 export interface Env {
   VIDEOS_BUCKET: R2Bucket
   DB: D1Database
   SHARE_BASE_URL: string
+  R2_ACCESS_KEY_ID: string
+  R2_SECRET_ACCESS_KEY: string
+  R2_ACCOUNT_ID: string
+  ENVIRONMENT?: string
 }
 
 // ─── DB Row Types ───────────────────────────────────────────────────────────
@@ -46,58 +62,4 @@ export interface CommentRow {
   content: string
   timestamp_ms: number | null
   created_at: number
-}
-
-// ─── API Types ──────────────────────────────────────────────────────────────
-
-export interface CreateVideoRequest {
-  title: string
-  fileSizeBytes: number
-  durationMs: number
-  contentType: string
-  settings: {
-    allowComments: boolean
-    allowDownload: boolean
-    showBadge: boolean
-    passwordProtected: boolean
-  }
-}
-
-export interface CreateVideoResponse {
-  videoId: string
-  ownerToken: string // returned ONCE at creation — client must store securely
-  uploadUrl: string
-  shareUrl: string
-}
-
-export interface VideoMetadata {
-  id: string
-  title: string
-  thumbnailUrl: string | null
-  videoUrl: string
-  durationMs: number
-  createdAt: number
-  settings: {
-    allowComments: boolean
-    allowDownload: boolean
-    showBadge: boolean
-    passwordProtected: boolean
-  }
-  analytics: {
-    views: number
-    uniqueViewers: number
-    totalWatchTimeMs: number
-  }
-}
-
-export interface AddCommentRequest {
-  authorName: string
-  content: string
-  timestampMs?: number
-}
-
-export interface TrackViewRequest {
-  watchTimeMs: number
-  completionPercent: number
-  referrer?: string
 }

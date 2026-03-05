@@ -1,6 +1,15 @@
 // All Tauri-specific functionality is accessed through this interface.
 // app/ components use usePlatform() — never import @tauri-apps directly.
 
+import type {
+  CreateShareRequest,
+  CreateShareResponse,
+  FinalizeShareRequest,
+  FinalizeShareResponse,
+  ShareUploadProgress,
+  SharedVideo,
+} from "@/types/sharing"
+
 export interface WindowInfo {
   label: string
 }
@@ -95,6 +104,15 @@ export interface PlatformMenu {
   showDropdown(items: MenuItemDef[]): Promise<void>
 }
 
+export interface PlatformShare {
+  createShare(request: CreateShareRequest): Promise<CreateShareResponse>
+  uploadVideo(uploadUrl: string, videoData: ArrayBuffer, onProgress?: (progress: ShareUploadProgress) => void): Promise<void>
+  finalizeShare(request: FinalizeShareRequest, ownerToken: string): Promise<FinalizeShareResponse>
+  getVideo(videoId: string): Promise<SharedVideo>
+  deleteVideo(videoId: string, ownerToken: string): Promise<void>
+  getAnalytics(videoId: string, ownerToken: string): Promise<unknown>
+}
+
 export interface Platform {
   /** Raw IPC invoke — use for all backend commands */
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>
@@ -106,6 +124,7 @@ export interface Platform {
   shortcuts: PlatformShortcuts
   monitor: PlatformMonitor
   menu: PlatformMenu
+  share: PlatformShare
 
   /** True when running inside Tauri desktop app */
   isTauri: boolean
