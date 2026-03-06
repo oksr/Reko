@@ -106,7 +106,7 @@ export interface PlatformMenu {
 
 export interface PlatformShare {
   createShare(request: CreateShareRequest): Promise<CreateShareResponse>
-  uploadVideo(uploadUrl: string, videoData: ArrayBuffer, onProgress?: (progress: ShareUploadProgress) => void): Promise<void>
+  uploadVideo(uploadUrl: string, videoData: ArrayBuffer, ownerToken: string, onProgress?: (progress: ShareUploadProgress) => void): Promise<void>
   finalizeShare(request: FinalizeShareRequest, ownerToken: string): Promise<FinalizeShareResponse>
   getVideo(videoId: string): Promise<SharedVideo>
   deleteVideo(videoId: string, ownerToken: string): Promise<void>

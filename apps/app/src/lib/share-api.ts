@@ -8,7 +8,7 @@ import type {
 } from "@/types/sharing"
 
 const API_BASE_URL =
-  import.meta.env.VITE_SHARE_API_URL || "https://api.reko.video"
+  import.meta.env.VITE_SHARE_API_URL || "https://reko-api.yasodev.workers.dev"
 
 /**
  * API client for the Reko sharing service.
@@ -56,6 +56,7 @@ export class ShareApiClient {
   async uploadVideo(
     uploadUrl: string,
     videoData: ArrayBuffer,
+    ownerToken: string,
     onProgress?: (progress: ShareUploadProgress) => void
   ): Promise<void> {
     const totalBytes = videoData.byteLength
@@ -70,6 +71,7 @@ export class ShareApiClient {
       const xhr = new XMLHttpRequest()
       xhr.open("PUT", resolvedUrl)
       xhr.setRequestHeader("Content-Type", "video/mp4")
+      xhr.setRequestHeader("Authorization", `Bearer ${ownerToken}`)
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && onProgress) {
@@ -91,7 +93,7 @@ export class ShareApiClient {
       }
 
       xhr.onerror = () => reject(new Error("Upload failed: network error"))
-      xhr.send(videoData)
+      xhr.send(new Uint8Array(videoData))
     })
   }
 

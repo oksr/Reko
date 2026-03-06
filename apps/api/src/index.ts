@@ -38,4 +38,27 @@ app.onError((err, c) => {
   return c.json({ error: "Internal server error" }, 500)
 })
 
-export default app
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext) {
+    // Clean up expired videos: delete R2 objects and mark as deleted
+    const now = Date.now()
+    const expired = await env.DB.prepare(
+      "SELECT id, video_key, thumbnail_key FROM videos WHERE expires_at IS NOT NULL AND expires_at < ? AND status = 'ready'"
+    )
+      .bind(now)
+      .all<{ id: string; video_key: string; thumbnail_key: string | null }>()
+
+    for (const row of expired.results) {
+      await env.VIDEOS_BUCKET.delete(row.video_key)
+      if (row.thumbnail_key) {
+        await env.VIDEOS_BUCKET.delete(row.thumbnail_key)
+      }
+      await env.DB.prepare("UPDATE videos SET status = 'deleted' WHERE id = ?")
+        .bind(row.id)
+        .run()
+    }
+
+    console.log(`[cron] Cleaned up ${expired.results.length} expired videos`)
+  },
+}

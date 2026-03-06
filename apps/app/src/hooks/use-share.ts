@@ -61,7 +61,7 @@ export function useShare() {
         })
 
         // Step 2: Upload video data with progress tracking
-        await platform.share.uploadVideo(uploadUrl, videoData, setUploadProgress)
+        await platform.share.uploadVideo(uploadUrl, videoData, ownerToken, setUploadProgress)
 
         // Step 3: Finalize (requires ownerToken)
         setUploadProgress({

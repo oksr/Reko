@@ -1,3 +1,9 @@
+/// Read a file as raw bytes (used by share flow to read exported video).
+#[tauri::command]
+pub fn read_file_bytes(path: String) -> Result<Vec<u8>, String> {
+    std::fs::read(&path).map_err(|e| format!("Failed to read file: {e}"))
+}
+
 /// Write export data to a file (used by WebCodecs export pipeline).
 #[tauri::command]
 pub fn write_export_file(path: String, data: Vec<u8>) -> Result<(), String> {

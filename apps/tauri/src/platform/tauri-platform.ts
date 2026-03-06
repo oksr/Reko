@@ -158,7 +158,7 @@ const shareClient = new ShareApiClient()
 
 const tauriShare: PlatformShare = {
   createShare: (request) => shareClient.createShare(request),
-  uploadVideo: (uploadUrl, videoData, onProgress) => shareClient.uploadVideo(uploadUrl, videoData, onProgress),
+  uploadVideo: (uploadUrl, videoData, ownerToken, onProgress) => shareClient.uploadVideo(uploadUrl, videoData, ownerToken, onProgress),
   finalizeShare: (request, ownerToken) => shareClient.finalizeShare(request, ownerToken),
   getVideo: (videoId) => shareClient.getVideo(videoId),
   deleteVideo: (videoId, ownerToken) => shareClient.deleteVideo(videoId, ownerToken),

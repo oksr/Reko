@@ -30,19 +30,21 @@ video.get("/:id", async (c) => {
     return c.json({ error: "Not found" }, 404)
   }
 
+  const apiBase = new URL(c.req.url).origin
+
   const metadata: VideoMetadata = {
     id: row.id,
     title: row.title,
     thumbnailUrl: row.thumbnail_key
-      ? `${c.env.SHARE_BASE_URL}/api/videos/${row.id}/thumbnail`
+      ? `${apiBase}/api/videos/${row.id}/thumbnail`
       : null,
-    videoUrl: `${c.env.SHARE_BASE_URL}/api/videos/${row.id}/stream`,
+    videoUrl: `${apiBase}/api/videos/${row.id}/stream`,
     durationMs: row.duration_ms,
     createdAt: row.created_at,
     settings: {
       allowComments: row.allow_comments === 1,
       allowDownload: row.allow_download === 1,
-      showBadge: row.show_badge === 1,
+      showBadge: true, // Phase 1: always show badge (free tier)
       passwordProtected: row.password_hash !== null,
     },
     analytics: {

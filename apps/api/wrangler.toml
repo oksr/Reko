@@ -1,10 +1,11 @@
 name = "reko-api"
 main = "src/index.ts"
 compatibility_date = "2025-12-01"
+account_id = "5007466dccf4cf5a65a28f2a17ea4dde"
 
 [vars]
-SHARE_BASE_URL = "https://share.reko.video"
-R2_ACCOUNT_ID = ""  # Set via wrangler secret put or .dev.vars for local
+SHARE_BASE_URL = "https://reko-player.pages.dev"
+R2_ACCOUNT_ID = "5007466dccf4cf5a65a28f2a17ea4dde"
 ENVIRONMENT = "production"
 
 # R2 bucket for video storage
@@ -16,4 +17,8 @@ bucket_name = "reko-videos"
 [[d1_databases]]
 binding = "DB"
 database_name = "reko-db"
-database_id = "placeholder-replace-after-creation"
+database_id = "d3fd1ab1-7704-44e1-8ca9-42d7b4451c8b"
+
+# Cron trigger: clean up expired videos every hour
+[triggers]
+crons = ["0 * * * *"]
