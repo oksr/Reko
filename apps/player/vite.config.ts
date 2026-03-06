@@ -10,4 +10,12 @@ export default defineConfig({
       "@": resolve(__dirname, "src"),
     },
   },
+  server: {
+    proxy: {
+      "/api": {
+        target: "https://reko-api.yasodev.workers.dev",
+        changeOrigin: true,
+      },
+    },
+  },
 })

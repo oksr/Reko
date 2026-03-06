@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { MessageCircle, Send, Clock } from "lucide-react"
+import { MessageCircle, ArrowUp, Clock, ChevronDown } from "lucide-react"
 import { fetchComments, postComment, type VideoComment } from "@/lib/api"
 
 interface CommentsSectionProps {
@@ -24,98 +24,124 @@ export function CommentsSection({ videoId, enabled }: CommentsSectionProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!authorName.trim() || !content.trim() || isSubmitting) return
-
     setIsSubmitting(true)
     try {
-      const comment = await postComment(videoId, authorName.trim(), content.trim())
+      const comment = await postComment(
+        videoId,
+        authorName.trim(),
+        content.trim()
+      )
       setComments((prev) => [...prev, comment])
       setContent("")
-      // Save author name for future comments
       localStorage.setItem("reko-comment-name", authorName.trim())
     } catch {
-      // silently fail — non-critical feature
+      // silently fail
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  // Restore saved name
   useEffect(() => {
     const saved = localStorage.getItem("reko-comment-name")
     if (saved) setAuthorName(saved)
   }, [])
 
+  const canSubmit = authorName.trim() && content.trim() && !isSubmitting
+
   return (
-    <div className="mt-6">
+    <div className="mt-7">
       <button
         onClick={() => setShowComments((v) => !v)}
         aria-label="Toggle comments"
-        className="flex items-center gap-2 text-sm text-white/60 hover:text-white transition-colors mb-4"
+        className="flex items-center gap-2 p-0 bg-transparent border-none cursor-pointer text-[13px] font-medium text-white/35 hover:text-white/60 transition-colors duration-150"
       >
         <MessageCircle className="w-4 h-4" />
-        Comments ({comments.length})
+        <span>
+          Comments{" "}
+          <span className="text-white/20">({comments.length})</span>
+        </span>
+        <ChevronDown
+          className={`w-3.5 h-3.5 text-white/15 transition-transform duration-200 ease-[var(--ease-out-quint)] ${
+            showComments ? "rotate-180" : ""
+          }`}
+        />
       </button>
 
       {showComments && (
-        <div className="space-y-4">
+        <div className="mt-4">
           {/* Comment list */}
           {comments.length > 0 ? (
-            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+            <div className="comments-scroll flex flex-col gap-1.5 max-h-[400px] overflow-y-auto mb-4">
               {comments.map((comment) => (
                 <div
                   key={comment.id}
-                  className="bg-white/5 rounded-lg p-3 space-y-1"
+                  className="p-3 rounded-xl bg-white/[0.02] shadow-[0_0_0_0.5px_rgba(255,255,255,0.04)] hover:bg-white/[0.04] transition-colors duration-150"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-white">
+                  <div className="flex items-center gap-2.5 mb-1.5">
+                    <div className="w-[22px] h-[22px] rounded-full bg-white/[0.06] shadow-[0_0_0_0.5px_rgba(255,255,255,0.06)] flex items-center justify-center shrink-0 uppercase select-none text-[10px] font-semibold text-white/35">
+                      {comment.authorName.charAt(0)}
+                    </div>
+                    <span className="text-[13px] font-medium text-white/70">
                       {comment.authorName}
                     </span>
-                    <span className="text-xs text-white/40">
+                    <span className="text-[11px] text-white/20">
                       {formatRelativeTime(comment.createdAt)}
                     </span>
                     {comment.timestampMs !== null && (
-                      <span className="text-xs text-blue-400 flex items-center gap-0.5">
+                      <span className="inline-flex items-center gap-0.5 text-[11px] font-medium text-blue-400/60 tabular-nums">
                         <Clock className="w-3 h-3" />
                         {formatTimestamp(comment.timestampMs)}
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-white/70">{comment.content}</p>
+                  <p className="text-[13.5px] leading-relaxed text-white/45 pl-8">
+                    {comment.content}
+                  </p>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-white/40 py-4 text-center">
-              No comments yet. Be the first!
-            </p>
+            <div className="text-center py-7 text-[13px] text-white/20 mb-4">
+              No comments yet
+            </div>
           )}
 
-          {/* Comment form */}
-          <form onSubmit={handleSubmit} className="space-y-2">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="flex flex-col gap-2">
             <input
               type="text"
               placeholder="Your name"
               value={authorName}
               onChange={(e) => setAuthorName(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50"
               maxLength={50}
+              className="w-full h-10 px-3.5 text-[13px] text-white/85 placeholder:text-white/20 bg-white/[0.03] border-none rounded-[10px] outline-none player-input transition-shadow duration-150"
             />
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="Add a comment..."
+                placeholder="Add a comment&#8230;"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-blue-500/50"
                 maxLength={2000}
+                className="flex-1 h-10 px-3.5 text-[13px] text-white/85 placeholder:text-white/20 bg-white/[0.03] border-none rounded-[10px] outline-none player-input transition-shadow duration-150"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    e.currentTarget.form?.requestSubmit()
+                  }
+                }}
               />
               <button
                 type="submit"
-                disabled={!authorName.trim() || !content.trim() || isSubmitting}
+                disabled={!canSubmit}
                 aria-label="Post comment"
-                className="px-3 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-white/10 disabled:text-white/30 rounded-lg text-sm text-white transition-colors"
+                className={`w-10 h-10 flex items-center justify-center shrink-0 border-none rounded-[10px] shadow-[0_0_0_0.5px_rgba(255,255,255,0.05)] transition-[background,color] duration-150 ${
+                  canSubmit
+                    ? "bg-white/[0.08] text-white/70 cursor-pointer hover:bg-white/12 hover:text-white/90"
+                    : "bg-white/[0.03] text-white/12 cursor-not-allowed"
+                }`}
               >
-                <Send className="w-4 h-4" />
+                <ArrowUp className="w-4 h-4" />
               </button>
             </div>
           </form>
