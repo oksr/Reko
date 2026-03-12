@@ -94,7 +94,7 @@ describe("POST /api/videos — input validation", () => {
     const res = await appFetch(req, env)
     expect(res.status).toBe(400)
     const data = await res.json()
-    expect(data.error).toMatch(/file size/i)
+    expect(data.error).toBe("file_too_large")
   })
 
   it("rejects fileSizeBytes over 5GB", async () => {

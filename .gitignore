@@ -15,6 +15,7 @@ dist
 dist-ssr
 apps/app/dist
 apps/website/dist
+*.tsbuildinfo
 
 # Rust build artifacts
 apps/tauri/src-tauri/target/

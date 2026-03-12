@@ -15,9 +15,6 @@ export interface Env {
   VIDEOS_BUCKET: R2Bucket
   DB: D1Database
   SHARE_BASE_URL: string
-  R2_ACCESS_KEY_ID: string
-  R2_SECRET_ACCESS_KEY: string
-  R2_ACCOUNT_ID: string
   ENVIRONMENT?: string
 }
 

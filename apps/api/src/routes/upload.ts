@@ -4,6 +4,8 @@ import type { Env, CreateVideoRequest, CreateVideoResponse } from "../types"
 import { hashToken } from "../lib/crypto"
 import { requireOwner } from "../middleware/auth"
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB (free tier limit)
+
 const upload = new Hono<{ Bindings: Env }>()
 
 /**
@@ -20,7 +22,6 @@ upload.post("/", async (c) => {
 
   // Input validation
   const MAX_TITLE_LENGTH = 200
-  const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB (free tier limit)
   const ALLOWED_CONTENT_TYPES = ["video/mp4", "video/quicktime", "video/webm"]
 
   if (!body.title?.trim() || body.title.trim().length > MAX_TITLE_LENGTH) {
@@ -95,6 +96,20 @@ upload.put("/:id/upload", async (c) => {
       contentType: c.req.header("content-type") || "video/mp4",
     },
   })
+
+  // Verify actual uploaded size against free tier limit
+  const obj = await c.env.VIDEOS_BUCKET.head(owner.video_key)
+  if (obj && obj.size > MAX_FILE_SIZE) {
+    await c.env.VIDEOS_BUCKET.delete(owner.video_key)
+    await c.env.DB.prepare("DELETE FROM videos WHERE id = ?").bind(videoId).run()
+    return c.json({ error: "file_too_large", limit: MAX_FILE_SIZE, upgradeUrl: "https://reko.video/pro" }, 413)
+  }
+
+  // Update D1 with actual size (client-declared size may differ slightly)
+  if (obj) {
+    await c.env.DB.prepare("UPDATE videos SET file_size_bytes = ? WHERE id = ?")
+      .bind(obj.size, videoId).run()
+  }
 
   return c.json({ ok: true })
 })

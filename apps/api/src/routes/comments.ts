@@ -60,6 +60,10 @@ comments.post("/:id/comments", async (c) => {
     return c.json({ error: "Author name and content are required" }, 400)
   }
 
+  if (body.authorName.trim().length > 50) {
+    return c.json({ error: "Author name must be 50 characters or less" }, 400)
+  }
+
   if (body.content.length > 2000) {
     return c.json({ error: "Comment must be 2000 characters or less" }, 400)
   }

@@ -27,7 +27,7 @@ video.get("/:id", async (c) => {
   }
 
   if (row.expires_at && row.expires_at < Date.now()) {
-    return c.json({ error: "Not found" }, 404)
+    return c.json({ error: "expired" }, 410)
   }
 
   const apiBase = new URL(c.req.url).origin
@@ -66,13 +66,17 @@ video.get("/:id/stream", async (c) => {
   const videoId = c.req.param("id")
 
   const row = await c.env.DB.prepare(
-    "SELECT video_key FROM videos WHERE id = ? AND status = 'ready'"
+    "SELECT video_key, expires_at FROM videos WHERE id = ? AND status = 'ready'"
   )
     .bind(videoId)
-    .first<{ video_key: string }>()
+    .first<{ video_key: string; expires_at: number | null }>()
 
   if (!row) {
     return c.json({ error: "Not found" }, 404)
+  }
+
+  if (row.expires_at && row.expires_at < Date.now()) {
+    return c.json({ error: "expired" }, 410)
   }
 
   const rangeHeader = c.req.header("range")
@@ -111,13 +115,17 @@ video.get("/:id/thumbnail", async (c) => {
   const videoId = c.req.param("id")
 
   const row = await c.env.DB.prepare(
-    "SELECT thumbnail_key FROM videos WHERE id = ? AND status = 'ready'"
+    "SELECT thumbnail_key, expires_at FROM videos WHERE id = ? AND status = 'ready'"
   )
     .bind(videoId)
-    .first<{ thumbnail_key: string | null }>()
+    .first<{ thumbnail_key: string | null; expires_at: number | null }>()
 
   if (!row?.thumbnail_key) {
     return c.json({ error: "Not found" }, 404)
+  }
+
+  if (row.expires_at && row.expires_at < Date.now()) {
+    return c.json({ error: "expired" }, 410)
   }
 
   const object = await c.env.VIDEOS_BUCKET.get(row.thumbnail_key)

@@ -5,7 +5,6 @@ account_id = "5007466dccf4cf5a65a28f2a17ea4dde"
 
 [vars]
 SHARE_BASE_URL = "https://reko-player.pages.dev"
-R2_ACCOUNT_ID = "5007466dccf4cf5a65a28f2a17ea4dde"
 ENVIRONMENT = "production"
 
 # R2 bucket for video storage
@@ -22,3 +21,8 @@ database_id = "d3fd1ab1-7704-44e1-8ca9-42d7b4451c8b"
 # Cron trigger: clean up expired videos every hour
 [triggers]
 crons = ["0 * * * *"]
+
+# TODO: Add Cloudflare Rate Limiting rules for production.
+# The in-memory rate limiter in middleware/rate-limit.ts is per-worker-isolate,
+# not global — under load, each isolate has its own counter.
+# See: https://developers.cloudflare.com/waf/rate-limiting-rules/
