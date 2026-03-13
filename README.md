@@ -17,7 +17,7 @@
 
 Reko is a native macOS screen recorder with a built-in Premiere-style timeline editor. Capture your screen, microphone, system audio, and camera — then trim, zoom, add transitions, and export a polished video without ever leaving the app.
 
-No Electron. No cloud uploads. No subscriptions. Just a fast, native app built with Swift, Rust, and React.
+No Electron. No cloud uploads. Just a fast, native app built with Swift, Rust, and React.
 
 ## Features
 
@@ -28,7 +28,9 @@ No Electron. No cloud uploads. No subscriptions. Just a fast, native app built w
 - **Camera Overlay** — Picture-in-picture webcam bubble with resizable positioning
 - **Cursor Effects** — Automatic mouse tracking with click highlights and smooth cursor animations
 - **Transitions** — Built-in transition effects between clips for polished, professional cuts
+- **Shareable Links** — Generate a shareable link for any video with one click; viewers watch instantly in the browser
 - **Native Performance** — Hardware-accelerated recording via ScreenCaptureKit and VideoToolbox encoding on Apple Silicon
+- **Pro Tier** — Optional $8/mo subscription for larger uploads, non-expiring links, and badge removal
 
 ## Tech Stack
 
@@ -76,6 +78,8 @@ reko/
 ├── apps/
 │   ├── app/          # React UI (platform-agnostic, zero Tauri imports)
 │   ├── tauri/        # Tauri v2 shell + Rust backend
+│   ├── api/          # Cloudflare Workers API (sharing, billing)
+│   ├── player/       # Shareable video link viewer (Cloudflare Pages)
 │   └── website/      # Marketing site
 └── RekoEngine/       # Swift framework (ScreenCaptureKit, AVFoundation, VideoToolbox)
 ```
