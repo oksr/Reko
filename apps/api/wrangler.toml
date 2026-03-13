@@ -6,6 +6,9 @@ account_id = "5007466dccf4cf5a65a28f2a17ea4dde"
 [vars]
 SHARE_BASE_URL = "https://reko-player.pages.dev"
 ENVIRONMENT = "production"
+LEMONSQUEEZY_STORE_ID = ""    # Set after creating LS store
+LEMONSQUEEZY_VARIANT_ID = ""  # Set after creating LS product variant
+WEBSITE_URL = "https://reko.video"
 
 # R2 bucket for video storage
 [[r2_buckets]]

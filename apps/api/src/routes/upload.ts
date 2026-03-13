@@ -3,8 +3,7 @@ import { nanoid } from "nanoid"
 import type { Env, CreateVideoRequest, CreateVideoResponse } from "../types"
 import { hashToken } from "../lib/crypto"
 import { requireOwner } from "../middleware/auth"
-
-const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB (free tier limit)
+import { resolveTier } from "../middleware/license"
 
 const upload = new Hono<{ Bindings: Env }>()
 
@@ -19,6 +18,7 @@ const upload = new Hono<{ Bindings: Env }>()
  */
 upload.post("/", async (c) => {
   const body = await c.req.json<CreateVideoRequest>()
+  const { tier, limits, licenseKeyId } = await resolveTier(c)
 
   // Input validation
   const MAX_TITLE_LENGTH = 200
@@ -27,8 +27,13 @@ upload.post("/", async (c) => {
   if (!body.title?.trim() || body.title.trim().length > MAX_TITLE_LENGTH) {
     return c.json({ error: "Title must be between 1 and 200 characters" }, 400)
   }
-  if (typeof body.fileSizeBytes !== "number" || body.fileSizeBytes <= 0 || body.fileSizeBytes > MAX_FILE_SIZE) {
-    return c.json({ error: "file_too_large", limit: MAX_FILE_SIZE, upgradeUrl: "https://reko.video/pro" }, 400)
+  if (typeof body.fileSizeBytes !== "number" || body.fileSizeBytes <= 0 || body.fileSizeBytes > limits.maxFileSizeBytes) {
+    return c.json({
+      error: "file_too_large",
+      limit: limits.maxFileSizeBytes,
+      tier,
+      upgradeUrl: "https://reko.video/#pricing",
+    }, 400)
   }
   if (typeof body.durationMs !== "number" || body.durationMs <= 0) {
     return c.json({ error: "Duration must be positive" }, 400)
@@ -42,11 +47,11 @@ upload.post("/", async (c) => {
   const ownerTokenHash = await hashToken(ownerToken)
   const videoKey = `videos/${videoId}/video.mp4`
   const now = Date.now()
-  const expiresAt = now + 7 * 24 * 60 * 60 * 1000 // 7-day expiry (free tier)
+  const expiresAt = limits.expiryMs ? now + limits.expiryMs : null
 
   await c.env.DB.prepare(
-    `INSERT INTO videos (id, owner_token_hash, project_id, title, video_key, duration_ms, file_size_bytes, status, created_at, expires_at, allow_comments, allow_download, show_badge, password_hash)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO videos (id, owner_token_hash, project_id, title, video_key, duration_ms, file_size_bytes, status, created_at, expires_at, allow_comments, allow_download, show_badge, password_hash, license_key_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       videoId,
@@ -61,7 +66,8 @@ upload.post("/", async (c) => {
       body.settings.allowComments ? 1 : 0,
       body.settings.allowDownload ? 1 : 0,
       body.settings.showBadge ? 1 : 0,
-      null
+      null,
+      licenseKeyId,
     )
     .run()
 
@@ -97,12 +103,14 @@ upload.put("/:id/upload", async (c) => {
     },
   })
 
-  // Verify actual uploaded size against free tier limit
+  // Resolve tier to get the right file size limit
+  const { limits } = await resolveTier(c)
+
   const obj = await c.env.VIDEOS_BUCKET.head(owner.video_key)
-  if (obj && obj.size > MAX_FILE_SIZE) {
+  if (obj && obj.size > limits.maxFileSizeBytes) {
     await c.env.VIDEOS_BUCKET.delete(owner.video_key)
     await c.env.DB.prepare("DELETE FROM videos WHERE id = ?").bind(videoId).run()
-    return c.json({ error: "file_too_large", limit: MAX_FILE_SIZE, upgradeUrl: "https://reko.video/pro" }, 413)
+    return c.json({ error: "file_too_large", limit: limits.maxFileSizeBytes, upgradeUrl: "https://reko.video/#pricing" }, 413)
   }
 
   // Update D1 with actual size (client-declared size may differ slightly)

@@ -26,6 +26,17 @@ export class ShareApiClient {
   }
 
   /**
+   * Get the stored license key from localStorage.
+   */
+  private getLicenseKey(): string | null {
+    try {
+      return localStorage.getItem("reko-license-key")
+    } catch {
+      return null
+    }
+  }
+
+  /**
    * Step 1: Create a video record and get an upload URL.
    * The response includes an ownerToken that must be stored securely —
    * it is never returned again and is required for all management operations.
@@ -33,9 +44,15 @@ export class ShareApiClient {
   async createShare(
     request: CreateShareRequest
   ): Promise<CreateShareResponse> {
+    const headers: Record<string, string> = { "Content-Type": "application/json" }
+    const licenseKey = this.getLicenseKey()
+    if (licenseKey) {
+      headers["X-License-Key"] = licenseKey
+    }
+
     const res = await fetch(`${this.baseUrl}/api/videos`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(request),
     })
 
@@ -72,6 +89,10 @@ export class ShareApiClient {
       xhr.open("PUT", resolvedUrl)
       xhr.setRequestHeader("Content-Type", "video/mp4")
       xhr.setRequestHeader("Authorization", `Bearer ${ownerToken}`)
+      const licenseKey = this.getLicenseKey()
+      if (licenseKey) {
+        xhr.setRequestHeader("X-License-Key", licenseKey)
+      }
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable && onProgress) {

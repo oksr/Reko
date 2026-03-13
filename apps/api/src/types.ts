@@ -16,6 +16,11 @@ export interface Env {
   DB: D1Database
   SHARE_BASE_URL: string
   ENVIRONMENT?: string
+  LEMONSQUEEZY_API_KEY: string        // wrangler secret
+  LEMONSQUEEZY_WEBHOOK_SECRET: string // wrangler secret
+  LEMONSQUEEZY_STORE_ID: string       // wrangler var
+  LEMONSQUEEZY_VARIANT_ID: string     // wrangler var
+  WEBSITE_URL: string                 // wrangler var
 }
 
 // ─── DB Row Types ───────────────────────────────────────────────────────────
@@ -39,6 +44,7 @@ export interface VideoRow {
   view_count: number
   unique_viewer_count: number
   total_watch_time_ms: number
+  license_key_id: string | null
 }
 
 export interface ViewEventRow {
@@ -50,6 +56,18 @@ export interface ViewEventRow {
   referrer_domain: string | null
   country: string | null
   created_at: number
+}
+
+export interface LicenseKeyRow {
+  id: string
+  key_hash: string | null
+  email: string
+  activation_token: string | null
+  ls_customer_id: string | null
+  ls_subscription_id: string | null
+  status: 'pending' | 'active' | 'canceled' | 'past_due'
+  created_at: number
+  updated_at: number
 }
 
 export interface CommentRow {

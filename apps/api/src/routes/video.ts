@@ -44,7 +44,7 @@ video.get("/:id", async (c) => {
     settings: {
       allowComments: row.allow_comments === 1,
       allowDownload: row.allow_download === 1,
-      showBadge: true, // Phase 1: always show badge (free tier)
+      showBadge: row.license_key_id ? (row.show_badge === 1) : true,
       passwordProtected: row.password_hash !== null,
     },
     analytics: {

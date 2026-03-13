@@ -104,6 +104,23 @@ export interface PlatformMenu {
   showDropdown(items: MenuItemDef[]): Promise<void>
 }
 
+export interface AppSettings {
+  launchAtLogin: boolean
+  showInDock: boolean
+  defaultSavePath: string
+  defaultExportResolution: "original" | "4k" | "1080p" | "720p"
+  defaultExportQuality: "low" | "medium" | "high" | "best"
+}
+
+export interface PlatformSettings {
+  getSettings(): Promise<AppSettings>
+  saveSettings(settings: AppSettings): Promise<void>
+  getAutoStartEnabled(): Promise<boolean>
+  setAutoStartEnabled(enabled: boolean): Promise<void>
+  setDockVisible(visible: boolean): Promise<void>
+  pickFolder(defaultPath?: string): Promise<string | null>
+}
+
 export interface PlatformShare {
   createShare(request: CreateShareRequest): Promise<CreateShareResponse>
   uploadVideo(uploadUrl: string, videoData: ArrayBuffer, ownerToken: string, onProgress?: (progress: ShareUploadProgress) => void): Promise<void>
@@ -124,6 +141,7 @@ export interface Platform {
   shortcuts: PlatformShortcuts
   monitor: PlatformMonitor
   menu: PlatformMenu
+  settings: PlatformSettings
   share: PlatformShare
 
   /** True when running inside Tauri desktop app */

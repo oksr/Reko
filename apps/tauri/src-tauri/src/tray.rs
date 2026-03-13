@@ -137,7 +137,7 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             let _ = app.emit_to("recorder", "tray-action", "record-area");
         }
         "tray:show-settings" => {
-            show_recorder(app);
+            show_settings(app);
         }
         "tray:show-projects" => {
             show_recorder(app);
@@ -156,6 +156,35 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             app.exit(0);
         }
         _ => {}
+    }
+}
+
+fn show_settings(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.set_focus();
+    } else {
+        use tauri::utils::config::WindowEffectsConfig;
+        use tauri::window::{Effect, EffectState};
+        use tauri::TitleBarStyle;
+
+        let _ = tauri::WebviewWindowBuilder::new(
+            app,
+            "settings",
+            tauri::WebviewUrl::App(Default::default()),
+        )
+        .title("Settings")
+        .inner_size(600.0, 470.0)
+        .resizable(false)
+        .transparent(true)
+        .title_bar_style(TitleBarStyle::Overlay)
+        .hidden_title(true)
+        .effects(WindowEffectsConfig {
+            effects: vec![Effect::UnderWindowBackground],
+            state: Some(EffectState::Active),
+            radius: None,
+            color: None,
+        })
+        .build();
     }
 }
 

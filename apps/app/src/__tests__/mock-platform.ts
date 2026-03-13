@@ -42,6 +42,20 @@ export function createMockPlatform(overrides?: Partial<Platform>): Platform {
     menu: {
       showDropdown: vi.fn().mockResolvedValue(undefined),
     },
+    settings: {
+      getSettings: vi.fn().mockResolvedValue({
+        launchAtLogin: false,
+        showInDock: true,
+        defaultSavePath: "/Users/test/Desktop",
+        defaultExportResolution: "1080p",
+        defaultExportQuality: "high",
+      }),
+      saveSettings: vi.fn().mockResolvedValue(undefined),
+      getAutoStartEnabled: vi.fn().mockResolvedValue(false),
+      setAutoStartEnabled: vi.fn().mockResolvedValue(undefined),
+      setDockVisible: vi.fn().mockResolvedValue(undefined),
+      pickFolder: vi.fn().mockResolvedValue(null),
+    },
     share: {
       createShare: vi.fn().mockResolvedValue({
         videoId: "test-video-id",

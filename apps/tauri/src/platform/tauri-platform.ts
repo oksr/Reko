@@ -16,7 +16,9 @@ import type {
   PlatformShortcuts,
   PlatformMonitor,
   PlatformMenu,
+  PlatformSettings,
   PlatformShare,
+  AppSettings,
   WindowOptions,
   SaveDialogOptions,
   OpenDialogOptions,
@@ -154,6 +156,27 @@ const tauriMenu: PlatformMenu = {
   },
 }
 
+const tauriSettings: PlatformSettings = {
+  async getSettings() {
+    return await invoke<AppSettings>("get_settings")
+  },
+  async saveSettings(settings: AppSettings) {
+    await invoke("save_settings", { settings })
+  },
+  async getAutoStartEnabled() {
+    return await invoke<boolean>("get_autostart_enabled")
+  },
+  async setAutoStartEnabled(enabled: boolean) {
+    await invoke("set_autostart_enabled", { enabled })
+  },
+  async setDockVisible(visible: boolean) {
+    await invoke("set_dock_visible", { visible })
+  },
+  async pickFolder(defaultPath?: string) {
+    return await invoke<string | null>("pick_folder", { defaultPath: defaultPath ?? null })
+  },
+}
+
 const shareClient = new ShareApiClient()
 
 const tauriShare: PlatformShare = {
@@ -174,6 +197,7 @@ export const tauriPlatform: Platform = {
   shortcuts: tauriShortcuts,
   monitor: tauriMonitor,
   menu: tauriMenu,
+  settings: tauriSettings,
   share: tauriShare,
   isTauri: true,
 }

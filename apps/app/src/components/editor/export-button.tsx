@@ -76,6 +76,8 @@ export function ExportButton() {
     const [result, setResult] = useState<string | null>(null)
     const [localError, setLocalError] = useState<string | null>(null)
     const [linkCopied, setLinkCopied] = useState(false)
+    const [showKeyInput, setShowKeyInput] = useState(false)
+    const [keyInput, setKeyInput] = useState("")
 
     const { progress, error: exportError, startExport, cancelExport } = useExport()
     const {
@@ -102,12 +104,20 @@ export function ExportButton() {
         }
     }, [progress?.phase, outputPath])
 
-    // Initialize output path on mount
+    // Load defaults from settings + initialize output path
     useEffect(() => {
-        platform.invoke<string>("get_home_dir").then((home) => {
-            const filename =
-                project?.name.replace(/[/\\:"]/g, "_") ?? "export"
-            setOutputPath(`${home}/Desktop/${filename}.mp4`)
+        platform.settings.getSettings().then((settings) => {
+            setResolution(settings.defaultExportResolution as ExportResolution)
+            setQuality(settings.defaultExportQuality as ExportQuality)
+
+            const filename = project?.name.replace(/[/\\:"]/g, "_") ?? "export"
+            setOutputPath(`${settings.defaultSavePath}/${filename}.mp4`)
+        }).catch(() => {
+            // Fallback for non-Tauri environments
+            platform.invoke<string>("get_home_dir").then((home) => {
+                const filename = project?.name.replace(/[/\\:"]/g, "_") ?? "export"
+                setOutputPath(`${home}/Desktop/${filename}.mp4`)
+            })
         })
     }, [project?.name]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -404,6 +414,49 @@ export function ExportButton() {
                 {/* Error */}
                 {error && (
                     <span className="text-xs text-destructive">{error}</span>
+                )}
+
+                {/* Upgrade prompt for file_too_large quota errors */}
+                {error && error.includes("file_too_large") && (
+                    <div className="flex flex-col gap-2 mt-2">
+                        <button
+                            onClick={() => setShowKeyInput(!showKeyInput)}
+                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors text-left"
+                        >
+                            {showKeyInput ? "Hide" : "Have a Pro license key?"}
+                        </button>
+                        {showKeyInput && (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={keyInput}
+                                    onChange={(e) => setKeyInput(e.target.value)}
+                                    placeholder="rk_live_..."
+                                    className="flex-1 text-xs bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-white placeholder:text-white/30 focus:outline-none focus:border-white/20"
+                                />
+                                <button
+                                    onClick={() => {
+                                        if (keyInput.trim()) {
+                                            localStorage.setItem("reko-license-key", keyInput.trim())
+                                            setShowKeyInput(false)
+                                            setLocalError(null)
+                                        }
+                                    }}
+                                    className="text-xs px-3 py-1.5 bg-white/10 rounded-md text-white hover:bg-white/15 transition-colors"
+                                >
+                                    Save
+                                </button>
+                            </div>
+                        )}
+                        <a
+                            href="https://reko.video/#pricing"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-muted-foreground hover:text-white transition-colors"
+                        >
+                            Get Pro →
+                        </a>
+                    </div>
                 )}
 
                 {/* Export button */}

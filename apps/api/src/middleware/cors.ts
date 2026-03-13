@@ -20,7 +20,7 @@ export function applyCors(app: Hono<{ Bindings: Env }>) {
         return ""
       },
       allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization"],
+      allowHeaders: ["Content-Type", "Authorization", "X-License-Key"],
       maxAge: 86400,
     })
   )

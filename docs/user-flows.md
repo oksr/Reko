@@ -374,3 +374,104 @@ Configured during share creation:
 - Each project stored at `~/Library/Application Support/com.reko.app/projects/{id}/`
   - `project.json` — project state (metadata, timeline, effects, sequence, share info)
   - `raw/` — recorded media files (screen MP4, mic WAV, system audio, camera, mouse events)
+
+---
+
+## 8. Business Model & Authentication
+
+### 8.1 Current State (What's Live)
+
+**No user accounts, no authentication, no payments.** The app is completely free with no feature gating.
+
+**Ownership model:** Anonymous owner tokens.
+- Generated as high-entropy random strings (nanoid 32) at video creation
+- SHA-256 hashed before storage in D1 — raw token returned only once
+- Sent as `Authorization: Bearer {token}` for management operations (delete, finalize, analytics)
+- Returns uniform 404 for both "doesn't exist" and "unauthorized" (prevents ID enumeration)
+
+**What's enforced today:**
+- `expires_at` column exists but is always null (no expiry enforced)
+- `show_badge` is client-controlled (no server enforcement)
+- No file size limits beyond R2's own limits
+- Rate limiting is per-worker-instance (in-memory, not global)
+
+### 8.2 Infrastructure
+
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| API | Cloudflare Workers (Hono.js) | `apps/api/` |
+| Database | Cloudflare D1 (SQLite) | `videos`, `view_events`, `comments` tables |
+| Video storage | Cloudflare R2 | Free egress — key cost advantage over competitors |
+| Player | Cloudflare Pages | `apps/player/` → `reko-player.pages.dev` |
+
+**Per-user cost estimates:**
+- Free user (5 videos × 100MB): ~$0.0075/month storage
+- Pro user (20 videos × 1GB): ~$0.30/month storage vs $8/month revenue = 96% margin
+- 10 paying users covers all infrastructure with margin
+
+### 8.3 Planned Business Model: Free App, Paid Cloud
+
+The desktop recording/editing app stays **free and open source (MIT)**. Revenue comes from the **cloud sharing infrastructure** (video hosting, analytics, player features). Same model as CleanShot X and Loom.
+
+### 8.4 Planned Pricing Tiers
+
+| Feature | Free | Pro ($8/mo or $69/yr) |
+|---------|------|----------------------|
+| Shared videos | 5 max | Unlimited |
+| File size per video | 100MB | 5GB |
+| Storage pool | 500MB | 50GB |
+| Auto-expiry | 7 days (forced) | None (indefinite) |
+| "Made with Reko" badge | Always shown (enforced) | Optional |
+| Analytics | View count only | Full (unique viewers, watch time, geography, referrers) |
+| Comments | Disabled | Enabled |
+| Download toggle | Disabled | Configurable |
+| Password protection | No | Yes |
+| Share links per video | 1 | Unlimited |
+| Custom thumbnails | No | Yes |
+
+**Team tier** ($15/team/month) planned for later — team workspaces, shared storage pool, SSO, review workflows.
+
+### 8.5 Implementation Phases
+
+**Phase 1 — Server-side enforcement (no accounts needed)**
+- Enforce 7-day expiry via Cloudflare Cron Trigger
+- Force badge to always-on server-side
+- Cap file size at 100MB for free tier
+- Status: **Not started**
+
+**Phase 2 — User accounts + quotas**
+- Magic link auth via Resend
+- API keys (nanoid 32) as long-lived credentials stored in system keychain
+- Users table in D1 with per-user quota tracking
+- Share links as separate entities (decouple from videos, multiple links per video)
+- Access grant pattern for password-protected links
+- Desktop app: login flow in settings, upgrade prompts in share dialog
+- Status: **Not started**
+
+**Phase 3 — Stripe payments**
+- Stripe Checkout for Pro subscription
+- Webhook handlers: `checkout.session.completed`, `subscription.updated`, `subscription.deleted`
+- Customer Portal for self-service management
+- 7-day free trial on first signup
+- Pricing page on website
+- Status: **Not started**
+
+**Phase 4 — Growth features**
+- Expiry warning emails (24h before free video expires)
+- Analytics teaser (show count, blur details for free users)
+- Custom branding for Pro (logo, accent color on player)
+- Embed restrictions (free embeds include Reko footer)
+- Status: **Not started**
+
+### 8.6 Licensing Plan
+
+| Package | License | Rationale |
+|---------|---------|-----------|
+| `apps/app/` | MIT | Desktop UI — encourage contributors |
+| `apps/tauri/` | MIT | Tauri shell |
+| `RekoEngine/` | MIT | Swift engine |
+| `apps/api/` | AGPL-3.0 + commercial restriction | Prevent competitors reselling hosted service |
+| `apps/player/` | AGPL-3.0 + commercial restriction | Same as API |
+| `packages/types/` | MIT | Shared types |
+
+Self-hosters can run their own instance with `BYPASS_QUOTAS=true` but pay their own infrastructure costs. AGPL prevents reselling.

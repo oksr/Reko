@@ -6,6 +6,7 @@ import { upload } from "./routes/upload"
 import { video } from "./routes/video"
 import { analytics } from "./routes/analytics"
 import { comments } from "./routes/comments"
+import { billing } from "./routes/billing"
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -28,6 +29,8 @@ app.route("/api/videos", upload)
 app.route("/api/videos", video)
 app.route("/api/videos", analytics)
 app.route("/api/videos", comments)
+app.route("/api/billing", billing)
+app.route("/api/webhooks", billing)
 
 // 404 fallback
 app.notFound((c) => c.json({ error: "Not found" }, 404))

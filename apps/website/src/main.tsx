@@ -11,22 +11,30 @@ import { Testimonials } from "@/components/testimonials"
 import { CTA } from "@/components/cta"
 import { Footer } from "@/components/layout/footer"
 import { DownloadModalProvider } from "@/components/download-modal"
+import { ProSuccess } from "@/components/pro-success"
 
 function App() {
+  const path = window.location.pathname
+
+  // Pro success page — standalone, no marketing chrome
+  if (path === "/pro/success") {
+    return <ProSuccess />
+  }
+
   return (
     <DownloadModalProvider>
-    <div className="noise-overlay">
-      <Nav />
-      <main>
-        <Hero />
-        <Features />
-        <HowItWorks />
-        <Pricing />
-        <Testimonials />
-        <CTA />
-      </main>
-      <Footer />
-    </div>
+      <div className="noise-overlay">
+        <Nav />
+        <main>
+          <Hero />
+          <Features />
+          <HowItWorks />
+          <Pricing />
+          <Testimonials />
+          <CTA />
+        </main>
+        <Footer />
+      </div>
     </DownloadModalProvider>
   )
 }

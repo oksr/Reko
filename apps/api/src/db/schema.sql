@@ -60,3 +60,22 @@ CREATE INDEX IF NOT EXISTS idx_comments_video ON comments(video_id);
 -- Clean up expired videos periodically via a cron trigger
 CREATE INDEX IF NOT EXISTS idx_videos_expires ON videos(expires_at)
   WHERE expires_at IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS license_keys (
+  id TEXT PRIMARY KEY,                    -- nanoid(16)
+  key_hash TEXT,                          -- SHA-256 of the license key (null until activated)
+  email TEXT NOT NULL DEFAULT '',         -- from Lemon Squeezy checkout
+  activation_token TEXT UNIQUE,           -- correlates checkout → webhook → activate
+  ls_customer_id TEXT,                    -- Lemon Squeezy customer ID
+  ls_subscription_id TEXT,                -- Lemon Squeezy subscription ID
+  status TEXT NOT NULL DEFAULT 'pending', -- pending | active | canceled | past_due
+  created_at INTEGER NOT NULL,            -- epoch ms
+  updated_at INTEGER NOT NULL             -- epoch ms
+);
+
+CREATE INDEX IF NOT EXISTS idx_license_keys_status ON license_keys(status);
+CREATE INDEX IF NOT EXISTS idx_license_keys_activation ON license_keys(activation_token);
+CREATE INDEX IF NOT EXISTS idx_license_keys_ls_sub ON license_keys(ls_subscription_id);
+
+-- Migration: add license_key_id to videos (run separately)
+ALTER TABLE videos ADD COLUMN license_key_id TEXT REFERENCES license_keys(id);

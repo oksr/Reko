@@ -67,15 +67,25 @@ export function PlayerPage() {
           </h1>
           <p className="text-sm leading-relaxed text-white/35 mb-5">
             {error === "expired" &&
-              "The owner set an expiration date on this video and it is no longer available."}
+              "Free shared videos expire after 7 days."}
             {error === "not_found" &&
               "This video may have been deleted or the link is incorrect."}
             {error === "fetch_failed" &&
               "Something went wrong. Please try again later."}
           </p>
+          {error === "expired" && (
+            <a
+              href="https://reko.video/#pricing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 h-9 px-4 text-[13px] font-medium text-white bg-white/[0.06] rounded-lg shadow-border hover:bg-white/[0.1] transition-colors duration-150 mb-4"
+            >
+              Upgrade to Pro — links never expire
+            </a>
+          )}
           <a
             href="https://reko.video"
-            className="text-[13px] text-white/30 hover:text-white/60 transition-colors duration-150"
+            className="text-[13px] text-white/30 hover:text-white/60 transition-colors duration-150 block"
           >
             Go to reko.video &rarr;
           </a>
