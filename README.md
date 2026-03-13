@@ -17,7 +17,7 @@
 
 Reko is a native macOS screen recorder with a built-in Premiere-style timeline editor. Capture your screen, microphone, system audio, and camera — then trim, zoom, add transitions, and export a polished video without ever leaving the app.
 
-No Electron. No cloud uploads. Just a fast, native app built with Swift, Rust, and React.
+Built with Swift, Rust, and React — a fast, hardware-accelerated app that runs entirely on your Mac.
 
 ## Features
 
