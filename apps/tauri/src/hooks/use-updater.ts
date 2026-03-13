@@ -7,6 +7,7 @@ type Update = Awaited<ReturnType<typeof check>>
 export function useUpdater() {
   const [update, setUpdate] = useState<Update>(null)
   const [installing, setInstalling] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (import.meta.env.DEV) return
@@ -16,14 +17,17 @@ export function useUpdater() {
   const install = async () => {
     if (!update) return
     setInstalling(true)
+    setError(null)
     try {
       await update.downloadAndInstall()
       await relaunch()
     } catch (err) {
-      console.error("Update failed:", err)
+      const message = err instanceof Error ? err.message : String(err)
+      console.error("Update failed:", message)
+      setError(message)
       setInstalling(false)
     }
   }
 
-  return { update, install, installing }
+  return { update, install, installing, error }
 }

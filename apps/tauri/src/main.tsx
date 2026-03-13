@@ -6,7 +6,7 @@ import { useUpdater } from "./hooks/use-updater"
 import "@app/index.css"
 
 function UpdateBanner() {
-  const { update, install, installing } = useUpdater()
+  const { update, install, installing, error } = useUpdater()
   if (!update) return null
   return (
     <div
@@ -15,6 +15,7 @@ function UpdateBanner() {
         inset: 0,
         zIndex: 9999,
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         gap: 10,
@@ -26,26 +27,33 @@ function UpdateBanner() {
         fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
-      <span style={{ opacity: 0.85 }}>
-        Reko {update.version} is available
-      </span>
-      <button
-        onClick={install}
-        disabled={installing}
-        style={{
-          padding: "4px 12px",
-          borderRadius: 6,
-          border: "none",
-          background: "rgba(255,255,255,0.15)",
-          color: "#fff",
-          fontSize: 12,
-          fontWeight: 600,
-          cursor: installing ? "default" : "pointer",
-          opacity: installing ? 0.6 : 1,
-        }}
-      >
-        {installing ? "Installing…" : "Update"}
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ opacity: 0.85 }}>
+          Reko {update.version} is available
+        </span>
+        <button
+          onClick={install}
+          disabled={installing}
+          style={{
+            padding: "4px 12px",
+            borderRadius: 6,
+            border: "none",
+            background: "rgba(255,255,255,0.15)",
+            color: "#fff",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: installing ? "default" : "pointer",
+            opacity: installing ? 0.6 : 1,
+          }}
+        >
+          {installing ? "Installing…" : "Update"}
+        </button>
+      </div>
+      {error && (
+        <span style={{ opacity: 0.6, fontSize: 11, maxWidth: 400, textAlign: "center" }}>
+          Update failed: {error}
+        </span>
+      )}
     </div>
   )
 }
