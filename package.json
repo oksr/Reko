@@ -1,6 +1,6 @@
 {
   "name": "reko-workspace",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "private": true,
   "scripts": {
     "dev": "pnpm --filter @reko/tauri dev",
