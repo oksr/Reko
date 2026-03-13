@@ -83,6 +83,10 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(RecordingState {
@@ -156,6 +160,7 @@ pub fn run() {
             commands::editor::list_projects,
             commands::editor::load_project,
             commands::editor::save_project_state,
+            commands::export::read_file_bytes,
             commands::export::write_export_file,
             commands::export::mux_audio,
             commands::editor::generate_auto_zoom,
@@ -170,6 +175,12 @@ pub fn run() {
             commands::unsplash::unsplash_search_photos,
             commands::unsplash::unsplash_get_topic_photos,
             commands::unsplash::unsplash_track_download,
+            commands::settings::get_settings,
+            commands::settings::save_settings,
+            commands::settings::get_autostart_enabled,
+            commands::settings::set_autostart_enabled,
+            commands::settings::set_dock_visible,
+            commands::settings::pick_folder,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

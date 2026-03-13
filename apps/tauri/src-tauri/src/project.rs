@@ -20,6 +20,10 @@ pub struct ProjectState {
     pub sequence: Option<Sequence>,
     #[serde(default, rename = "autoZoomSettings", skip_serializing_if = "Option::is_none")]
     pub auto_zoom_settings: Option<AutoZoomSettings>,
+    #[serde(default, rename = "shareVideoId", skip_serializing_if = "Option::is_none")]
+    pub share_video_id: Option<String>,
+    #[serde(default, rename = "shareOwnerToken", skip_serializing_if = "Option::is_none")]
+    pub share_owner_token: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -305,6 +309,8 @@ mod tests {
             }),
             sequence: None,
             auto_zoom_settings: None,
+            share_video_id: None,
+            share_owner_token: None,
         };
         let json = serde_json::to_string(&project).unwrap();
         // Verify camelCase serialization

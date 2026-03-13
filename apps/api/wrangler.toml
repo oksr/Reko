@@ -1,0 +1,31 @@
+name = "reko-api"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+account_id = "5007466dccf4cf5a65a28f2a17ea4dde"
+
+[vars]
+SHARE_BASE_URL = "https://reko-player.pages.dev"
+ENVIRONMENT = "production"
+LEMONSQUEEZY_STORE_ID = ""    # Set after creating LS store
+LEMONSQUEEZY_VARIANT_ID = ""  # Set after creating LS product variant
+WEBSITE_URL = "https://reko.video"
+
+# R2 bucket for video storage
+[[r2_buckets]]
+binding = "VIDEOS_BUCKET"
+bucket_name = "reko-videos"
+
+# D1 database for metadata, analytics, comments
+[[d1_databases]]
+binding = "DB"
+database_name = "reko-db"
+database_id = "d3fd1ab1-7704-44e1-8ca9-42d7b4451c8b"
+
+# Cron trigger: clean up expired videos every hour
+[triggers]
+crons = ["0 * * * *"]
+
+# TODO: Add Cloudflare Rate Limiting rules for production.
+# The in-memory rate limiter in middleware/rate-limit.ts is per-worker-isolate,
+# not global — under load, each isolate has its own counter.
+# See: https://developers.cloudflare.com/waf/rate-limiting-rules/

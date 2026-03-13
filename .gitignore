@@ -15,6 +15,7 @@ dist
 dist-ssr
 apps/app/dist
 apps/website/dist
+*.tsbuildinfo
 
 # Rust build artifacts
 apps/tauri/src-tauri/target/
@@ -44,3 +45,6 @@ apps/website/.claude/
 *.sw?
 
 .agent/
+
+docs/plans/roadmap.md
+tasks.md

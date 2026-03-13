@@ -1,0 +1,23 @@
+{
+  "name": "@reko/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute reko-db --file=./src/db/schema.sql",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@reko/types": "workspace:*",
+    "hono": "^4.7.0",
+    "nanoid": "^5.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250214.0",
+    "typescript": "~5.7.2",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.0.0"
+  }
+}

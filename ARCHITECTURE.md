@@ -82,6 +82,7 @@ On `stop()`, all tracks finish writing, then duration is computed from `mach_abs
 ### Build Process
 
 `build.rs` automatically:
+
 1. Detects target architecture from `CARGO_CFG_TARGET_ARCH`
 2. Runs `swift build -c release --triple <arch>-apple-macosx` in `RekoEngine/`
 3. Links the resulting static library via `rustc-link-lib=static=RekoEngine`
@@ -121,6 +122,7 @@ Wraps all `extern "C"` function declarations and provides safe Rust methods on `
 Pure algorithmic module (no FFI, no I/O). Takes `Vec<MouseEvent>` and a `zoom_scale`, produces `Vec<ZoomEvent>`.
 
 Four-pass algorithm:
+
 1. **Filter noise** — discard non-click events and rapid double-clicks
 2. **Group into sessions** — cluster clicks by spatial proximity and time gap
 3. **Sessions → ZoomEvents** — each session becomes a zoom with lead-in and hold-after
@@ -138,23 +140,27 @@ Four-pass algorithm:
 
 ### Package Split
 
-| Package | Description |
-|---|---|
-| `apps/app/` | Platform-agnostic React UI. Zero `@tauri-apps` imports. All I/O through `Platform` interface. |
-| `apps/tauri/` | Tauri shell. Implements `TauriPlatform`. Imports `app/` source via `@app/*` alias. |
+
+| Package       | Description                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `apps/app/`   | Platform-agnostic React UI. Zero `@tauri-apps` imports. All I/O through `Platform` interface. |
+| `apps/tauri/` | Tauri shell. Implements `TauriPlatform`. Imports `app/` source via `@app/`* alias.            |
+
 
 ### Entry Point and Window Routing
 
 `apps/tauri/src/main.tsx` injects `tauriPlatform` into `PlatformProvider` and mounts `Root`. The `Root` component routes by Tauri window label:
 
-| Window Label | Component |
-|---|---|
-| `recorder` | `RecorderApp` |
-| `editor-*` | `EditorApp` |
-| `window-picker` | `WindowPickerApp` |
+
+| Window Label     | Component          |
+| ---------------- | ------------------ |
+| `recorder`       | `RecorderApp`      |
+| `editor-*`       | `EditorApp`        |
+| `window-picker`  | `WindowPickerApp`  |
 | `area-selection` | `AreaSelectionApp` |
-| `onboarding` | `OnboardingApp` |
+| `onboarding`     | `OnboardingApp`    |
 | `camera-preview` | `CameraPreviewApp` |
+
 
 ### Platform Abstraction
 
@@ -316,14 +322,16 @@ Nested structs use `#[serde(rename_all = "camelCase")]`. Top-level `ProjectState
 
 ## Window Architecture
 
-| Window | Label | Purpose | Decorations | Transparent |
-|---|---|---|---|---|
-| Recorder | `recorder` | Floating recording bar | Frameless | Yes |
-| Editor | `editor-{uuid}` | NLE editor | Title bar overlay | No |
-| Window Picker | `window-picker` | Pick app window | No | Yes |
-| Area Selection | `area-selection` | Drag-to-select area | No | Yes |
-| Onboarding | `onboarding` | First-run flow | Standard | No |
-| Camera Preview | `camera-preview` | Floating camera PiP | No | Yes |
+
+| Window         | Label            | Purpose                | Decorations       | Transparent |
+| -------------- | ---------------- | ---------------------- | ----------------- | ----------- |
+| Recorder       | `recorder`       | Floating recording bar | Frameless         | Yes         |
+| Editor         | `editor-{uuid}`  | NLE editor             | Title bar overlay | No          |
+| Window Picker  | `window-picker`  | Pick app window        | No                | Yes         |
+| Area Selection | `area-selection` | Drag-to-select area    | No                | Yes         |
+| Onboarding     | `onboarding`     | First-run flow         | Standard          | No          |
+| Camera Preview | `camera-preview` | Floating camera PiP    | No                | Yes         |
+
 
 The recorder window hides on close (app stays alive in menu bar). Editor windows re-show the recorder when destroyed.
 
@@ -331,11 +339,13 @@ The recorder window hides on close (app stays alive in menu bar). Editor windows
 
 ## Testing
 
-| Layer | Command | Framework |
-|---|---|---|
-| Frontend | `pnpm --filter @reko/app test` | Vitest + jsdom |
-| Rust | `cargo test --manifest-path apps/tauri/src-tauri/Cargo.toml` | cargo test |
-| Swift | `cd RekoEngine && swift test` | swift test |
+
+| Layer    | Command                                                      | Framework      |
+| -------- | ------------------------------------------------------------ | -------------- |
+| Frontend | `pnpm --filter @reko/app test`                               | Vitest + jsdom |
+| Rust     | `cargo test --manifest-path apps/tauri/src-tauri/Cargo.toml` | cargo test     |
+| Swift    | `cd RekoEngine && swift test`                                | swift test     |
+
 
 Frontend tests use `renderWithPlatform()` and `createMockPlatform()` — no global `@tauri-apps` mocks needed thanks to the Platform abstraction.
 
@@ -343,12 +353,14 @@ Frontend tests use `renderWithPlatform()` and `createMockPlatform()` — no glob
 
 ## Build System
 
-| Command | Description |
-|---|---|
-| `pnpm dev` | Full Tauri app (Swift + Rust + Vite dev server) |
-| `pnpm --filter @reko/app dev` | Frontend only at localhost:5173 |
-| `pnpm build` | Production build (app + tauri) |
-| `cd RekoEngine && swift build -c release` | Swift framework only |
-| `cargo build --manifest-path apps/tauri/src-tauri/Cargo.toml` | Rust + Swift |
+
+| Command                                                       | Description                                     |
+| ------------------------------------------------------------- | ----------------------------------------------- |
+| `pnpm dev`                                                    | Full Tauri app (Swift + Rust + Vite dev server) |
+| `pnpm --filter @reko/app dev`                                 | Frontend only at localhost:5173                 |
+| `pnpm build`                                                  | Production build (app + tauri)                  |
+| `cd RekoEngine && swift build -c release`                     | Swift framework only                            |
+| `cargo build --manifest-path apps/tauri/src-tauri/Cargo.toml` | Rust + Swift                                    |
+
 
 Rust toolchain is installed via Homebrew (not rustup).

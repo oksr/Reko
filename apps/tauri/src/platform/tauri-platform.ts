@@ -16,11 +16,15 @@ import type {
   PlatformShortcuts,
   PlatformMonitor,
   PlatformMenu,
+  PlatformSettings,
+  PlatformShare,
+  AppSettings,
   WindowOptions,
   SaveDialogOptions,
   OpenDialogOptions,
   MenuItemDef,
 } from "@app/platform/types"
+import { ShareApiClient } from "@app/lib/share-api"
 
 const tauriWindow: PlatformWindow = {
   getLabel() {
@@ -152,6 +156,38 @@ const tauriMenu: PlatformMenu = {
   },
 }
 
+const tauriSettings: PlatformSettings = {
+  async getSettings() {
+    return await invoke<AppSettings>("get_settings")
+  },
+  async saveSettings(settings: AppSettings) {
+    await invoke("save_settings", { settings })
+  },
+  async getAutoStartEnabled() {
+    return await invoke<boolean>("get_autostart_enabled")
+  },
+  async setAutoStartEnabled(enabled: boolean) {
+    await invoke("set_autostart_enabled", { enabled })
+  },
+  async setDockVisible(visible: boolean) {
+    await invoke("set_dock_visible", { visible })
+  },
+  async pickFolder(defaultPath?: string) {
+    return await invoke<string | null>("pick_folder", { defaultPath: defaultPath ?? null })
+  },
+}
+
+const shareClient = new ShareApiClient()
+
+const tauriShare: PlatformShare = {
+  createShare: (request) => shareClient.createShare(request),
+  uploadVideo: (uploadUrl, videoData, ownerToken, onProgress) => shareClient.uploadVideo(uploadUrl, videoData, ownerToken, onProgress),
+  finalizeShare: (request, ownerToken) => shareClient.finalizeShare(request, ownerToken),
+  getVideo: (videoId) => shareClient.getVideo(videoId),
+  deleteVideo: (videoId, ownerToken) => shareClient.deleteVideo(videoId, ownerToken),
+  getAnalytics: (videoId, ownerToken) => shareClient.getAnalytics(videoId, ownerToken),
+}
+
 export const tauriPlatform: Platform = {
   invoke: invoke as Platform["invoke"],
   window: tauriWindow,
@@ -161,5 +197,7 @@ export const tauriPlatform: Platform = {
   shortcuts: tauriShortcuts,
   monitor: tauriMonitor,
   menu: tauriMenu,
+  settings: tauriSettings,
+  share: tauriShare,
   isTauri: true,
 }
