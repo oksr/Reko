@@ -12,6 +12,7 @@
     "tauri:build": "pnpm --filter @reko/tauri tauri:build",
     "website:dev": "pnpm --filter @reko/website dev",
     "website:build": "pnpm --filter @reko/website build",
+    "website:deploy": "pnpm --filter @reko/website deploy:cf",
     "release": "./scripts/release.sh"
   },
   "engines": {

@@ -6,7 +6,7 @@ const API_URL = import.meta.env.VITE_API_URL || "https://reko-api.yasodev.worker
 
 export function ProSuccess() {
   const [licenseKey, setLicenseKey] = useState<string | null>(null)
-  const [email, setEmail] = useState<string | null>(null)
+  const [_email, setEmail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
