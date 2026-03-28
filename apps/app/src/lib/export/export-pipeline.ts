@@ -12,6 +12,8 @@ import { interpolateZoomEvents } from "@/lib/zoom-interpolation"
 import { CURSOR_ICON_ASSETS, SYSTEM_CURSOR_ASSETS } from "@/assets/cursors"
 import type { CursorIcon, SystemCursorType } from "@/types/editor"
 
+const SEEK_TIMEOUT_MS = 10_000
+const VIDEO_LOAD_TIMEOUT_MS = 15_000
 const MAX_FRAME_DELTA_MS = 100
 const SCALE_BLUR = 2
 const PAN_BLUR = 0.8
@@ -74,7 +76,7 @@ function getClicksInRange(events: MouseLogEvent[], startMs: number, endMs: numbe
 
 export interface ExportCallbacks {
   onProgress: (progress: ExportProgress) => void
-  onComplete: (mp4Data: ArrayBuffer) => void
+  onComplete: (mp4Data: ArrayBuffer) => Promise<void> | void
   onError: (error: string) => void
 }
 
@@ -85,20 +87,36 @@ function loadVideo(url: string): Promise<HTMLVideoElement> {
     video.muted = true
     video.playsInline = true
     video.preload = "auto"
-    video.onloadedmetadata = () => resolve(video)
-    video.onerror = () => reject(new Error(`Failed to load video: ${url}`))
+    const timeout = setTimeout(() => {
+      video.onloadedmetadata = null
+      video.onerror = null
+      reject(new Error(`Video load timed out after ${VIDEO_LOAD_TIMEOUT_MS / 1000}s: ${url}`))
+    }, VIDEO_LOAD_TIMEOUT_MS)
+    video.onloadedmetadata = () => {
+      clearTimeout(timeout)
+      resolve(video)
+    }
+    video.onerror = () => {
+      clearTimeout(timeout)
+      reject(new Error(`Failed to load video: ${url}`))
+    }
     video.src = url
   })
 }
 
 /** Seek a video element and wait for the frame to be ready. */
 function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (Math.abs(video.currentTime - timeSec) < 0.001) {
       resolve()
       return
     }
+    const timeout = setTimeout(() => {
+      video.onseeked = null
+      reject(new Error(`Video seek timed out at ${timeSec.toFixed(3)}s`))
+    }, SEEK_TIMEOUT_MS)
     video.onseeked = () => {
+      clearTimeout(timeout)
       video.onseeked = null
       resolve()
     }
@@ -386,7 +404,7 @@ export class ExportPipeline {
         estimatedRemainingMs: 0,
         phase: "done",
       })
-      callbacks.onComplete(mp4Data)
+      await callbacks.onComplete(mp4Data)
     } catch (e) {
       console.error("[export-pipeline] CAUGHT ERROR:", e)
       callbacks.onError(String(e))

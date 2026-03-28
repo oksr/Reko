@@ -5,9 +5,12 @@ export interface EncoderConfig {
   fps: number
 }
 
+const FLUSH_TIMEOUT_MS = 30_000
+
 export class VideoEncoderWrapper {
   private encoder: VideoEncoder | null = null
   private chunks: Array<{ chunk: EncodedVideoChunk; meta?: EncodedVideoChunkMetadata }> = []
+  private encoderError: Error | null = null
 
   async init(config: EncoderConfig): Promise<void> {
     this.encoder = new VideoEncoder({
@@ -16,6 +19,7 @@ export class VideoEncoderWrapper {
       },
       error: (e) => {
         console.error("VideoEncoder error:", e)
+        this.encoderError = e instanceof Error ? e : new Error(String(e))
       },
     })
 
@@ -31,19 +35,30 @@ export class VideoEncoderWrapper {
 
   encode(frame: VideoFrame, keyFrame = false): void {
     if (!this.encoder) throw new Error("Encoder not initialized")
+    if (this.encoderError) {
+      frame.close()
+      throw this.encoderError
+    }
     this.encoder.encode(frame, { keyFrame })
     frame.close()
   }
 
   async flush(): Promise<Array<{ chunk: EncodedVideoChunk; meta?: EncodedVideoChunkMetadata }>> {
     if (!this.encoder) return []
-    await this.encoder.flush()
+    if (this.encoderError) throw this.encoderError
+
+    const flushPromise = this.encoder.flush()
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Video encoder flush timed out after 30s")), FLUSH_TIMEOUT_MS)
+    )
+    await Promise.race([flushPromise, timeoutPromise])
     return this.chunks
   }
 
   destroy(): void {
-    this.encoder?.close()
+    try { this.encoder?.close() } catch { /* encoder may already be closed */ }
     this.encoder = null
     this.chunks = []
+    this.encoderError = null
   }
 }
